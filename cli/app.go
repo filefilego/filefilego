@@ -18,6 +18,7 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/keystore"
+	"github.com/filefilego/filefilego/node"
 	npkg "github.com/filefilego/filefilego/node"
 	"github.com/filefilego/filefilego/search"
 	ma "github.com/multiformats/go-multiaddr"
@@ -43,8 +44,14 @@ func init() {
 }
 
 func entry(ctx *cli.Context) error {
-	// crypto.EncryptFile()
 
+	// 35gb
+	node.FileBlocksRandomizer(48)
+	// node.FileBlocksRandomizer(37580963840)
+	// node.FileBlocksRandomizer(8, 3)
+	// node.FileManipulation()
+	return nil
+	// crypto.EncryptFile()
 	// return nil
 	cfg := GetConfig(ctx)
 
