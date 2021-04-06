@@ -34,13 +34,25 @@ const KeyRequestFromVerifierID = "/ffg/dv_key_req/1.0.0"
 
 //
 type PeerContext int32
+type EncryptionType int8
 
 const (
 	PeerContextType_None       PeerContext = 0
 	PeerContextType_Verifier   PeerContext = 1
 	PeerContextType_Host       PeerContext = 2
 	PeerContextType_Downloader PeerContext = 3
+
+	EncryptionType_Aes    EncryptionType = 0 // key and iv are both 16 bytes for aes
+	EncryptionType_Chacha EncryptionType = 2 // key 32 bytes, iv(nounce) 32 bytes
 )
+
+type NodeDownloadSetupData struct {
+	fileBlocksOrder []int
+	key             []byte
+	iv              []byte
+	encryption      EncryptionType
+	timestamp       time.Time
+}
 
 type ContractTransaction struct {
 	verifierID   peer.ID
@@ -53,10 +65,60 @@ type ContractTransaction struct {
 
 // DataVerificationProtocol wraps the protocols
 type DataVerificationProtocol struct {
-	VerifierMode bool
-	Node         *Node
-	contMutex    sync.Mutex
-	contracts    map[string]ContractTransaction
+	VerifierMode              bool
+	Node                      *Node
+	contMutex                 sync.Mutex
+	contracts                 map[string]ContractTransaction
+	nodeContractDownloadSetup map[string]NodeDownloadSetupData
+}
+
+func (dqp *DataVerificationProtocol) GetNodeContractDownloadSetup(contractHash, nodeHash []byte) (NodeDownloadSetupData, bool) {
+	dqp.contMutex.Lock()
+	defer dqp.contMutex.Unlock()
+	data := bytes.Join(
+		[][]byte{
+			contractHash,
+			nodeHash,
+		},
+		[]byte{},
+	)
+
+	hash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
+	c, ok := dqp.nodeContractDownloadSetup[hash]
+	if !ok {
+		return c, false
+	}
+
+	return c, true
+}
+
+func (dqp *DataVerificationProtocol) AddNodeContractDownloadSetup(contractHash, nodeHash, key, iv []byte, fileBlocksOrder []int, encryptionType EncryptionType) (ndsd NodeDownloadSetupData, _ bool) {
+	dqp.contMutex.Lock()
+	defer dqp.contMutex.Unlock()
+
+	data := bytes.Join(
+		[][]byte{
+			contractHash,
+			nodeHash,
+		},
+		[]byte{},
+	)
+
+	cHash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
+
+	_, ok := dqp.nodeContractDownloadSetup[cHash]
+	if ok {
+		// contract already exists in the map
+		return ndsd, false
+	}
+	dqp.nodeContractDownloadSetup[cHash] = NodeDownloadSetupData{
+		fileBlocksOrder: fileBlocksOrder,
+		key:             key,
+		iv:              iv,
+		encryption:      encryptionType,
+		timestamp:       time.Now(),
+	}
+	return dqp.nodeContractDownloadSetup[cHash], true
 }
 
 // GetContractTransaction returns a a contract transaction
@@ -400,6 +462,27 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 				log.Error("couldn't open binlayer file" + err.Error())
 				return
 			}
+
+			// segmentSizeBytes := 1024
+
+			// ndsd, ok := dqp.GetNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node)
+			// if !ok {
+			// 	bufKey := make([]byte, 16)
+			// 	iv := make([]byte, 16)
+			// 	rand.Read(bufKey)
+			// 	rand.Read(iv)
+
+			// 	totalSegments := int(math.Round((float64(bitem.Size) / float64(segmentSizeBytes)) + 0.5))
+			// 	randomSlice := GenerateRandomIntSlice(totalSegments)
+			// 	ndsd, _ = dqp.AddNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node, bufKey, iv, randomSlice, EncryptionType_Aes)
+			// }
+
+			// fileRanges, ok := Range(int(nrdr.From), int(nrdr.To), int(bitem.Size), segmentSizeBytes, ndsd.fileBlocksOrder)
+			// fmt.Println(fileRanges)
+			// if !ok {
+			// 	log.Error("error getting the correct file ranges")
+			// 	return
+			// }
 
 			buf := make([]byte, 1024)
 			for {

@@ -43,9 +43,7 @@ func init() {
 }
 
 func entry(ctx *cli.Context) error {
-	// crypto.EncryptFile()
 
-	// return nil
 	cfg := GetConfig(ctx)
 
 	if cfg.Global.LogPathLine {

@@ -30,7 +30,9 @@ func EncryptFile() {
 		log.Fatal(err)
 	}
 
+	fmt.Println("size of iv ", block.BlockSize())
 	iv := make([]byte, block.BlockSize())
+
 	rand.Read(iv)
 	stream := cipher.NewCTR(block, iv)
 
