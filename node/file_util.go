@@ -1,12 +1,13 @@
 package node
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
 	"os"
-	"sort"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -18,9 +19,7 @@ type FileBlockRange struct {
 	to          int
 }
 
-func Range(from, to, fileSize, segmentSizeBytes, encryptEverySegment int, randomSlice []int) (fileRanges []FileBlockRange, _ bool) {
-
-	// ranges := []FileBlockRange{}
+func Range(from, to, fileSize, segmentSizeBytes int, randomSlice []int) (fileRanges []FileBlockRange, _ bool) {
 	if to > fileSize-1 {
 		return fileRanges, false
 	}
@@ -28,47 +27,53 @@ func Range(from, to, fileSize, segmentSizeBytes, encryptEverySegment int, random
 		return fileRanges, false
 	}
 
-	// ranges must be computed here
-	// so we dont store info (FileBlockRange) for each single byte
-	calcRanges := make(map[int]FileBlockRange)
-	// lastBlock := 0
-	for i := from; i <= to; i++ {
+	tmpDivision := from / segmentSizeBytes
+	start := randomSlice[tmpDivision]*segmentSizeBytes + (from % segmentSizeBytes)
+	enteredLoop := false
+
+	for i := from + 1; i <= to; i++ {
+		enteredLoop = true
 		div := i / segmentSizeBytes
-		mod := i % segmentSizeBytes
-		startIndex := randomSlice[div]*segmentSizeBytes + mod
-		item, ok := calcRanges[div]
-		if !ok {
-			enc := div%encryptEverySegment == 0
-			calcRanges[div] = FileBlockRange{
-				// block: div,
-				// remainder: mod,
-				// finalIndex: randomSlice[div]*segmentSizeBytes + mod,
-				mustEncrypt: enc,
-				from:        startIndex,
-				to:          startIndex,
+
+		if div != tmpDivision {
+			fileRanges = append(fileRanges, FileBlockRange{
+				from: start,
+				to:   randomSlice[(i-1)/segmentSizeBytes]*segmentSizeBytes + ((i - 1) % segmentSizeBytes),
+			})
+
+			mod := i % segmentSizeBytes
+			start = randomSlice[div]*segmentSizeBytes + mod
+			tmpDivision = div
+
+			if i == to {
+				fileRanges = append(fileRanges, FileBlockRange{
+					from: start,
+					to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
+				})
 			}
 
-			if len(calcRanges) > 1 {
-				f, _ := calcRanges[div-1]
-				f.to = to
+			// makes magic (skips until end of the segments)
+			// without this, would take forever
+			if i+segmentSizeBytes-1 < to {
+				i = i + segmentSizeBytes - 1
 			}
 
-		} else {
-			item.to = startIndex
-			calcRanges[div] = item
+		} else if i == to {
+			// last
+			fileRanges = append(fileRanges, FileBlockRange{
+				from: start,
+				to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
+			})
+
 		}
+
 	}
 
-	keys := make([]int, len(calcRanges))
-	i := 0
-	for k := range calcRanges {
-		keys[i] = k
-		i++
-	}
-	sort.Ints(keys)
-
-	for _, k := range keys {
-		fileRanges = append(fileRanges, calcRanges[k])
+	if !enteredLoop {
+		fileRanges = append(fileRanges, FileBlockRange{
+			from: start,
+			to:   start,
+		})
 	}
 
 	return fileRanges, true
@@ -88,9 +93,10 @@ func GenerateRandomIntSlice(totalPerm int) []int {
 	return slice
 }
 
-func FileBlocksRandomizer(fileSize int) {
+func FileBlocksRandomizer(fileSize int) ([]FileBlockRange, []int, int, int, int, int) {
 
-	segmentSizeBytes, howManySegments := 0, 24
+	percentageToEncrypt := 4
+	segmentSizeBytes, howManySegments := 0, 4096
 
 	sizeOverSegments := (float64(fileSize) / float64(howManySegments))
 	sizeModSegments := fileSize % howManySegments
@@ -102,59 +108,244 @@ func FileBlocksRandomizer(fileSize int) {
 		segmentSizeBytes = int(math.Round((sizeOverSegments) + 0.5))
 	}
 
-	if fileSize < howManySegments {
-		// fmt.Println("single segment")
-		segmentSizeBytes = howManySegments
-		howManySegments = 1
+	fileSizeOverSegsize := float64(fileSize) / float64(segmentSizeBytes)
 
+	newSegmentSize, frc := math.Modf(fileSizeOverSegsize)
+	if frc > 0 {
+		newSegmentSize += 1
 	}
 
-	fmt.Println("segmentSizeBytes: ", segmentSizeBytes)
+	howManySegments = int(newSegmentSize)
+
+	if fileSize < howManySegments {
+		segmentSizeBytes = howManySegments
+		howManySegments = 1
+	}
 
 	randomSlice := GenerateRandomIntSlice(howManySegments)
 
-	// randomSlice = []int{1, 0, 2}
-	// fmt.Println(randomSlice)
+	fmt.Println("howManySegments: ", howManySegments)
 
-	totalSegmentsToEncrypt := int(math.Round(((float64(10) / float64(100)) * float64(howManySegments)) + 0.5))
+	enPer := (float64(percentageToEncrypt) / float64(100)) * float64(howManySegments)
+	_, frac := math.Modf(enPer)
+	totalSegmentsToEncrypt := 0
+	if frac > 0 {
+		totalSegmentsToEncrypt = int(math.Round((enPer) + 0.5))
+	} else {
+		totalSegmentsToEncrypt = int(math.Round(enPer))
+	}
+
 	fmt.Println("totalSegmentsToEncrypt: ", totalSegmentsToEncrypt)
 
 	encryptEverySegment := howManySegments / totalSegmentsToEncrypt
 
-	ranges, _ := Range(0, 30, fileSize, segmentSizeBytes, encryptEverySegment, randomSlice)
+	// need this so when encryptEverySegment is zero, avoid division by zero
+	if encryptEverySegment == 0 {
+		encryptEverySegment = 1
+	}
 
-	fmt.Println(ranges)
+	ranges, _ := Range(0, fileSize-1, fileSize, segmentSizeBytes, randomSlice)
 
+	totalSegmentsToEncryptTmp := totalSegmentsToEncrypt
 	enc := 0
-	for _, v := range ranges {
-		if v.mustEncrypt {
+	for i, v := range ranges {
+		div := v.from / segmentSizeBytes
+		if div%encryptEverySegment == 0 && totalSegmentsToEncrypt != 0 {
+			totalSegmentsToEncrypt--
 			enc++
+			ranges[i].mustEncrypt = true
 		}
 	}
 
-	fmt.Println("Encrypted these many ", enc)
+	return ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncryptTmp, encryptEverySegment
+
 }
 
 func FileManipulation() {
-	infile, _ := os.Open("/home/filefilego/Desktop/txt.txt")
-	infile.Seek(1, 0)
-	for {
 
-		buf := make([]byte, 2)
+	// AES
+	bufKey := make([]byte, 16)
+	rand.Read(bufKey)
 
-		n, err := infile.Read(buf)
-		if n > 0 {
-			fmt.Println("n: ", n)
-			fmt.Println(string(buf))
+	block, err := aes.NewCipher(bufKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	iv := make([]byte, block.BlockSize())
+
+	iv2 := make([]byte, block.BlockSize())
+
+	rand.Read(iv)
+	copy(iv2, iv)
+	stream := cipher.NewCTR(block, iv)
+	// END of AES
+
+	infile, _ := os.Open("/home/filefilego/Desktop/a.AppImage")
+	output, _ := os.OpenFile("/home/filefilego/Desktop/a.AppImage.enc", os.O_RDWR|os.O_CREATE, 0777)
+	output2, _ := os.OpenFile("/home/filefilego/Desktop/a.decrypted.AppImage", os.O_RDWR|os.O_CREATE, 0777)
+	info, _ := infile.Stat()
+	ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncrypt, _ := FileBlocksRandomizer(int(info.Size()))
+
+	// fmt.Println("ranges ", ranges)
+
+	bufferSize := 8192 //8kb
+	for _, v := range ranges {
+		infile.Seek(int64(v.from), 0)
+
+		diff := (v.to - v.from) + 1
+
+		for diff > 0 {
+			totalBytesRead := 0
+			if diff > bufferSize {
+				diff -= bufferSize
+				totalBytesRead = bufferSize
+			} else {
+				totalBytesRead = diff
+				diff -= diff
+			}
+
+			buf := make([]byte, totalBytesRead)
+			n, err := infile.Read(buf)
+			if err != nil {
+				log.Warn(err)
+			}
+			if n > 0 {
+				if v.mustEncrypt {
+					stream.XORKeyStream(buf, buf[:n])
+				}
+				okn, err := output.Write(buf[:n])
+				if okn != n {
+					log.Fatal("problem writing same as read bytes")
+				}
+				if err != nil {
+					log.Fatal("problem with writing to ourput file")
+
+				}
+			} else {
+				log.Warn("this triggered n > 0")
+			}
+
+			if err == io.EOF {
+				log.Fatal("problem reading from original EOF")
+			}
+
+			if err != nil {
+				log.Fatalf("Read %d bytes: %v", n, err)
+
+			}
+
 		}
 
-		if err == io.EOF {
-			break
-		}
+	}
 
-		if err != nil {
-			log.Printf("Read %d bytes: %v", n, err)
-			break
+	output.Seek(0, 0)
+
+	stream2 := cipher.NewCTR(block, iv2)
+
+	fmt.Println("descrypting segments: ", totalSegmentsToEncrypt)
+
+	for i, v := range ranges {
+		if v.mustEncrypt {
+
+			from := i * segmentSizeBytes
+			to := from + segmentSizeBytes - 1
+			diff := (to - from) + 1
+			totalOffset := 0
+			for diff > 0 {
+				totalBytesRead := 0
+				if diff > bufferSize {
+					diff -= bufferSize
+					totalBytesRead = bufferSize
+				} else {
+					totalBytesRead = diff
+					diff -= diff
+				}
+
+				buf := make([]byte, totalBytesRead)
+				output.Seek(int64(from+totalOffset), 0)
+				n, err := output.Read(buf)
+				output.Seek(int64(from+totalOffset), 0)
+
+				if err != nil {
+					log.Warn(err)
+				}
+				if n > 0 {
+					stream2.XORKeyStream(buf, buf[:n])
+					totalOffset += n
+					okn, err := output.Write(buf[:n])
+					if okn != n {
+						log.Fatal("problem writing same as read bytes")
+					}
+					if err != nil {
+						log.Fatal("problem with writing to ourput file")
+
+					}
+				} else {
+					log.Warn("this triggered n > 0")
+				}
+
+			}
+			output.Sync()
 		}
 	}
+
+	fmt.Print("restoring original file")
+
+	output.Seek(0, 0)
+
+	for i := 0; i < howManySegments; i++ {
+		idx := -1
+		for j, v := range randomSlice {
+			if v == i {
+				idx = j
+				break
+			}
+		}
+
+		from := idx * segmentSizeBytes
+		to := from + segmentSizeBytes - 1
+
+		output.Seek(int64(from), 0)
+		diff := (to - from) + 1
+		for diff > 0 {
+			totalBytesRead := 0
+			if diff > bufferSize {
+				diff -= bufferSize
+				totalBytesRead = bufferSize
+			} else {
+				totalBytesRead = diff
+				diff -= diff
+			}
+
+			buf := make([]byte, totalBytesRead)
+
+			n, err := output.Read(buf)
+			if n > 0 {
+				okn, err := output2.Write(buf[:n])
+				if err != nil {
+					log.Warn(err)
+					break
+				}
+				if okn != n {
+					log.Fatal("problem writing same as read bytes")
+				}
+				if err != nil {
+					log.Fatal("problem with writing to ourput file")
+				}
+			}
+
+			if err == io.EOF {
+				continue
+			}
+
+			if err != nil {
+				log.Fatalf("Read %d bytes: %v", n, err)
+
+			}
+
+		}
+
+	}
+
 }
