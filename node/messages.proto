@@ -76,9 +76,10 @@ message ChanNode {
 }
 
 message BinlayerBinaryItem {
-    string BinaryHash = 1;
-    string FilePath = 2;
-    int64 Size = 3;
+    bytes MerkleRootHash = 1;
+    string BinaryHash = 2;
+    string FilePath = 3;
+    int64 Size = 4;
 }
 
 message DataQueryRequest {

@@ -859,10 +859,22 @@ func (n *Node) StartRPCHTTP(ctx context.Context, enabledServices []string, addre
 				return
 			}
 
+			mkh, err := GetFileMerkleHash(newPath)
+
+			if err != nil {
+				// delete the file
+				os.Remove(newPath)
+
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error": "Unable to get merkle root hash"}`))
+				return
+			}
+
 			bitem := BinlayerBinaryItem{
-				BinaryHash: fHash,
-				FilePath:   folderPath,
-				Size:       fileSize,
+				MerkleRootHash: mkh,
+				BinaryHash:     fHash,
+				FilePath:       folderPath,
+				Size:           fileSize,
 			}
 
 			fileHashExistsInDb, bitemLocation := n.BinLayerEngine.FileHashExists(fHash)

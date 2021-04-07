@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/blevesearch/bleve v1.0.14
 	github.com/boltdb/bolt v1.3.1
+	github.com/cbergoon/merkletree v0.2.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/golang/protobuf v1.4.3

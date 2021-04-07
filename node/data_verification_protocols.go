@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"container/list"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"sync"
@@ -47,6 +50,7 @@ const (
 )
 
 type NodeDownloadSetupData struct {
+	ranges          []FileBlockRange
 	fileBlocksOrder []int
 	key             []byte
 	iv              []byte
@@ -72,7 +76,7 @@ type DataVerificationProtocol struct {
 	nodeContractDownloadSetup map[string]NodeDownloadSetupData
 }
 
-func (dqp *DataVerificationProtocol) GetNodeContractDownloadSetup(contractHash, nodeHash []byte) (NodeDownloadSetupData, bool) {
+func (dqp *DataVerificationProtocol) GetOrCreateNodeContractDownloadSetup(contractHash, nodeHash []byte, fileSize int) (NodeDownloadSetupData, bool) {
 	dqp.contMutex.Lock()
 	defer dqp.contMutex.Unlock()
 	data := bytes.Join(
@@ -86,40 +90,58 @@ func (dqp *DataVerificationProtocol) GetNodeContractDownloadSetup(contractHash, 
 	hash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
 	c, ok := dqp.nodeContractDownloadSetup[hash]
 	if !ok {
-		return c, false
+		// create it
+		bufKey := make([]byte, 16)
+		iv := make([]byte, 16)
+		rand.Read(bufKey)
+		rand.Read(iv)
+
+		// ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncrypt, _ := GetFileBlockOrderAndEncryptionList(fileSize, 0, fileSize-1)
+		ranges, randomSlice, _, _, _, _ := GetFileBlockOrderAndEncryptionList(fileSize, 0, fileSize-1)
+
+		dqp.nodeContractDownloadSetup[hash] = NodeDownloadSetupData{
+			ranges:          ranges,
+			fileBlocksOrder: randomSlice,
+			key:             bufKey,
+			iv:              iv,
+			encryption:      EncryptionType_Aes,
+			timestamp:       time.Now(),
+		}
+
+		return dqp.nodeContractDownloadSetup[hash], true
 	}
 
-	return c, true
+	return c, false
 }
 
-func (dqp *DataVerificationProtocol) AddNodeContractDownloadSetup(contractHash, nodeHash, key, iv []byte, fileBlocksOrder []int, encryptionType EncryptionType) (ndsd NodeDownloadSetupData, _ bool) {
-	dqp.contMutex.Lock()
-	defer dqp.contMutex.Unlock()
+// func (dqp *DataVerificationProtocol) AddNodeContractDownloadSetup(contractHash, nodeHash, key, iv []byte, fileBlocksOrder []int, encryptionType EncryptionType) (ndsd NodeDownloadSetupData, _ bool) {
+// 	dqp.contMutex.Lock()
+// 	defer dqp.contMutex.Unlock()
 
-	data := bytes.Join(
-		[][]byte{
-			contractHash,
-			nodeHash,
-		},
-		[]byte{},
-	)
+// 	data := bytes.Join(
+// 		[][]byte{
+// 			contractHash,
+// 			nodeHash,
+// 		},
+// 		[]byte{},
+// 	)
 
-	cHash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
+// 	cHash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
 
-	_, ok := dqp.nodeContractDownloadSetup[cHash]
-	if ok {
-		// contract already exists in the map
-		return ndsd, false
-	}
-	dqp.nodeContractDownloadSetup[cHash] = NodeDownloadSetupData{
-		fileBlocksOrder: fileBlocksOrder,
-		key:             key,
-		iv:              iv,
-		encryption:      encryptionType,
-		timestamp:       time.Now(),
-	}
-	return dqp.nodeContractDownloadSetup[cHash], true
-}
+// 	_, ok := dqp.nodeContractDownloadSetup[cHash]
+// 	if ok {
+// 		// contract already exists in the map
+// 		return ndsd, false
+// 	}
+// 	dqp.nodeContractDownloadSetup[cHash] = NodeDownloadSetupData{
+// 		fileBlocksOrder: fileBlocksOrder,
+// 		key:             key,
+// 		iv:              iv,
+// 		encryption:      encryptionType,
+// 		timestamp:       time.Now(),
+// 	}
+// 	return dqp.nodeContractDownloadSetup[cHash], true
+// }
 
 // GetContractTransaction returns a a contract transaction
 func (dqp *DataVerificationProtocol) GetContractTransaction(hash string) (ContractTransaction, bool) {
@@ -386,7 +408,8 @@ func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, n
 		log.Fatal(err)
 	}
 
-	buf := make([]byte, 1024)
+	bufferSize := 8192
+	buf := make([]byte, bufferSize)
 	for {
 		n, err := s.Read(buf)
 		if n > 0 {
@@ -396,10 +419,11 @@ func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, n
 			break
 		}
 		if err != nil {
-			log.Printf("Read %d bytes: %v", n, err)
 			break
 		}
 	}
+
+	// check if file has been downloaded
 	return true
 }
 
@@ -458,14 +482,73 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 
 			readFromFile := path.Join(bitem.FilePath, fn.Hash)
 			infile, err := os.Open(readFromFile)
+
 			if err != nil {
 				log.Error("couldn't open binlayer file" + err.Error())
 				return
 			}
 
+			defer infile.Close()
+
 			// segmentSizeBytes := 1024
 
-			// ndsd, ok := dqp.GetNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node)
+			ndsd, newCreated := dqp.GetOrCreateNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node, int(bitem.Size))
+
+			if newCreated {
+				fmt.Println("created downlaod contracts")
+			}
+
+			block, err := aes.NewCipher(ndsd.key)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+
+			stream := cipher.NewCTR(block, ndsd.iv)
+
+			bufferSize := 8192 //8kb
+			for _, v := range ndsd.ranges {
+				infile.Seek(int64(v.from), 0)
+
+				diff := (v.to - v.from) + 1
+
+				for diff > 0 {
+					totalBytesRead := 0
+					if diff > bufferSize {
+						diff -= bufferSize
+						totalBytesRead = bufferSize
+					} else {
+						totalBytesRead = diff
+						diff -= diff
+					}
+
+					buf := make([]byte, totalBytesRead)
+					n, err := infile.Read(buf)
+					if err != nil {
+						log.Warn(err)
+					}
+					if n > 0 {
+						if v.mustEncrypt {
+							stream.XORKeyStream(buf, buf[:n])
+						}
+						okn, err := s.Write(buf[:n])
+						if okn != n {
+							log.Error("problem writing same as read bytes")
+							return
+						}
+						if err != nil {
+							log.Error("error while writing data to downloader stream")
+
+						}
+					}
+
+					if err == io.EOF {
+						break
+					}
+				}
+
+			}
+
 			// if !ok {
 			// 	bufKey := make([]byte, 16)
 			// 	iv := make([]byte, 16)
@@ -484,25 +567,24 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 			// 	return
 			// }
 
-			buf := make([]byte, 1024)
-			for {
-				n, err := infile.Read(buf)
-				if n > 0 {
-					s.Write(buf[:n])
-				}
+			// buf := make([]byte, 1024)
+			// for {
+			// 	n, err := infile.Read(buf)
+			// 	if n > 0 {
+			// 		s.Write(buf[:n])
+			// 	}
 
-				if err == io.EOF {
-					break
-				}
+			// 	if err == io.EOF {
+			// 		break
+			// 	}
 
-				if err != nil {
-					log.Printf("Read %d bytes: %v", n, err)
-					break
-				}
-			}
+			// 	if err != nil {
+			// 		log.Printf("Read %d bytes: %v", n, err)
+			// 		break
+			// 	}
+			// }
 
-			// already found, just break
-			break
+			// break
 		}
 	}
 
