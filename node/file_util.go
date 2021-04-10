@@ -14,7 +14,6 @@ import (
 
 	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/sha3"
 )
 
 type FileBlockRange struct {
@@ -70,18 +69,18 @@ func HashFileBlocksBySegment(filePath string) (hashes []merkletree.Content, _ er
 
 	fileSize := int(fstats.Size())
 	// create the root
-	howManySegments, segmentSizeBytes, _, _ := GetFileSegmentsMetadata(fileSize)
+	howManySegments, segmentSizeBytes, _, _ := GetFileSegmentsMetadata(fileSize, 4096)
 
 	orderedSlice := []int{}
 	for i := 0; i < howManySegments; i++ {
 		orderedSlice = append(orderedSlice, i)
 	}
 
-	ranges, _ := PrepareOffsetRanges(0, fileSize-1, fileSize, segmentSizeBytes, orderedSlice)
+	ranges, _ := PrepareOffsetBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, orderedSlice)
 
 	bufferSize := 8192 //8kb
 
-	sha256Sum := sha3.New256()
+	sha256Sum := sha256.New()
 
 	for _, v := range ranges {
 		sha256Sum.Reset()
@@ -120,64 +119,117 @@ func HashFileBlocksBySegment(filePath string) (hashes []merkletree.Content, _ er
 	return hashes, nil
 }
 
-func PrepareOffsetRanges(from, to, fileSize, segmentSizeBytes int, randomSlice []int) (fileRanges []FileBlockRange, _ bool) {
-	if to > fileSize-1 {
-		return fileRanges, false
+func NewRangeCreator() {
+	fileSize := 11
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := GetFileSegmentsMetadata(fileSize, 4096)
+	randomSlice := GenerateRandomIntSlice(howManySegments)
+
+	ranges, ok := PrepareOffsetBlockRanges(0, 3, fileSize, howManySegments, segmentSizeBytes, randomSlice)
+
+	if !ok {
+		fmt.Println("fuckkk not ok ", howManySegments)
 	}
-	if from > to {
-		return fileRanges, false
-	}
+	// totalSegmentsToEncryptTmp := totalSegmentsToEncrypt
 
-	tmpDivision := from / segmentSizeBytes
-	start := randomSlice[tmpDivision]*segmentSizeBytes + (from % segmentSizeBytes)
-	enteredLoop := false
-
-	for i := from + 1; i <= to; i++ {
-		enteredLoop = true
-		div := i / segmentSizeBytes
-
-		if div != tmpDivision {
-			fileRanges = append(fileRanges, FileBlockRange{
-				from: start,
-				to:   randomSlice[(i-1)/segmentSizeBytes]*segmentSizeBytes + ((i - 1) % segmentSizeBytes),
-			})
-
-			mod := i % segmentSizeBytes
-			start = randomSlice[div]*segmentSizeBytes + mod
-			tmpDivision = div
-
-			if i == to {
-				fileRanges = append(fileRanges, FileBlockRange{
-					from: start,
-					to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
-				})
-			}
-
-			// makes magic (skips until end of the segments)
-			// without this, would take forever
-			if i+segmentSizeBytes-1 < to {
-				i = i + segmentSizeBytes - 1
-			}
-
-		} else if i == to {
-			// last
-			fileRanges = append(fileRanges, FileBlockRange{
-				from: start,
-				to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
-			})
-
+	// which blocks to encrypt
+	enc := 0
+	for i, v := range ranges {
+		div := v.from / segmentSizeBytes
+		if div%encryptEverySegment == 0 && totalSegmentsToEncrypt != 0 {
+			totalSegmentsToEncrypt--
+			enc++
+			ranges[i].mustEncrypt = true
 		}
 	}
 
-	if !enteredLoop {
+	fmt.Println(ranges)
+
+}
+
+func PrepareOffsetBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes int, randomSlice []int) (fileRanges []FileBlockRange, _ bool) {
+
+	if fileSize == 0 {
+		return fileRanges, false
+	}
+
+	if from > to || to > totalSegments-1 {
+		return fileRanges, false
+	}
+
+	for i := from; i <= to; i++ {
+		start := randomSlice[i] * segmentSizeBytes
+		end := start + segmentSizeBytes - 1
+
+		if end > fileSize-1 {
+			end = fileSize - 1
+		}
 		fileRanges = append(fileRanges, FileBlockRange{
 			from: start,
-			to:   start,
+			to:   end,
 		})
 	}
 
 	return fileRanges, true
 }
+
+// func PrepareOffsetRanges(from, to, fileSize, segmentSizeBytes int, randomSlice []int) (fileRanges []FileBlockRange, _ bool) {
+// 	if to > fileSize-1 {
+// 		return fileRanges, false
+// 	}
+// 	if from > to {
+// 		return fileRanges, false
+// 	}
+
+// 	tmpDivision := from / segmentSizeBytes
+// 	start := randomSlice[tmpDivision]*segmentSizeBytes + (from % segmentSizeBytes)
+// 	enteredLoop := false
+
+// 	for i := from + 1; i <= to; i++ {
+// 		enteredLoop = true
+// 		div := i / segmentSizeBytes
+
+// 		if div != tmpDivision {
+// 			fileRanges = append(fileRanges, FileBlockRange{
+// 				from: start,
+// 				to:   randomSlice[(i-1)/segmentSizeBytes]*segmentSizeBytes + ((i - 1) % segmentSizeBytes),
+// 			})
+
+// 			mod := i % segmentSizeBytes
+// 			start = randomSlice[div]*segmentSizeBytes + mod
+// 			tmpDivision = div
+
+// 			if i == to {
+// 				fileRanges = append(fileRanges, FileBlockRange{
+// 					from: start,
+// 					to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
+// 				})
+// 			}
+
+// 			// makes magic (skips until end of the segments)
+// 			// without this, would take forever
+// 			if i+segmentSizeBytes-1 < to {
+// 				i = i + segmentSizeBytes - 1
+// 			}
+
+// 		} else if i == to {
+// 			// last
+// 			fileRanges = append(fileRanges, FileBlockRange{
+// 				from: start,
+// 				to:   randomSlice[i/segmentSizeBytes]*segmentSizeBytes + (i % segmentSizeBytes),
+// 			})
+
+// 		}
+// 	}
+
+// 	if !enteredLoop {
+// 		fileRanges = append(fileRanges, FileBlockRange{
+// 			from: start,
+// 			to:   start,
+// 		})
+// 	}
+
+// 	return fileRanges, true
+// }
 
 // GenerateRandomIntSlice generates a random slice
 // we always keep the last item same as original index
@@ -193,10 +245,11 @@ func GenerateRandomIntSlice(totalPerm int) []int {
 	return slice
 }
 
-func GetFileSegmentsMetadata(fileSize int) (int, int, int, int) {
+func GetFileSegmentsMetadata(fileSize int, howManySegments int) (int, int, int, int) {
 	percentageToEncrypt := 4
 
-	segmentSizeBytes, howManySegments := 0, 4096
+	// howManySegments = 4096
+	segmentSizeBytes := 0
 	sizeOverSegments := (float64(fileSize) / float64(howManySegments))
 	sizeModSegments := fileSize % howManySegments
 
@@ -240,11 +293,12 @@ func GetFileSegmentsMetadata(fileSize int) (int, int, int, int) {
 }
 
 // GetFileBlockOrderAndEncryptionList returns
-func GetFileBlockOrderAndEncryptionList(fileSize, from, to int) ([]FileBlockRange, []int, int, int, int, int) {
+func GetFileBlockOrderAndEncryptionList(fileSize int) ([]FileBlockRange, []int, int, int, int, int) {
 
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := GetFileSegmentsMetadata(fileSize)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := GetFileSegmentsMetadata(fileSize, 4096)
 	randomSlice := GenerateRandomIntSlice(howManySegments)
-	ranges, _ := PrepareOffsetRanges(from, to, fileSize, segmentSizeBytes, randomSlice)
+
+	ranges, _ := PrepareOffsetBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, randomSlice)
 	totalSegmentsToEncryptTmp := totalSegmentsToEncrypt
 
 	// which blocks to encrypt
@@ -278,19 +332,20 @@ func FileManipulation() {
 
 	rand.Read(iv)
 	copy(iv2, iv)
-	stream := cipher.NewCTR(block, iv)
+
 	// END of AES
 
 	infile, _ := os.Open("/home/filefilego/Desktop/a.AppImage")
 	output, _ := os.OpenFile("/home/filefilego/Desktop/a.AppImage.enc", os.O_RDWR|os.O_CREATE, 0777)
 	output2, _ := os.OpenFile("/home/filefilego/Desktop/a.decrypted.AppImage", os.O_RDWR|os.O_CREATE, 0777)
 	info, _ := infile.Stat()
-	ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncrypt, _ := GetFileBlockOrderAndEncryptionList(int(info.Size()), 0, int(info.Size())-1)
+	ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncrypt, _ := GetFileBlockOrderAndEncryptionList(int(info.Size()))
 
 	// fmt.Println("ranges ", ranges)
 
 	bufferSize := 8192 //8kb
 	for _, v := range ranges {
+		stream := cipher.NewCTR(block, iv)
 		infile.Seek(int64(v.from), 0)
 
 		diff := (v.to - v.from) + 1
@@ -312,6 +367,7 @@ func FileManipulation() {
 			}
 			if n > 0 {
 				if v.mustEncrypt {
+
 					stream.XORKeyStream(buf, buf[:n])
 				}
 				okn, err := output.Write(buf[:n])
@@ -341,8 +397,6 @@ func FileManipulation() {
 
 	output.Seek(0, 0)
 
-	stream2 := cipher.NewCTR(block, iv2)
-
 	fmt.Println("descrypting segments: ", totalSegmentsToEncrypt)
 
 	for i, v := range ranges {
@@ -371,6 +425,7 @@ func FileManipulation() {
 					log.Warn(err)
 				}
 				if n > 0 {
+					stream2 := cipher.NewCTR(block, iv2)
 					stream2.XORKeyStream(buf, buf[:n])
 					totalOffset += n
 					okn, err := output.Write(buf[:n])
@@ -390,7 +445,7 @@ func FileManipulation() {
 		}
 	}
 
-	fmt.Print("restoring original file")
+	fmt.Println("restoring original file")
 
 	output.Seek(0, 0)
 

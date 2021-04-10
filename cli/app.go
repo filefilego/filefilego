@@ -76,7 +76,7 @@ func entry(ctx *cli.Context) error {
 	bn := binlayer.Engine{}
 
 	if cfg.Global.BinLayer {
-		bn, _ = binlayer.NewEngine(cfg.Global.BinLayerDir, cfg.Global.DataDir, cfg.Global.BinLayerToken, cfg.Global.BinLayerFeesGB)
+		bn, _ = binlayer.NewEngine(cfg.Global.DownloadPath, cfg.Global.BinLayerDir, cfg.Global.DataDir, cfg.Global.BinLayerToken, cfg.Global.BinLayerFeesGB)
 		bn.Enabled = true
 		log.Println("Binlayer storage is enabled")
 	} else {

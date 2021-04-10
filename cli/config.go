@@ -29,6 +29,7 @@ func DefaultConfig() *GlobalConfig {
 			BinLayerToken:       "",
 			BinLayerFeesGB:      "1000000000000000000", // 1 Zaran
 			DataVerifier:        false,
+			DownloadPath:        filepath.Join(DefaultDataDir(), "downloads"),
 		},
 		Host: Host{},
 		RPC: RPC{
@@ -138,6 +139,10 @@ func ApplyFlags(ctx *cli.Context, cfg *GlobalConfig) {
 
 	if ctx.GlobalIsSet(DataVerifier.Name) {
 		cfg.Global.DataVerifier = ctx.GlobalBool(DataVerifier.Name)
+	}
+
+	if ctx.GlobalIsSet(DownloadPath.Name) {
+		cfg.Global.DownloadPath = ctx.GlobalString(DownloadPath.Name)
 	}
 
 	// Host

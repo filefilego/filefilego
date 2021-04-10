@@ -2,7 +2,6 @@ package crypto
 
 import (
 	"crypto/sha256"
-	"hash"
 
 	"github.com/filefilego/filefilego/common/hexutil"
 
@@ -90,13 +89,6 @@ func Keccak256(data ...[]byte) []byte {
 		d.Write(b)
 	}
 	return d.Sum(nil)
-}
-
-// Sha256Hash hashes data with the sha256
-func Sha256Hash(data []byte) hash.Hash {
-	d := sha3.New256()
-	d.Write(data)
-	return d
 }
 
 // Sha256HashHexBytes retuens the hex representation of data

@@ -64,6 +64,11 @@ var (
 		Usage: "Storage location for binlayer",
 	}
 
+	DownloadPath = cli.StringFlag{
+		Name:  "downloadpath",
+		Usage: "Download location",
+	}
+
 	BinLayerToken = cli.StringFlag{
 		Name:  "binlayer_token",
 		Usage: "Access token for binlayer",
@@ -205,6 +210,7 @@ var AppFlags = []cli.Flag{
 	BinLayerToken,
 	BinLayerFeesGB,
 	DataVerifier,
+	DownloadPath,
 
 	RPCFlag,
 	RPCServicesFlag,

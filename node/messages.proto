@@ -61,18 +61,19 @@ enum ChanNodeType {
 message ChanNode {
     string Name = 1;
     string Hash = 2;
-    string BinlayerHash = 3;
-    string Size = 4;
-    string Owner = 5;
-    bool Enabled = 6;
-    ChanNodeType NodeType = 7;
-    string ParentHash = 8;
-    string Description = 9;
-    string ContentType = 10;
-    repeated string Attributes = 11;
-    repeated string Admins = 12;
-    repeated string Posters = 13;
-    int64 Timestamp = 14;
+    bytes MerkleRoot = 3;
+    string BinlayerHash = 4;
+    string Size = 5;
+    string Owner = 6;
+    bool Enabled = 7;
+    ChanNodeType NodeType = 8;
+    string ParentHash = 9;
+    string Description = 10;
+    string ContentType = 11;
+    repeated string Attributes = 12;
+    repeated string Admins = 13;
+    repeated string Posters = 14;
+    int64 Timestamp = 15;
 }
 
 message BinlayerBinaryItem {
@@ -119,6 +120,12 @@ message NodeDataRangeRequest {
     bytes ContractHash = 2;
     uint64 From = 3;
     uint64 To = 4;
+}
+
+message NodeToFileInfo {
+    string Name = 1;
+    bytes Hash = 2;
+    uint64 Size = 3;
 }
 
 message GossipPayload {

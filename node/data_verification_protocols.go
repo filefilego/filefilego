@@ -8,6 +8,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,6 +33,9 @@ const DataVerifierRequestID = "/ffg/dv_verifier_req/1.0.0"
 // NodeDataRangeRequestID used to allow downloader ask for range of bytes
 const NodeDataRangeRequestID = "/ffg/dv_range_data_req/1.0.0"
 
+// FileNodesRequestID this protocol is used by light clients to query and get back a list of files
+const FileNodesRequestID = "/ffg/dv_file_nodes_req/1.0.0"
+
 // KeyRequestFromVerifierID this protocol is runned by verifier
 const KeyRequestFromVerifierID = "/ffg/dv_key_req/1.0.0"
 
@@ -47,10 +51,11 @@ const (
 
 	EncryptionType_Aes    EncryptionType = 0 // key and iv are both 16 bytes for aes
 	EncryptionType_Chacha EncryptionType = 2 // key 32 bytes, iv(nounce) 32 bytes
+
+	TotalThreadsPerFileDownload int = 4
 )
 
 type NodeDownloadSetupData struct {
-	ranges          []FileBlockRange
 	fileBlocksOrder []int
 	key             []byte
 	iv              []byte
@@ -96,11 +101,10 @@ func (dqp *DataVerificationProtocol) GetOrCreateNodeContractDownloadSetup(contra
 		rand.Read(bufKey)
 		rand.Read(iv)
 
-		// ranges, randomSlice, segmentSizeBytes, howManySegments, totalSegmentsToEncrypt, _ := GetFileBlockOrderAndEncryptionList(fileSize, 0, fileSize-1)
-		ranges, randomSlice, _, _, _, _ := GetFileBlockOrderAndEncryptionList(fileSize, 0, fileSize-1)
+		howManySegments, _, _, _ := GetFileSegmentsMetadata(fileSize, 4096)
+		randomSlice := GenerateRandomIntSlice(howManySegments)
 
 		dqp.nodeContractDownloadSetup[hash] = NodeDownloadSetupData{
-			ranges:          ranges,
 			fileBlocksOrder: randomSlice,
 			key:             bufKey,
 			iv:              iv,
@@ -113,35 +117,6 @@ func (dqp *DataVerificationProtocol) GetOrCreateNodeContractDownloadSetup(contra
 
 	return c, false
 }
-
-// func (dqp *DataVerificationProtocol) AddNodeContractDownloadSetup(contractHash, nodeHash, key, iv []byte, fileBlocksOrder []int, encryptionType EncryptionType) (ndsd NodeDownloadSetupData, _ bool) {
-// 	dqp.contMutex.Lock()
-// 	defer dqp.contMutex.Unlock()
-
-// 	data := bytes.Join(
-// 		[][]byte{
-// 			contractHash,
-// 			nodeHash,
-// 		},
-// 		[]byte{},
-// 	)
-
-// 	cHash := hexutil.Encode(crypto.Sha256HashHexBytes(data))
-
-// 	_, ok := dqp.nodeContractDownloadSetup[cHash]
-// 	if ok {
-// 		// contract already exists in the map
-// 		return ndsd, false
-// 	}
-// 	dqp.nodeContractDownloadSetup[cHash] = NodeDownloadSetupData{
-// 		fileBlocksOrder: fileBlocksOrder,
-// 		key:             key,
-// 		iv:              iv,
-// 		encryption:      encryptionType,
-// 		timestamp:       time.Now(),
-// 	}
-// 	return dqp.nodeContractDownloadSetup[cHash], true
-// }
 
 // GetContractTransaction returns a a contract transaction
 func (dqp *DataVerificationProtocol) GetContractTransaction(hash string) (ContractTransaction, bool) {
@@ -263,10 +238,9 @@ func (dqp *DataVerificationProtocol) onDataVerifierRequest(s network.Stream) {
 		log.Println("data downloader")
 
 		contractHashBytes, _ := hexutil.Decode(contractHash)
-		nodeTodownload, _ := hexutil.Decode("0x4f76b4f3a51dfb8549cbf7f675120e3099180c56ebb4c9a21992a225efa42ea4")
-		time.Sleep(2 * time.Second)
-		ok := dqp.RequestNodeDataRange(contractHashBytes, nodeTodownload, 0, 0)
-		log.Println("result of file download ", ok)
+		nodeTodownload, _ := hexutil.Decode("0xfdc4febb8d0497824ac7cb0bee18c9f74562eacb4f032dde66ebec04215e303c")
+		err := dqp.Download(contractHashBytes, nodeTodownload)
+		fmt.Println("Download return err ", err)
 
 	} else if bytes.Equal(foundContract.HostResponse.PubKey, currentNodePubKeyRawBytes) {
 		dqp.AddContract(foundContract, *tx, PeerContextType_Host, hostID, downloaderID)
@@ -337,9 +311,10 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 
 			} else {
 				size, _ := hexutil.DecodeUint64(tmp.Size)
+				hashBts, _ := hexutil.Decode(tmp.Hash)
 				finfo := NodeToFileInfo{
 					Name: tmp.Name,
-					Hash: tmp.Hash,
+					Hash: hashBts,
 					Size: size,
 				}
 				files = append(files, finfo)
@@ -356,11 +331,61 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 	return files, nil
 }
 
-func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, nodeHash []byte, from, to uint64) bool {
+func (dqp *DataVerificationProtocol) Download(contractHash []byte, nodeHash []byte) error {
 
+	contract, ok := dqp.GetContract(hexutil.Encode(contractHash))
+	if !ok {
+		return errors.New("contract not found")
+	}
+	fileNodes, _ := dqp.GetFileNodesFromContract(contract)
+	fileSize := 0
+	for _, fn := range fileNodes {
+		if bytes.Equal(fn.Hash, nodeHash) {
+			fileSize = int(fn.Size)
+			break
+		}
+	}
+
+	if fileSize == 0 {
+		return errors.New("file size is 0")
+	}
+
+	howManySegments, _, _, _ := GetFileSegmentsMetadata(fileSize, 4096)
+
+	segments, segmentSizeBytes, _, _ := GetFileSegmentsMetadata(howManySegments, TotalThreadsPerFileDownload)
+	orderedSlice := []int{}
+	for i := 0; i < howManySegments; i++ {
+		orderedSlice = append(orderedSlice, i)
+	}
+
+	ranges, _ := PrepareOffsetBlockRanges(0, segments-1, howManySegments, segments, segmentSizeBytes, orderedSlice)
+
+	if len(ranges) > 0 {
+		wg := &sync.WaitGroup{}
+		for _, v := range ranges {
+			wg.Add(1)
+			go func(wg *sync.WaitGroup, v FileBlockRange) {
+				outputPath, ok := dqp.RequestFileBlockRanges(contractHash, nodeHash, uint64(v.from), uint64(v.to))
+				if !ok {
+					log.Warn("error while downloading part")
+				}
+				fmt.Println("Downloaded file ", outputPath)
+				wg.Done()
+			}(wg, v)
+		}
+
+		wg.Wait()
+	}
+
+	return nil
+
+}
+
+// RequestFileBlockRanges requests a range of file blocks
+func (dqp *DataVerificationProtocol) RequestFileBlockRanges(contractHash []byte, nodeHash []byte, from, to uint64) (string, bool) {
 	_, ok := dqp.GetContract(hexutil.Encode(contractHash))
 	if !ok {
-		return false
+		return "", false
 	}
 
 	nrdr := NodeDataRangeRequest{
@@ -372,7 +397,7 @@ func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, n
 
 	nrdrBits, err := proto.Marshal(&nrdr)
 	if err != nil {
-		return false
+		return "", false
 	}
 
 	msg := make([]byte, 8+len(nrdrBits))
@@ -385,28 +410,33 @@ func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, n
 	accessiblePeers := dqp.Node.FindPeers(peerIDs)
 	if len(accessiblePeers) != 1 {
 		log.Warn("couldn't find host node")
-		return false
+		return "", false
 	}
 
 	if err := dqp.Node.Host.Connect(context.Background(), accessiblePeers[0]); err != nil {
 		log.Warn("unable to connect to data hoster node ", err)
-		return false
+		return "", false
 	}
 
 	s, err := dqp.Node.Host.NewStream(context.Background(), ctx.hostID, NodeDataRangeRequestID)
 	if err != nil {
 		log.Error(err)
-		return false
+		return "", false
 	}
+	defer s.Close()
 	_, err = s.Write(msg)
 	if err != nil {
-		return false
+		return "", false
 	}
 	// c := bufio.NewReader(s)
-	output, err := os.OpenFile("/root/"+hexutil.Encode(nodeHash), os.O_RDWR|os.O_CREATE, 0777)
+	outputFile := path.Join(dqp.Node.BinLayerEngine.DownloadPath, hexutil.Encode(nodeHash)+fmt.Sprintf("_%d_%d.part", from, to))
+	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return "", false
 	}
+
+	defer output.Close()
 
 	bufferSize := 8192
 	buf := make([]byte, bufferSize)
@@ -424,10 +454,34 @@ func (dqp *DataVerificationProtocol) RequestNodeDataRange(contractHash []byte, n
 	}
 
 	// check if file has been downloaded
-	return true
+	return outputFile, true
 }
 
+// func (dqp *DataVerificationProtocol) onFileNodesRequest(s network.Stream) {
+// 	c := bufio.NewReader(s)
+// 	defer s.Close()
+
+// 	msgLengthBuffer := make([]byte, 8)
+// 	_, err := c.Read(msgLengthBuffer)
+// 	if err != nil {
+// 		log.Error(err)
+// 		return
+// 	}
+
+// 	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+// 	buf := make([]byte, lengthPrefix)
+// 	// read the full message, or return an error
+// 	_, err = io.ReadFull(c, buf)
+// 	if err != nil {
+// 		log.Error(err)
+// 		return
+// 	}
+
+// 	if
+// }
+
 func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
+
 	c := bufio.NewReader(s)
 	defer s.Close()
 
@@ -461,14 +515,21 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 		return
 	}
 
-	fmt.Println("contract nodes: ", contract.HostResponse.Nodes)
+	pubKey, _ := crypto.PublicKeyFromRawHex(hexutil.Encode(contract.RequesterNodePubKey))
+	remoteID, err := peer.IDFromPublicKey(pubKey)
+
+	// if not downloader peer
+	if remoteID.String() != s.Conn().RemotePeer().String() {
+		log.Error("peer not allowed to download this node")
+		return
+	}
 
 	fileNodes, _ := dqp.GetFileNodesFromContract(contract)
 	log.Println("total filenodes for this contract: ", len(fileNodes))
 
 	for _, fn := range fileNodes {
-		if fn.Hash == hexutil.Encode(nrdr.Node) {
-			fileItem, err := dqp.Node.BinLayerEngine.GetBinaryItem(fn.Hash)
+		if bytes.Equal(fn.Hash, nrdr.Node) {
+			fileItem, err := dqp.Node.BinLayerEngine.GetBinaryItem(hexutil.Encode(fn.Hash))
 			if err != nil {
 				log.Error("couldn't find binary in binlayer")
 				return
@@ -480,7 +541,7 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 				return
 			}
 
-			readFromFile := path.Join(bitem.FilePath, fn.Hash)
+			readFromFile := path.Join(bitem.FilePath, hexutil.Encode(fn.Hash))
 			infile, err := os.Open(readFromFile)
 
 			if err != nil {
@@ -490,13 +551,14 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 
 			defer infile.Close()
 
-			// segmentSizeBytes := 1024
-
 			ndsd, newCreated := dqp.GetOrCreateNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node, int(bitem.Size))
 
 			if newCreated {
 				fmt.Println("created downlaod contracts")
 			}
+
+			howManySegments, segmentSizeBytes, _, _ := GetFileSegmentsMetadata(int(bitem.Size), 4096)
+			ranges, _ := PrepareOffsetBlockRanges(int(nrdr.From), int(nrdr.To), int(bitem.Size), howManySegments, segmentSizeBytes, ndsd.fileBlocksOrder)
 
 			block, err := aes.NewCipher(ndsd.key)
 			if err != nil {
@@ -504,10 +566,9 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 				return
 			}
 
-			stream := cipher.NewCTR(block, ndsd.iv)
-
 			bufferSize := 8192 //8kb
-			for _, v := range ndsd.ranges {
+			for _, v := range ranges {
+				stream := cipher.NewCTR(block, ndsd.iv)
 				infile.Seek(int64(v.from), 0)
 
 				diff := (v.to - v.from) + 1
@@ -548,54 +609,17 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 				}
 
 			}
-
-			// if !ok {
-			// 	bufKey := make([]byte, 16)
-			// 	iv := make([]byte, 16)
-			// 	rand.Read(bufKey)
-			// 	rand.Read(iv)
-
-			// 	totalSegments := int(math.Round((float64(bitem.Size) / float64(segmentSizeBytes)) + 0.5))
-			// 	randomSlice := GenerateRandomIntSlice(totalSegments)
-			// 	ndsd, _ = dqp.AddNodeContractDownloadSetup(nrdr.ContractHash, nrdr.Node, bufKey, iv, randomSlice, EncryptionType_Aes)
-			// }
-
-			// fileRanges, ok := Range(int(nrdr.From), int(nrdr.To), int(bitem.Size), segmentSizeBytes, ndsd.fileBlocksOrder)
-			// fmt.Println(fileRanges)
-			// if !ok {
-			// 	log.Error("error getting the correct file ranges")
-			// 	return
-			// }
-
-			// buf := make([]byte, 1024)
-			// for {
-			// 	n, err := infile.Read(buf)
-			// 	if n > 0 {
-			// 		s.Write(buf[:n])
-			// 	}
-
-			// 	if err == io.EOF {
-			// 		break
-			// 	}
-
-			// 	if err != nil {
-			// 		log.Printf("Read %d bytes: %v", n, err)
-			// 		break
-			// 	}
-			// }
-
-			// break
 		}
 	}
-
 }
 
 // DataVerificationProtocol returns a new instance and registers the handlers
 func NewDataVerificationProtocol(n *Node) *DataVerificationProtocol {
 	p := &DataVerificationProtocol{
-		Node:      n,
-		contMutex: sync.Mutex{},
-		contracts: make(map[string]ContractTransaction),
+		Node:                      n,
+		contMutex:                 sync.Mutex{},
+		contracts:                 make(map[string]ContractTransaction),
+		nodeContractDownloadSetup: make(map[string]NodeDownloadSetupData),
 	}
 	n.Host.SetStreamHandler(DataVerifierRequestID, p.onDataVerifierRequest)
 	n.Host.SetStreamHandler(NodeDataRangeRequestID, p.onNodeDataRangeRequest)
@@ -607,6 +631,7 @@ func NewDataVerificationProtocol(n *Node) *DataVerificationProtocol {
 func (dqp *DataVerificationProtocol) EnableVerifierMode() {
 	dqp.VerifierMode = true
 	dqp.Node.Host.SetStreamHandler(KeyRequestFromVerifierID, dqp.onKeyRequestFromVerifier)
+	// dqp.Node.Host.SetStreamHandler(FileNodesRequestID, dqp.onFileNodesRequest)
 }
 
 // extractContractFromTransaction extracts a valid contract
