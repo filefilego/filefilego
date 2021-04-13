@@ -301,27 +301,31 @@ type ReceiptPayload struct {
 }
 
 // Receipt gets receipts of a tx
-func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl ReceiptPayload, err error) {
-	v, block, blockHeight, err := api.Node.BlockChain.GetTransactionByHash(hash)
+func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl []ReceiptPayload, err error) {
+	txs, blocks, blockHeights, err := api.Node.BlockChain.GetTransactionByHash(hash)
 	if err != nil {
+		log.Println("fuck it", txs, blocks, blockHeights, err)
 		return txpl, err
 	}
-	tx := TransactionJSON{
-		Data:            hexutil.Encode(v.Data),
-		From:            v.From,
-		Hash:            hexutil.Encode(v.Hash),
-		Nounce:          v.Nounce,
-		PubKey:          v.PubKey,
-		Signature:       hexutil.Encode(v.Signature),
-		To:              v.To,
-		TransactionFees: v.TransactionFees,
-		Value:           v.Value,
-	}
 
-	txpl = ReceiptPayload{
-		BlockHash:   hexutil.Encode(block.Hash),
-		BlockHeight: blockHeight,
-		Transaction: tx,
+	for i, v := range txs {
+		tx := TransactionJSON{
+			Data:            hexutil.Encode(v.Data),
+			From:            v.From,
+			Hash:            hexutil.Encode(v.Hash),
+			Nounce:          v.Nounce,
+			PubKey:          v.PubKey,
+			Signature:       hexutil.Encode(v.Signature),
+			To:              v.To,
+			TransactionFees: v.TransactionFees,
+			Value:           v.Value,
+		}
+		txpl = append(txpl, ReceiptPayload{
+			BlockHash:   hexutil.Encode(blocks[i].Hash),
+			BlockHeight: blockHeights[i],
+			Transaction: tx,
+		})
+
 	}
 
 	return txpl, nil

@@ -255,6 +255,7 @@ func (api *ChannelAPI) DataQueryResult(ctx context.Context, hash string) ([]Data
 }
 
 type DataContractJSON struct {
+	ContractHash string
 	HexPayload   string
 	VerifierAddr string
 }
@@ -336,6 +337,7 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 				return dcj, err
 			}
 
+			dcj.ContractHash = hexutil.Encode(contract.GetHash())
 			dcj.HexPayload = hexutil.Encode(plBits)
 			dcj.VerifierAddr = verifierAddr
 

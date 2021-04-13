@@ -53,11 +53,11 @@ func createDirectory(path string) error {
 }
 
 // NewEngine returns an instance of engine
-func NewEngine(downloadPath, path, dataDir, token, feesGB string) (Engine, error) {
+func NewEngine(downloadPath, dbpath, dataDir, token, feesGB string) (Engine, error) {
 
-	filePath := dataDir + "/db/binlayer.db"
+	filePath := path.Join(dataDir, "db", "binlayer.db")
 	if !common.FileExists(filePath) {
-		os.MkdirAll(dataDir+"/db/", os.ModePerm)
+		os.MkdirAll(path.Join(dataDir, "db"), os.ModePerm)
 	}
 
 	db, err := bolt.Open(filePath, 0600, nil)
@@ -72,12 +72,12 @@ func NewEngine(downloadPath, path, dataDir, token, feesGB string) (Engine, error
 		return nil
 	})
 
-	ng := Engine{Path: path, DB: db, FeesPerGB: feesGB, DownloadPath: downloadPath}
+	ng := Engine{Path: dbpath, DB: db, FeesPerGB: feesGB, DownloadPath: downloadPath}
 
 	ng.InsertToken(token, "admin")
 
-	if !common.DirExists(path) {
-		err := createDirectory(path)
+	if !common.DirExists(dbpath) {
+		err := createDirectory(dbpath)
 		if err != nil {
 			log.Fatal(err)
 		}

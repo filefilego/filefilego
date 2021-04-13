@@ -235,16 +235,16 @@ func (dqp *DataVerificationProtocol) onDataVerifierRequest(s network.Stream) {
 	currentNodePubKeyRawBytes, _ := dqp.Node.GetPublicKeyBytes()
 	if bytes.Equal(foundContract.RequesterNodePubKey, currentNodePubKeyRawBytes) {
 		contractHash, _ := dqp.AddContract(foundContract, *tx, PeerContextType_Downloader, hostID, downloaderID)
-		log.Println("data downloader")
+		log.Println("data downloader, contract hash: ", contractHash)
 
-		contractHashBytes, _ := hexutil.Decode(contractHash)
-		nodeTodownload, _ := hexutil.Decode("0xfdc4febb8d0497824ac7cb0bee18c9f74562eacb4f032dde66ebec04215e303c")
-		err := dqp.Download(contractHashBytes, nodeTodownload)
-		fmt.Println("Download return err ", err)
+		// contractHashBytes, _ := hexutil.Decode(contractHash)
+		// nodeTodownload, _ := hexutil.Decode("0xfdc4febb8d0497824ac7cb0bee18c9f74562eacb4f032dde66ebec04215e303c")
+		// err := dqp.Download(contractHashBytes, nodeTodownload)
+		// fmt.Println("Download return err ", err)
 
 	} else if bytes.Equal(foundContract.HostResponse.PubKey, currentNodePubKeyRawBytes) {
-		dqp.AddContract(foundContract, *tx, PeerContextType_Host, hostID, downloaderID)
-		log.Println("data hoster")
+		contractHash, _ := dqp.AddContract(foundContract, *tx, PeerContextType_Host, hostID, downloaderID)
+		log.Println("data hoster, contract hash: ", contractHash)
 	}
 }
 
@@ -375,6 +375,7 @@ func (dqp *DataVerificationProtocol) Download(contractHash []byte, nodeHash []by
 		}
 
 		wg.Wait()
+
 	}
 
 	return nil
