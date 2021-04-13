@@ -304,7 +304,6 @@ type ReceiptPayload struct {
 func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl []ReceiptPayload, err error) {
 	txs, blocks, blockHeights, err := api.Node.BlockChain.GetTransactionByHash(hash)
 	if err != nil {
-		log.Println("fuck it", txs, blocks, blockHeights, err)
 		return txpl, err
 	}
 
@@ -333,7 +332,7 @@ func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl []Rec
 
 // ByAddress returns transactions by an address
 func (api *TransactionAPI) ByAddress(ctx context.Context, address string) ([]TransactionTimestamp, error) {
-	txs, err := api.Node.BlockChain.GetTransactionsByAddress(address)
+	txs, err := api.Node.BlockChain.GetTransactionsByAddress(address, 20)
 	if err != nil {
 		return txs, err
 	}

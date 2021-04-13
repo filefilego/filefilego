@@ -76,6 +76,7 @@ type BlockchainIterator struct {
 
 // CloseDB closes the db
 func (bc *Blockchain) CloseDB() error {
+	bc.txIndexDB.Close()
 	return bc.db.Close()
 }
 
@@ -146,31 +147,42 @@ func (bc *Blockchain) GetTransactionByHash(hash string) (transactions []Transact
 }
 
 // GetTransactionsByAddress return transactions of an address
-func (bc *Blockchain) GetTransactionsByAddress(address string) (tx []TransactionTimestamp, err error) {
-	bci := bc.Iterator()
-	total := 0
-	for {
-		block := bci.Next()
-		for _, t := range block.Transactions {
-			if address == t.From || address == t.To {
-				tmp := TransactionTimestamp{Transaction: *t, Timestamp: block.Timestamp, Timestamp8601: time.Unix(block.Timestamp, 0).Format(time.RFC3339)}
-				tx = append(tx, tmp)
-				total++
-			}
-			if total > 10 {
+func (bc *Blockchain) GetTransactionsByAddress(address string, limit int) (transactions []TransactionTimestamp, err error) {
+	// bci := bc.Iterator()
+
+	total := 10
+	if limit > 0 {
+		total = limit
+	}
+
+	prefix, err := hexutil.Decode(address)
+	if err != nil {
+		return transactions, err
+	}
+	err = bc.txIndexDB.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket([]byte(addrTxBucket)).Cursor()
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			if total == 0 {
 				break
 			}
-		}
+			total--
+			txs, blocks, _, err := bc.GetTransactionByHash(hexutil.Encode(v))
+			if err != nil || len(txs) == 0 {
+				continue
+			}
 
-		if total > 10 {
-			break
-		}
+			tmp := TransactionTimestamp{Transaction: txs[len(txs)-1], Timestamp: blocks[len(blocks)-1].Timestamp, Timestamp8601: time.Unix(blocks[len(blocks)-1].Timestamp, 0).Format(time.RFC3339)}
+			transactions = append(transactions, tmp)
 
-		if len(block.PrevBlockHash) == 0 {
-			break
 		}
+		return nil
+	})
+
+	if err != nil {
+		return transactions, err
+
 	}
-	return tx, nil
+	return transactions, nil
 }
 
 // GetBlockByHeight gets the block given its number (height)
@@ -250,17 +262,6 @@ func (bc *Blockchain) GetBlockByHash(hash string) (bb Block, err error) {
 	if err != nil {
 		return bb, err
 	}
-	// bci := bc.Iterator()
-	// for {
-	// 	block := bci.Next()
-	// 	if hexutil.Encode(block.Hash) == hash {
-	// 		return block, nil
-	// 	}
-
-	// 	if len(block.PrevBlockHash) == 0 {
-	// 		break
-	// 	}
-	// }
 	return bb, nil
 }
 
@@ -867,21 +868,6 @@ func (bc *Blockchain) IsValidTransaction(transaction Transaction) (bool, error) 
 	if valFees.Cmp(zero) == -1 {
 		return false, errors.New("Value is negative")
 	}
-
-	// data := bytes.Join(
-	// 	[][]byte{
-	// 		[]byte(transaction.PubKey),
-	// 		[]byte(transaction.Nounce),
-	// 		transaction.Data,
-	// 		[]byte(transaction.From),
-	// 		[]byte(transaction.To),
-	// 		[]byte(transaction.Value),
-	// 		[]byte(transaction.TransactionFees),
-	// 	},
-	// 	[]byte{},
-	// )
-
-	// hash := sha256.Sum256(data)
 
 	hash := GetTransactionID(&transaction)
 
