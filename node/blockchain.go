@@ -150,10 +150,10 @@ func (bc *Blockchain) GetTransactionByHash(hash string) (transactions []Transact
 func (bc *Blockchain) GetTransactionsByAddress(address string, limit int) (transactions []TransactionTimestamp, err error) {
 	// bci := bc.Iterator()
 
-	total := 10
-	if limit > 0 {
-		total = limit
-	}
+	// total := 10
+	// if limit > 0 {
+	// 	total = limit
+	// }
 
 	prefix, err := hexutil.Decode(address)
 	if err != nil {
@@ -162,10 +162,10 @@ func (bc *Blockchain) GetTransactionsByAddress(address string, limit int) (trans
 	err = bc.txIndexDB.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte(addrTxBucket)).Cursor()
 		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
-			if total == 0 {
-				break
-			}
-			total--
+			// if total == 0 {
+			// 	break
+			// }
+			// total--
 			txs, blocks, _, err := bc.GetTransactionByHash(hexutil.Encode(v))
 			if err != nil || len(txs) == 0 {
 				continue
@@ -182,6 +182,20 @@ func (bc *Blockchain) GetTransactionsByAddress(address string, limit int) (trans
 		return transactions, err
 
 	}
+
+	// reverse
+	for i, j := 0, len(transactions)-1; i < j; i, j = i+1, j-1 {
+		transactions[i], transactions[j] = transactions[j], transactions[i]
+	}
+
+	txLen := len(transactions)
+	if txLen <= limit {
+		transactions = transactions[0:txLen]
+	} else {
+		transactions = transactions[0:limit]
+
+	}
+
 	return transactions, nil
 }
 
