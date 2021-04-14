@@ -301,27 +301,30 @@ type ReceiptPayload struct {
 }
 
 // Receipt gets receipts of a tx
-func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl ReceiptPayload, err error) {
-	v, block, blockHeight, err := api.Node.BlockChain.GetTransactionByHash(hash)
+func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl []ReceiptPayload, err error) {
+	txs, blocks, blockHeights, err := api.Node.BlockChain.GetTransactionByHash(hash)
 	if err != nil {
 		return txpl, err
 	}
-	tx := TransactionJSON{
-		Data:            hexutil.Encode(v.Data),
-		From:            v.From,
-		Hash:            hexutil.Encode(v.Hash),
-		Nounce:          v.Nounce,
-		PubKey:          v.PubKey,
-		Signature:       hexutil.Encode(v.Signature),
-		To:              v.To,
-		TransactionFees: v.TransactionFees,
-		Value:           v.Value,
-	}
 
-	txpl = ReceiptPayload{
-		BlockHash:   hexutil.Encode(block.Hash),
-		BlockHeight: blockHeight,
-		Transaction: tx,
+	for i, v := range txs {
+		tx := TransactionJSON{
+			Data:            hexutil.Encode(v.Data),
+			From:            v.From,
+			Hash:            hexutil.Encode(v.Hash),
+			Nounce:          v.Nounce,
+			PubKey:          v.PubKey,
+			Signature:       hexutil.Encode(v.Signature),
+			To:              v.To,
+			TransactionFees: v.TransactionFees,
+			Value:           v.Value,
+		}
+		txpl = append(txpl, ReceiptPayload{
+			BlockHash:   hexutil.Encode(blocks[i].Hash),
+			BlockHeight: blockHeights[i],
+			Transaction: tx,
+		})
+
 	}
 
 	return txpl, nil
@@ -329,7 +332,7 @@ func (api *TransactionAPI) Receipt(ctx context.Context, hash string) (txpl Recei
 
 // ByAddress returns transactions by an address
 func (api *TransactionAPI) ByAddress(ctx context.Context, address string) ([]TransactionTimestamp, error) {
-	txs, err := api.Node.BlockChain.GetTransactionsByAddress(address)
+	txs, err := api.Node.BlockChain.GetTransactionsByAddress(address, 10)
 	if err != nil {
 		return txs, err
 	}

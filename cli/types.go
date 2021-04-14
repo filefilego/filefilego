@@ -15,6 +15,7 @@ type Global struct {
 	BinLayerToken       string
 	BinLayerFeesGB      string
 	DataVerifier        bool
+	DownloadPath        string
 }
 
 // Host

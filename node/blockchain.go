@@ -3,12 +3,14 @@ package node
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"io/ioutil"
 	"math/big"
 	"os"
+	"path"
 	"reflect"
 	"sort"
 	"sync"
@@ -33,6 +35,9 @@ const channelBucket = "channels"
 const nodesBucket = "nodes"
 const nodeNodesBucket = "node_nodes"
 
+const txBlocksBucket = "tx_blocks"
+const addrTxBucket = "addr_txs"
+
 // TransactionTimestamp represents a transaction and its timestamps
 type TransactionTimestamp struct {
 	Transaction   Transaction
@@ -44,6 +49,7 @@ type TransactionTimestamp struct {
 type Blockchain struct {
 	tip       []byte
 	db        *bolt.DB
+	txIndexDB *bolt.DB
 	FilePath  string
 	Key       *keystore.Key
 	HeightMux sync.Mutex
@@ -70,6 +76,7 @@ type BlockchainIterator struct {
 
 // CloseDB closes the db
 func (bc *Blockchain) CloseDB() error {
+	bc.txIndexDB.Close()
 	return bc.db.Close()
 }
 
@@ -89,51 +96,107 @@ func (bc *Blockchain) GetHeight() uint64 {
 }
 
 // GetTransactionByHash returns a transaction by hash
-func (bc *Blockchain) GetTransactionByHash(hash string) (tx Transaction, blck Block, index uint64, err error) {
-	bci := bc.Iterator()
-	index = bc.GetHeight()
-
-	for {
-		block := bci.Next()
-		for _, t := range block.Transactions {
-			if hash == hexutil.Encode(t.Hash) {
-				return *t, block, index, nil
+func (bc *Blockchain) GetTransactionByHash(hash string) (transactions []Transaction, blcks []Block, indices []uint64, err error) {
+	prefix, err := hexutil.Decode(hash)
+	if err != nil {
+		return transactions, blcks, indices, errors.New("invalid transaction")
+	}
+	err = bc.txIndexDB.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket([]byte(txBlocksBucket)).Cursor()
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			index := binary.BigEndian.Uint64(v[32:])
+			indices = append(indices, index)
+			blck, err := bc.GetBlockByHash(hexutil.Encode(v[:32]))
+			blcks = append(blcks, blck)
+			if err != nil {
+				continue
+			}
+			for _, t := range blck.Transactions {
+				if bytes.Equal(prefix, t.Hash) {
+					transactions = append(transactions, *t)
+					break
+				}
 			}
 		}
-		index--
-		if len(block.PrevBlockHash) == 0 {
-			break
-		}
+		return nil
+	})
+
+	if err != nil || len(transactions) == 0 {
+		return transactions, blcks, indices, errors.New("invalid transaction")
+
 	}
-	return tx, blck, 0, errors.New("transaction not found")
+
+	return transactions, blcks, indices, nil
+
+	// bci := bc.Iterator()
+	// index = bc.GetHeight()
+
+	// for {
+	// 	block := bci.Next()
+	// 	for _, t := range block.Transactions {
+	// 		if hash == hexutil.Encode(t.Hash) {
+	// 			return *t, block, index, nil
+	// 		}
+	// 	}
+	// 	index--
+	// 	if len(block.PrevBlockHash) == 0 {
+	// 		break
+	// 	}
+	// }
+	// return tx, blck, 0, errors.New("transaction not found")
 }
 
 // GetTransactionsByAddress return transactions of an address
-func (bc *Blockchain) GetTransactionsByAddress(address string) (tx []TransactionTimestamp, err error) {
-	bci := bc.Iterator()
-	total := 0
-	for {
-		block := bci.Next()
-		for _, t := range block.Transactions {
-			if address == t.From || address == t.To {
-				tmp := TransactionTimestamp{Transaction: *t, Timestamp: block.Timestamp, Timestamp8601: time.Unix(block.Timestamp, 0).Format(time.RFC3339)}
-				tx = append(tx, tmp)
-				total++
-			}
-			if total > 10 {
-				break
-			}
-		}
+func (bc *Blockchain) GetTransactionsByAddress(address string, limit int) (transactions []TransactionTimestamp, err error) {
+	// bci := bc.Iterator()
 
-		if total > 10 {
-			break
-		}
+	// total := 10
+	// if limit > 0 {
+	// 	total = limit
+	// }
 
-		if len(block.PrevBlockHash) == 0 {
-			break
-		}
+	prefix, err := hexutil.Decode(address)
+	if err != nil {
+		return transactions, err
 	}
-	return tx, nil
+	err = bc.txIndexDB.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket([]byte(addrTxBucket)).Cursor()
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			// if total == 0 {
+			// 	break
+			// }
+			// total--
+			txs, blocks, _, err := bc.GetTransactionByHash(hexutil.Encode(v))
+			if err != nil || len(txs) == 0 {
+				continue
+			}
+
+			tmp := TransactionTimestamp{Transaction: txs[len(txs)-1], Timestamp: blocks[len(blocks)-1].Timestamp, Timestamp8601: time.Unix(blocks[len(blocks)-1].Timestamp, 0).Format(time.RFC3339)}
+			transactions = append(transactions, tmp)
+
+		}
+		return nil
+	})
+
+	if err != nil {
+		return transactions, err
+
+	}
+
+	// reverse
+	for i, j := 0, len(transactions)-1; i < j; i, j = i+1, j-1 {
+		transactions[i], transactions[j] = transactions[j], transactions[i]
+	}
+
+	txLen := len(transactions)
+	if txLen <= limit {
+		transactions = transactions[0:txLen]
+	} else {
+		transactions = transactions[0:limit]
+
+	}
+
+	return transactions, nil
 }
 
 // GetBlockByHeight gets the block given its number (height)
@@ -191,18 +254,29 @@ func (bc *Blockchain) GetBlocksByRange(from uint64, to uint64) ([]*Block, error)
 
 // GetBlockByHash gets the block given its hash
 func (bc *Blockchain) GetBlockByHash(hash string) (bb Block, err error) {
-	bci := bc.Iterator()
-	for {
-		block := bci.Next()
-		if hexutil.Encode(block.Hash) == hash {
-			return block, nil
+
+	blockHash, err := hexutil.Decode(hash)
+	if err != nil {
+		return bb, err
+	}
+	err = bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		bts := b.Get(blockHash)
+		if bts == nil {
+			return errors.New("block doesn't exists in the database")
 		}
 
-		if len(block.PrevBlockHash) == 0 {
-			break
+		bb, err = DeserializeBlock(bts)
+		if err != nil {
+			return err
 		}
+		return nil
+	})
+
+	if err != nil {
+		return bb, err
 	}
-	return bb, errors.New("block was not found")
+	return bb, nil
 }
 
 // AddBalanceTo adds balance to address
@@ -556,10 +630,15 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 								return err
 							}
 						} else {
+
+							timeBytes := make([]byte, 8)
+							binary.BigEndian.PutUint64(timeBytes, uint64(time.Now().Unix()))
+
 							// add relations by using the intermidiate bucket
 							chBucket := tx.Bucket([]byte(nodeNodesBucket))
 							key := bytes.Join([][]byte{
 								[]byte(chaNode.ParentHash),
+								timeBytes,
 								[]byte(chaNode.Hash),
 							}, []byte{})
 							err := chBucket.Put(key, []byte(chaNode.Hash))
@@ -594,6 +673,75 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 		}
 	}
 	return nil
+}
+
+// IndexBlockTransactions indexes blocks txs
+func (bc *Blockchain) IndexBlockTransactions(transaction Transaction, blockHash []byte, blockHeight uint64) error {
+	err := bc.txIndexDB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(txBlocksBucket))
+		timeBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(timeBytes, uint64(time.Now().UnixNano()))
+
+		bHeight := make([]byte, 8)
+		binary.BigEndian.PutUint64(bHeight, blockHeight)
+
+		blockHashAndHeight := make([]byte, len(blockHash))
+		copy(blockHashAndHeight, blockHash)
+		blockHashAndHeight = append(blockHashAndHeight, bHeight...)
+
+		key := bytes.Join([][]byte{
+			transaction.Hash,
+			timeBytes,
+		}, []byte{})
+		err := b.Put(key, blockHashAndHeight)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return err
+}
+
+// IndexAddrTransaction indexes addresses and txs
+func (bc *Blockchain) IndexAddrTransaction(transaction Transaction) error {
+
+	fromAddr, _ := hexutil.Decode(transaction.From)
+	toAddr, _ := hexutil.Decode(transaction.To)
+
+	err := bc.txIndexDB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(addrTxBucket))
+		timeBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(timeBytes, uint64(time.Now().UnixNano()))
+
+		// coinbase transactions have no From
+		if len(fromAddr) > 0 {
+			keyFrom := bytes.Join([][]byte{
+				fromAddr,
+				timeBytes,
+			}, []byte{})
+
+			err := b.Put(keyFrom, transaction.Hash)
+			if err != nil {
+				return err
+			}
+		}
+
+		// to will be always available
+		keyTo := bytes.Join([][]byte{
+			toAddr,
+			timeBytes,
+		}, []byte{})
+
+		err := b.Put(keyTo, transaction.Hash)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 // MutateAddressStateFromTransaction mutates the state of an address from a transaction
@@ -735,21 +883,6 @@ func (bc *Blockchain) IsValidTransaction(transaction Transaction) (bool, error) 
 		return false, errors.New("Value is negative")
 	}
 
-	// data := bytes.Join(
-	// 	[][]byte{
-	// 		[]byte(transaction.PubKey),
-	// 		[]byte(transaction.Nounce),
-	// 		transaction.Data,
-	// 		[]byte(transaction.From),
-	// 		[]byte(transaction.To),
-	// 		[]byte(transaction.Value),
-	// 		[]byte(transaction.TransactionFees),
-	// 	},
-	// 	[]byte{},
-	// )
-
-	// hash := sha256.Sum256(data)
-
 	hash := GetTransactionID(&transaction)
 
 	if !reflect.DeepEqual(transaction.Hash, hash) {
@@ -882,6 +1015,9 @@ func (bc *Blockchain) AddBlockPool(block Block) (bool, error) {
 					if err != nil {
 						log.Error("mutation error", err)
 					}
+
+					bc.IndexBlockTransactions(*vc, v.Hash, bc.GetHeight()+1)
+					bc.IndexAddrTransaction(*vc)
 
 					// perform channel mutations if available
 					vbalances := make(map[string]*big.Int)
@@ -1393,6 +1529,9 @@ func (bc *Blockchain) MineScheduler() {
 				continue
 			}
 
+			bc.IndexBlockTransactions(*v, minedBlock.Hash, bc.GetHeight()+1)
+			bc.IndexAddrTransaction(*v)
+
 			// perform channel mutations if available
 			err = bc.MutateChannel(*v, vbalances, true)
 			if err != nil {
@@ -1473,20 +1612,34 @@ func dbExists(filePath string) bool {
 
 // CreateOrLoadBlockchain creates a new blockchain DB
 func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKeyPass string) *Blockchain {
-	filePath := dataDir + "/db/blockchain.db"
+	filePath := path.Join(dataDir, "db", "blockchain.db")
+
+	txIndexPath := path.Join(dataDir, "db", "txindex.db")
+
 	if !common.FileExists(filePath) {
-		os.MkdirAll(dataDir+"/db/", os.ModePerm)
+		os.MkdirAll(path.Join(dataDir, "db"), os.ModePerm)
 	}
+
+	if !common.FileExists(txIndexPath) {
+		os.MkdirAll(path.Join(dataDir, "db"), os.ModePerm)
+	}
+
 	var tip []byte
 	db, err := bolt.Open(filePath, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	txdb, err := bolt.Open(txIndexPath, 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	bc := Blockchain{
-		tip:      tip,
-		db:       db,
-		FilePath: filePath,
+		tip:       tip,
+		db:        db,
+		txIndexDB: txdb,
+		FilePath:  filePath,
 		Key: &keystore.Key{
 			KeyPair: &crypto.KeyPair{
 				Address: "",
@@ -1524,6 +1677,22 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 		if !foundKey {
 			log.Fatal("Verification can be done by the genesis verifiers only")
 		}
+	}
+
+	err = txdb.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(txBlocksBucket))
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists([]byte(addrTxBucket))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Fatal("Unable to create tx index buckets")
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {

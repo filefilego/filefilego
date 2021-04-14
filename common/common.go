@@ -2,6 +2,7 @@ package common
 
 import (
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"io"
 	"os"
@@ -35,8 +36,8 @@ func Sha1File(path string) (string, error) {
 }
 
 // Sha1String performs a sha1 hash on a string
-func Sha1String(data string) (string, error) {
-	h := sha1.New()
+func Sha256String(data string) (string, error) {
+	h := sha256.New()
 	io.WriteString(h, data)
 	return hexutil.Encode(h.Sum(nil)), nil
 }

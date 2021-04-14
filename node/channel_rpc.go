@@ -183,7 +183,7 @@ func (api *ChannelAPI) Search(ctx context.Context, query string, searchType int,
 // DataQuery applies gossip to search for suplied nodes
 func (api *ChannelAPI) DataQuery(ctx context.Context, nodes string) (string, error) {
 
-	dataHash, err := common.Sha1String(nodes)
+	dataHash, err := common.Sha256String(nodes)
 
 	if err != nil {
 		return "", errors.New("Unable to hash the request")
@@ -254,11 +254,17 @@ func (api *ChannelAPI) DataQueryResult(ctx context.Context, hash string) ([]Data
 	return res, nil
 }
 
+type DataContractJSON struct {
+	ContractHash string
+	HexPayload   string
+	VerifierAddr string
+}
+
 // PrepareDataContract prepares a data contract
-func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fromPeer string) (string, error) {
+func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fromPeer string) (dcj DataContractJSON, _ error) {
 	res, ok := api.Node.DataQueryProtocol.GetQueryResponse(hash)
 	if !ok {
-		return "", errors.New("response not available")
+		return dcj, errors.New("response not available")
 	}
 
 	for _, v := range res {
@@ -282,13 +288,14 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 
 			accessibleVerifiers := api.Node.FindPeers(peerIDs)
 			if len(accessibleVerifiers) == 0 {
-				return "", errors.New("Unable to find verifiers")
+				return dcj, errors.New("Unable to find verifiers")
 			}
 			randomIndex := rand.Intn(len(accessibleVerifiers))
 			verifier := accessibleVerifiers[randomIndex]
 			vpid := verifier.ID
 
 			vpubKey := []byte{}
+			verifierAddr := ""
 			for _, v := range GetBlockchainSettings().Verifiers {
 				if v.DataVerifier {
 					pk, err := crypto.PublicKeyFromRawHex(v.PublicKey)
@@ -298,13 +305,14 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 					pid, _ := peer.IDFromPublicKey(pk)
 					if pid.String() == vpid.String() {
 						vpubKey, _ = hexutil.Decode(v.PublicKey)
+						verifierAddr = v.Address
 					}
 				}
 			}
 
 			rawPubKeyBytes, err := api.Node.GetPublicKeyBytes()
 			if err != nil {
-				return "", err
+				return dcj, err
 			}
 			contractsEnvelop := DataContractsEnvelop{}
 			contract := DataContract{
@@ -316,7 +324,7 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 			contractsEnvelop.Contracts = append(contractsEnvelop.Contracts, &contract)
 			bts, err := proto.Marshal(&contractsEnvelop)
 			if err != nil {
-				return "", err
+				return dcj, err
 			}
 
 			pl := TransactionDataPayload{
@@ -326,21 +334,19 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 
 			plBits, err := proto.Marshal(&pl)
 			if err != nil {
-				return "", err
+				return dcj, err
 			}
 
-			return hexutil.Encode(plBits), nil
+			dcj.ContractHash = hexutil.Encode(contract.GetHash())
+			dcj.HexPayload = hexutil.Encode(plBits)
+			dcj.VerifierAddr = verifierAddr
+
+			return dcj, nil
 
 		}
 	}
 
-	return "", errors.New("Data provider not available")
-}
-
-type NodeToFileInfo struct {
-	Name string
-	Hash string
-	Size uint64
+	return dcj, errors.New("Data provider not available")
 }
 
 // ExtractFilesFromEntryFolder extracts files from folders and entry
@@ -402,9 +408,10 @@ func (api *ChannelAPI) ExtractFilesFromEntryFolder(ctx context.Context, nodes st
 
 			} else {
 				size, _ := hexutil.DecodeUint64(tmp.Size)
+				hashBts, _ := hexutil.Decode(tmp.Hash)
 				finfo := NodeToFileInfo{
 					Name: tmp.Name,
-					Hash: tmp.Hash,
+					Hash: hashBts,
 					Size: size,
 				}
 				files = append(files, finfo)
