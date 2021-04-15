@@ -1,7 +1,6 @@
 package node
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -302,11 +301,9 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 					if tmp.NodeType == ChanNodeType_ENTRY || tmp.NodeType == ChanNodeType_DIR {
 						// get its childs and append to queue accordingly
 
-						c := tx.Bucket([]byte(nodeNodesBucket)).Cursor()
-						prefix := []byte(tmp.Hash)
-						for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
-							// fmt.Printf("key=%s, value=%s\n", k, v)
-							val := b.Get(v)
+						childNodes, _ := n.BlockChain.GetNodeNodes(tmp.Hash)
+						for _, v := range childNodes {
+							val := b.Get([]byte(hexutil.Encode(v)))
 							if val == nil {
 								continue
 							}

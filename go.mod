@@ -20,6 +20,7 @@ require (
 	github.com/libp2p/go-libp2p-secio v0.2.3
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/libp2p/go-libp2p-yamux v0.5.1
+	github.com/mattn/go-sqlite3 v1.14.7 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.4
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416

@@ -1,7 +1,6 @@
 package node
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -42,28 +41,16 @@ func (api *ChannelAPI) List(ctx context.Context, limit int, offset int) (ChanNod
 	pl := ChanNodeListJSONResponse{Limit: limit, Offset: offset}
 
 	if err := db.View(func(tx *bolt.Tx) error {
-		// Assume bucket exists and has keys
-		b := tx.Bucket([]byte(channelBucket))
+		chans, totalCount, _ := api.Node.BlockChain.GetChannelNodes(limit, offset)
 		nbucket := tx.Bucket([]byte(nodesBucket))
-		pl.Total = b.Stats().KeyN
-		c := b.Cursor()
-		index := 0
-		accepted := 0
-		for k, val := c.First(); k != nil; k, val = c.Next() {
-			index++
-			if limit == accepted {
-				break
-			}
-			if index < offset+1 {
-				continue
-			}
-
+		pl.Total = totalCount
+		for _, val := range chans {
 			v := nbucket.Get(val)
 			channel := ChanNode{}
 			proto.Unmarshal(v, &channel)
 			pl.Channels = append(pl.Channels, channel)
-			accepted++
 		}
+
 		return nil
 	}); err != nil {
 		return pl, err
@@ -109,11 +96,10 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 		}
 
 		// get its childs
-		c := tx.Bucket([]byte(nodeNodesBucket)).Cursor()
-		prefix := []byte(hash)
-		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
-			// fmt.Printf("key=%s, value=%s\n", k, v)
-			val := b.Get(v)
+		childNodes, err := api.Node.BlockChain.GetNodeNodes(hash)
+
+		for _, v := range childNodes {
+			val := b.Get([]byte(hexutil.Encode(v)))
 			if val == nil {
 				continue
 			}
@@ -125,7 +111,6 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 			}
 			response.Childs = append(response.Childs, tmpNode)
 		}
-
 		return nil
 	}); err != nil {
 
@@ -388,12 +373,9 @@ func (api *ChannelAPI) ExtractFilesFromEntryFolder(ctx context.Context, nodes st
 			tmp := el.Value.(ChanNode)
 			if tmp.NodeType == ChanNodeType_ENTRY || tmp.NodeType == ChanNodeType_DIR {
 				// get its childs and append to queue accordingly
-
-				c := tx.Bucket([]byte(nodeNodesBucket)).Cursor()
-				prefix := []byte(tmp.Hash)
-				for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
-					// fmt.Printf("key=%s, value=%s\n", k, v)
-					val := b.Get(v)
+				childNodes, _ := api.Node.BlockChain.GetNodeNodes(tmp.Hash)
+				for _, v := range childNodes {
+					val := b.Get([]byte(hexutil.Encode(v)))
 					if val == nil {
 						continue
 					}
