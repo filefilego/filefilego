@@ -72,6 +72,9 @@ type ChanNodeJSONResponse struct {
 // GetNode gets a node given its hash
 func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanNodeJSONResponse, err error) {
 	db := api.Node.BlockChain.db
+	// get its childs
+	childNodes, err := api.Node.BlockChain.GetNodeNodes(hash)
+
 	if err := db.View(func(tx *bolt.Tx) error {
 
 		b := tx.Bucket([]byte(nodesBucket))
@@ -94,9 +97,6 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 				return err
 			}
 		}
-
-		// get its childs
-		childNodes, err := api.Node.BlockChain.GetNodeNodes(hash)
 
 		for _, v := range childNodes {
 			val := b.Get([]byte(hexutil.Encode(v)))
@@ -256,7 +256,7 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 		if v.FromPeerAddr == fromPeer {
 
 			peerIDs := []peer.ID{}
-			for _, v := range GetBlockchainSettings().Verifiers {
+			for _, v := range api.Node.GetBlockchainSettings().Verifiers {
 				if v.DataVerifier {
 					pubKey, err := crypto.PublicKeyFromRawHex(v.PublicKey)
 					if err != nil {
@@ -273,7 +273,7 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 
 			accessibleVerifiers := api.Node.FindPeers(peerIDs)
 			if len(accessibleVerifiers) == 0 {
-				return dcj, errors.New("Unable to find verifiers")
+				return dcj, errors.New("Unable to find verifiers. Please try again in a few minutes")
 			}
 			randomIndex := rand.Intn(len(accessibleVerifiers))
 			verifier := accessibleVerifiers[randomIndex]
@@ -281,7 +281,7 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 
 			vpubKey := []byte{}
 			verifierAddr := ""
-			for _, v := range GetBlockchainSettings().Verifiers {
+			for _, v := range api.Node.GetBlockchainSettings().Verifiers {
 				if v.DataVerifier {
 					pk, err := crypto.PublicKeyFromRawHex(v.PublicKey)
 					if err != nil {

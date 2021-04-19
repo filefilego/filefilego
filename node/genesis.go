@@ -4,8 +4,13 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 )
 
+var (
+	BlockchainChainID = hexutil.MustDecode("0x01")
+)
+
 // BlockchainSettings represents starting point of the blockchain
 type BlockchainSettings struct {
+	BinLayerEngineEnabled    bool       `json:"binlayer_engine_enabled"`
 	BlockchainVersion        string     `json:"blockchain_version"`
 	Chain                    []byte     `json:"chain"`
 	GenesisHash              string     `json:"genesis_hash"`
@@ -21,17 +26,19 @@ type BlockchainSettings struct {
 }
 
 // GetBlockchainSettings returns the genesis data
-func GetBlockchainSettings() BlockchainSettings {
+func (n *Node) GetBlockchainSettings() BlockchainSettings {
+
 	gen := BlockchainSettings{
-		BlockchainVersion:  "0.9.3",
-		Chain:              hexutil.MustDecode("0x01"), // 1 for Mainnet, anything else for other chains
-		GenesisHash:        "c2005c6ea44df4800bbd56d857bb6cb727acde486869553d212056bea38438e9",
-		BlockTimeSeconds:   10,
-		InitialBlockReward: "15000000000000000000",        // 15 zarans
-		MaxSupply:          "500000000000000000000000000", // 500M zarans
-		DropRewardDays:     730,                           //2 years
-		DropRewardFactor:   2,
-		NamespaceEnabled:   true,
+		BinLayerEngineEnabled: n.BinLayerEngine.Enabled,
+		BlockchainVersion:     "0.9.3",
+		Chain:                 BlockchainChainID, // 1 for Mainnet, anything else for other chains
+		GenesisHash:           "c2005c6ea44df4800bbd56d857bb6cb727acde486869553d212056bea38438e9",
+		BlockTimeSeconds:      10,
+		InitialBlockReward:    "15000000000000000000",        // 15 zarans
+		MaxSupply:             "500000000000000000000000000", // 500M zarans
+		DropRewardDays:        730,                           //2 years
+		DropRewardFactor:      2,
+		NamespaceEnabled:      true,
 		//NamespaceRegistrationFee: "10000000000000000000000", //10k zarans
 		NamespaceRegistrationFee: "15000000000000000000", //15 zarans
 		NodeCreationFeesGuest:    "1000000000000000000",  //1 Zaran

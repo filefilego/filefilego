@@ -115,7 +115,7 @@ func entry(ctx *cli.Context) error {
 
 		isVerifier := false
 
-		for _, v := range npkg.GetBlockchainSettings().Verifiers {
+		for _, v := range node.GetBlockchainSettings().Verifiers {
 			if v.PublicKey == currentNodePubKeyHex {
 				isVerifier = true
 				break

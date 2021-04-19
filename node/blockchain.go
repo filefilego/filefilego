@@ -464,7 +464,7 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 
 					// if channel remove parent as a security measure
 					if chaNode.NodeType == ChanNodeType_CHANNEL {
-						var regFee, _ = new(big.Int).SetString(GetBlockchainSettings().NamespaceRegistrationFee, 10)
+						var regFee, _ = new(big.Int).SetString(bc.Node.GetBlockchainSettings().NamespaceRegistrationFee, 10)
 						if txVal.Cmp(regFee) < 0 {
 							continue
 						}
@@ -628,7 +628,7 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 										breakOuter = true
 										break
 									}
-									var commentFees, _ = new(big.Int).SetString(GetBlockchainSettings().NodeCreationFeesGuest, 10)
+									var commentFees, _ = new(big.Int).SetString(bc.Node.GetBlockchainSettings().NodeCreationFeesGuest, 10)
 									if currentBalance.Cmp(commentFees) < 0 {
 										log.Error("No enough balance to post")
 										breakOuter = true
@@ -810,7 +810,7 @@ func (bc *Blockchain) MutateAddressStateFromTransaction(transaction Transaction,
 			log.Error("Unable to add balance to address ", err)
 			return err
 		}
-		err = bc.AddBalanceTo(GetBlockchainSettings().Verifiers[0].Address, txFees)
+		err = bc.AddBalanceTo(bc.Node.GetBlockchainSettings().Verifiers[0].Address, txFees)
 		if err != nil {
 			log.Error("Unable to add balance to verifier ", err)
 			return err
@@ -872,7 +872,7 @@ func (bc *Blockchain) IsValidTransaction(transaction Transaction) (bool, error) 
 		return false, errors.New("Hash is empty")
 	}
 
-	if !reflect.DeepEqual(transaction.Chain, GetBlockchainSettings().Chain) {
+	if !reflect.DeepEqual(transaction.Chain, bc.Node.GetBlockchainSettings().Chain) {
 		return false, errors.New("Chain is wrong")
 	}
 
@@ -1473,7 +1473,7 @@ func (bc *Blockchain) PreparePoolBlocksForMining() ([]*Transaction, map[string]*
 
 				// check if transaction payload is a channel
 				// and test for validity with the restrictions
-				if !IsValidChannelPayload(v, currentBalance) {
+				if !bc.IsValidChannelPayload(v, currentBalance) {
 					bc.RemoveMemPool(&v)
 					continue
 				}
@@ -1495,7 +1495,7 @@ func (bc *Blockchain) PreparePoolBlocksForMining() ([]*Transaction, map[string]*
 
 				// check if transaction payload is a channel
 				// and test for validity with the restrictions
-				if !IsValidChannelPayload(v, abalance) {
+				if !bc.IsValidChannelPayload(v, abalance) {
 					bc.RemoveMemPool(&v)
 					continue
 				}
@@ -1512,14 +1512,14 @@ func (bc *Blockchain) PreparePoolBlocksForMining() ([]*Transaction, map[string]*
 
 // CalculateReward calculates the reward for each block given the begining of the genesis timestamp
 func (bc *Blockchain) CalculateReward() string {
-	var blockReward, _ = new(big.Int).SetString(GetBlockchainSettings().InitialBlockReward, 10)
+	var blockReward, _ = new(big.Int).SetString(bc.Node.GetBlockchainSettings().InitialBlockReward, 10)
 	return hexutil.EncodeBig(blockReward)
 }
 
 // MineScheduler starts the mining process every x seconds
 func (bc *Blockchain) MineScheduler() {
 	for {
-		<-time.After(time.Duration(GetBlockchainSettings().BlockTimeSeconds) * time.Second)
+		<-time.After(time.Duration(bc.Node.GetBlockchainSettings().BlockTimeSeconds) * time.Second)
 
 		txs, vbalances := bc.PreparePoolBlocksForMining()
 
@@ -1527,12 +1527,12 @@ func (bc *Blockchain) MineScheduler() {
 			log.Info("prepareing to seal tx ", hexutil.Encode(v.Hash), " with nounce: ", v.Nounce)
 		}
 		cbtx := Transaction{
-			Chain:           GetBlockchainSettings().Chain,
+			Chain:           bc.Node.GetBlockchainSettings().Chain,
 			From:            "",
-			To:              GetBlockchainSettings().Verifiers[0].Address,
+			To:              bc.Node.GetBlockchainSettings().Verifiers[0].Address,
 			Data:            []byte(""),
 			Value:           bc.CalculateReward(),
-			PubKey:          GetBlockchainSettings().Verifiers[0].PublicKey,
+			PubKey:          bc.Node.GetBlockchainSettings().Verifiers[0].PublicKey,
 			TransactionFees: "0x0",
 			Nounce:          "0x0",
 		}
@@ -1702,7 +1702,7 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 		bc.Key = key
 		keyAddr := "0x" + bc.Key.Address
 		foundKey := false
-		for _, v := range GetBlockchainSettings().Verifiers {
+		for _, v := range bc.Node.GetBlockchainSettings().Verifiers {
 			if v.Address == keyAddr {
 				foundKey = true
 			}
@@ -1731,12 +1731,12 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 		b := tx.Bucket([]byte(blocksBucket))
 		if b == nil {
 
-			var txVal, _ = new(big.Int).SetString(GetBlockchainSettings().Verifiers[0].InitialBalance, 10)
+			var txVal, _ = new(big.Int).SetString(n.GetBlockchainSettings().Verifiers[0].InitialBalance, 10)
 
 			cbtx := Transaction{
-				Chain: GetBlockchainSettings().Chain,
+				Chain: n.GetBlockchainSettings().Chain,
 				From:  "",
-				To:    GetBlockchainSettings().Verifiers[0].Address,
+				To:    n.GetBlockchainSettings().Verifiers[0].Address,
 				Data:  []byte("Whoever would overthrow the liberty of a nation must begin by subduing the freeness of speech"),
 				Value: hexutil.EncodeBig(txVal),
 			}
@@ -1789,7 +1789,7 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 				log.Panic(err)
 			}
 
-			err = accBucket.Put([]byte(GetBlockchainSettings().Verifiers[0].Address), blkBts)
+			err = accBucket.Put([]byte(n.GetBlockchainSettings().Verifiers[0].Address), blkBts)
 
 			b, err := tx.CreateBucketIfNotExists([]byte(blocksBucket))
 			if err != nil {
@@ -1826,7 +1826,7 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 	log.Println("Verifying blocks")
 	bc.TraverseChain(func(blc Block) {
 		bc.Height += 1
-		if hex.EncodeToString(blc.Hash) != GetBlockchainSettings().GenesisHash {
+		if hex.EncodeToString(blc.Hash) != n.GetBlockchainSettings().GenesisHash {
 			if !ValidateBlock(blc) {
 				log.Fatal("Block " + hex.EncodeToString(blc.Hash) + " couldn't be verified")
 			}

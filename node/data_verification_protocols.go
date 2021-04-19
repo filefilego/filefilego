@@ -130,8 +130,8 @@ func (dqp *DataVerificationProtocol) GetContractTransaction(hash string) (Contra
 	return c, true
 }
 
-// GetContract returns a contract that has been validated before
-func (dqp *DataVerificationProtocol) GetContract(hash string) (dataContract DataContract, _ bool) {
+// GetContractFromContractTransaction returns a contract that has been validated before
+func (dqp *DataVerificationProtocol) GetContractFromContractTransaction(hash string) (dataContract DataContract, _ bool) {
 	dqp.contMutex.Lock()
 	defer dqp.contMutex.Unlock()
 
@@ -154,7 +154,7 @@ func (dqp *DataVerificationProtocol) GetContract(hash string) (dataContract Data
 	return dataContract, true
 }
 
-func (dqp *DataVerificationProtocol) AddContract(contract DataContract, tx Transaction, nContext PeerContext, hostID peer.ID, downloaderID peer.ID) (string, bool) {
+func (dqp *DataVerificationProtocol) AddContractTransaction(contract DataContract, tx Transaction, nContext PeerContext, hostID peer.ID, downloaderID peer.ID) (string, bool) {
 	dqp.contMutex.Lock()
 	defer dqp.contMutex.Unlock()
 	contractHash := hexutil.Encode(contract.GetHash())
@@ -234,7 +234,7 @@ func (dqp *DataVerificationProtocol) onDataVerifierRequest(s network.Stream) {
 	// find is current node is downloader or hoster
 	currentNodePubKeyRawBytes, _ := dqp.Node.GetPublicKeyBytes()
 	if bytes.Equal(foundContract.RequesterNodePubKey, currentNodePubKeyRawBytes) {
-		contractHash, _ := dqp.AddContract(foundContract, *tx, PeerContextType_Downloader, hostID, downloaderID)
+		contractHash, _ := dqp.AddContractTransaction(foundContract, *tx, PeerContextType_Downloader, hostID, downloaderID)
 		log.Println("data downloader, contract hash: ", contractHash)
 
 		// contractHashBytes, _ := hexutil.Decode(contractHash)
@@ -243,7 +243,7 @@ func (dqp *DataVerificationProtocol) onDataVerifierRequest(s network.Stream) {
 		// fmt.Println("Download return err ", err)
 
 	} else if bytes.Equal(foundContract.HostResponse.PubKey, currentNodePubKeyRawBytes) {
-		contractHash, _ := dqp.AddContract(foundContract, *tx, PeerContextType_Host, hostID, downloaderID)
+		contractHash, _ := dqp.AddContractTransaction(foundContract, *tx, PeerContextType_Host, hostID, downloaderID)
 		log.Println("data hoster, contract hash: ", contractHash)
 	}
 }
@@ -330,7 +330,7 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 
 func (dqp *DataVerificationProtocol) Download(contractHash []byte, nodeHash []byte) error {
 
-	contract, ok := dqp.GetContract(hexutil.Encode(contractHash))
+	contract, ok := dqp.GetContractFromContractTransaction(hexutil.Encode(contractHash))
 	if !ok {
 		return errors.New("contract not found")
 	}
@@ -359,16 +359,16 @@ func (dqp *DataVerificationProtocol) Download(contractHash []byte, nodeHash []by
 
 	if len(ranges) > 0 {
 		wg := &sync.WaitGroup{}
-		for _, v := range ranges {
+		for idx, v := range ranges {
 			wg.Add(1)
-			go func(wg *sync.WaitGroup, v FileBlockRange) {
-				outputPath, ok := dqp.RequestFileBlockRanges(contractHash, nodeHash, uint64(v.from), uint64(v.to))
+			go func(wg *sync.WaitGroup, v FileBlockRange, partIndex int) {
+				outputPath, ok := dqp.RequestFileBlockRanges(contractHash, nodeHash, partIndex, uint64(v.from), uint64(v.to))
 				if !ok {
 					log.Warn("error while downloading part")
 				}
 				fmt.Println("Downloaded file ", outputPath)
 				wg.Done()
-			}(wg, v)
+			}(wg, v, idx)
 		}
 
 		wg.Wait()
@@ -380,8 +380,8 @@ func (dqp *DataVerificationProtocol) Download(contractHash []byte, nodeHash []by
 }
 
 // RequestFileBlockRanges requests a range of file blocks
-func (dqp *DataVerificationProtocol) RequestFileBlockRanges(contractHash []byte, nodeHash []byte, from, to uint64) (string, bool) {
-	_, ok := dqp.GetContract(hexutil.Encode(contractHash))
+func (dqp *DataVerificationProtocol) RequestFileBlockRanges(contractHash []byte, nodeHash []byte, partIndex int, from, to uint64) (string, bool) {
+	_, ok := dqp.GetContractFromContractTransaction(hexutil.Encode(contractHash))
 	if !ok {
 		return "", false
 	}
@@ -427,7 +427,8 @@ func (dqp *DataVerificationProtocol) RequestFileBlockRanges(contractHash []byte,
 		return "", false
 	}
 	// c := bufio.NewReader(s)
-	outputFile := path.Join(dqp.Node.BinLayerEngine.DownloadPath, hexutil.Encode(nodeHash)+fmt.Sprintf("_%d_%d.part", from, to))
+	os.MkdirAll(path.Join(dqp.Node.BinLayerEngine.DownloadPath, hexutil.Encode(nodeHash)), os.ModePerm)
+	outputFile := path.Join(dqp.Node.BinLayerEngine.DownloadPath, hexutil.Encode(nodeHash), hexutil.Encode(nodeHash)+fmt.Sprintf("_%d.part", partIndex))
 	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
 		log.Error(err)
@@ -455,28 +456,26 @@ func (dqp *DataVerificationProtocol) RequestFileBlockRanges(contractHash []byte,
 	return outputFile, true
 }
 
-// func (dqp *DataVerificationProtocol) onFileNodesRequest(s network.Stream) {
-// 	c := bufio.NewReader(s)
-// 	defer s.Close()
+func (dqp *DataVerificationProtocol) onFileNodesRequest(s network.Stream) {
+	// c := bufio.NewReader(s)
+	// defer s.Close()
 
-// 	msgLengthBuffer := make([]byte, 8)
-// 	_, err := c.Read(msgLengthBuffer)
-// 	if err != nil {
-// 		log.Error(err)
-// 		return
-// 	}
+	// msgLengthBuffer := make([]byte, 8)
+	// _, err := c.Read(msgLengthBuffer)
+	// if err != nil {
+	// 	log.Error(err)
+	// 	return
+	// }
 
-// 	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
-// 	buf := make([]byte, lengthPrefix)
-// 	// read the full message, or return an error
-// 	_, err = io.ReadFull(c, buf)
-// 	if err != nil {
-// 		log.Error(err)
-// 		return
-// 	}
+	// lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	// buf := make([]byte, lengthPrefix)
+	// _, err = io.ReadFull(c, buf)
+	// if err != nil {
+	// 	log.Error(err)
+	// 	return
+	// }
 
-// 	if
-// }
+}
 
 func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 
@@ -507,7 +506,7 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 		return
 	}
 
-	contract, ok := dqp.GetContract(hexutil.Encode(nrdr.ContractHash))
+	contract, ok := dqp.GetContractFromContractTransaction(hexutil.Encode(nrdr.ContractHash))
 	if !ok {
 		log.Error("contract not found, make sure it has been negotiated before requesting data")
 		return
@@ -621,6 +620,7 @@ func NewDataVerificationProtocol(n *Node) *DataVerificationProtocol {
 	}
 	n.Host.SetStreamHandler(DataVerifierRequestID, p.onDataVerifierRequest)
 	n.Host.SetStreamHandler(NodeDataRangeRequestID, p.onNodeDataRangeRequest)
+	n.Host.SetStreamHandler(FileNodesRequestID, p.onFileNodesRequest)
 
 	return p
 }
@@ -629,7 +629,6 @@ func NewDataVerificationProtocol(n *Node) *DataVerificationProtocol {
 func (dqp *DataVerificationProtocol) EnableVerifierMode() {
 	dqp.VerifierMode = true
 	dqp.Node.Host.SetStreamHandler(KeyRequestFromVerifierID, dqp.onKeyRequestFromVerifier)
-	// dqp.Node.Host.SetStreamHandler(FileNodesRequestID, dqp.onFileNodesRequest)
 }
 
 // extractContractFromTransaction extracts a valid contract
@@ -674,7 +673,7 @@ func (dqp *DataVerificationProtocol) HandleIncomingBlock(block Block) {
 			if bytes.Equal(dc.VerifierPubKey, nodePubKeyBytes) {
 				h, d, ok := dqp.coordinate(dc, tx)
 				if ok {
-					dqp.AddContract(dc, *tx, PeerContextType_Verifier, h, d)
+					dqp.AddContractTransaction(dc, *tx, PeerContextType_Verifier, h, d)
 				} else {
 					log.Warn("coordination failed")
 				}
@@ -687,7 +686,7 @@ func (dqp *DataVerificationProtocol) verifyContract(contract DataContract, tx *T
 
 	// check validity of verifier in contract
 	isValidVerifier := false
-	for _, v := range GetBlockchainSettings().Verifiers {
+	for _, v := range dqp.Node.GetBlockchainSettings().Verifiers {
 		if v.DataVerifier {
 			localVerifirPk, _ := hexutil.Decode(v.PublicKey)
 			if bytes.Equal(localVerifirPk, contract.VerifierPubKey) {

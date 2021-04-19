@@ -86,6 +86,17 @@ func NewNode(ctx context.Context, listenAddrPort string, key *keystore.Key, ks *
 		SearchEngine:             se,
 		BinLayerEngine:           bl,
 	}
+
+	for _, v := range node.GetBlockchainSettings().Verifiers {
+		pubBytesFromHex, _ := hexutil.Decode(v.PublicKey)
+		newPub, err := crypto.UnmarshalSecp256k1PubKey(pubBytesFromHex)
+		if err != nil {
+			log.Fatal("Unable to load verifier list")
+		}
+		v.PublicKeyCrypto = newPub
+		BlockSealers = append(BlockSealers, v)
+	}
+
 	host, err := libp2p.New(ctx,
 		libp2p.Identity(key.Private),
 		libp2p.ListenAddrStrings(listenAddrPort),

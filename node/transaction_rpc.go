@@ -222,7 +222,7 @@ func (api *TransactionAPI) SendTransaction(ctx context.Context, accessToken stri
 
 		if hasBalance {
 			tx := Transaction{
-				Chain:           GetBlockchainSettings().Chain,
+				Chain:           api.Node.GetBlockchainSettings().Chain,
 				Data:            []byte(data),
 				From:            "0x" + unlockedAccount.Key.Address,
 				Nounce:          hexutil.EncodeBig(addrNounce),
