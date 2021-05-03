@@ -37,7 +37,7 @@ func GetTransactionID(tx *Transaction) []byte {
 			[]byte(tx.To),
 			[]byte(tx.Value),
 			[]byte(tx.TransactionFees),
-			GetBlockchainSettings().Chain,
+			BlockchainChainID,
 		},
 		[]byte{},
 	)

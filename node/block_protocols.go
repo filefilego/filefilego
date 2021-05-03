@@ -147,7 +147,7 @@ type BlockProtocol struct {
 	RemotePeers      []*RemotePeer
 	RemotePeersMux   *sync.Mutex
 	HeighestBlock    uint64
-	HeighestBlockMux *sync.Mutex
+	HeighestBlockMux *sync.RWMutex
 	RoundIndex       int
 	RoundRobin       *sync.Mutex
 }
@@ -213,7 +213,7 @@ func NewBlockProtocol(n *Node) *BlockProtocol {
 		RemotePeers:      []*RemotePeer{},
 		RemotePeersMux:   &sync.Mutex{},
 		HeighestBlock:    0,
-		HeighestBlockMux: &sync.Mutex{},
+		HeighestBlockMux: &sync.RWMutex{},
 		RoundRobin:       &sync.Mutex{},
 		RoundIndex:       0,
 	}
@@ -234,9 +234,9 @@ func (bp *BlockProtocol) SetHeighestBlock(h uint64) bool {
 
 // GetHeighestBlock gets the heighest block
 func (bp *BlockProtocol) GetHeighestBlock() uint64 {
-	bp.HeighestBlockMux.Lock()
+	bp.HeighestBlockMux.RLock()
 	h := bp.HeighestBlock
-	bp.HeighestBlockMux.Unlock()
+	bp.HeighestBlockMux.RUnlock()
 	return h
 }
 

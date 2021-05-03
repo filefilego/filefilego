@@ -1,8 +1,25 @@
 package node
 
 import (
+	"encoding/json"
+	"errors"
+	"sync"
+
+	"github.com/boltdb/bolt"
 	"github.com/filefilego/filefilego/common/hexutil"
 )
+
+var (
+	BlockchainChainID = hexutil.MustDecode("0x01")
+	bchsMutex         = sync.RWMutex{}
+)
+
+var settings *BlockchainSettings = nil
+
+type NodeSettings struct {
+	BinLayerEngineEnabled bool `json:"binlayer_engine_enabled"`
+	BlockchainSettings
+}
 
 // BlockchainSettings represents starting point of the blockchain
 type BlockchainSettings struct {
@@ -20,11 +37,68 @@ type BlockchainSettings struct {
 	Verifiers                []Verifier `json:"verifiers"`
 }
 
+// LoadBlockchainSettingsFromDB loads the settings from db
+func (n *Node) LoadBlockchainSettingsFromDB(db *bolt.DB) (bs BlockchainSettings, _ error) {
+	err := db.View(func(tx *bolt.Tx) error {
+		bchBucket := tx.Bucket([]byte(blockchainBucket))
+		data := bchBucket.Get([]byte("settings"))
+		if data != nil {
+			return json.Unmarshal(data, &bs)
+		}
+		return errors.New("couldnt load blockchain settings")
+	})
+	if err != nil {
+		return bs, err
+	}
+
+	bchsMutex.Lock()
+	settings = &bs
+	bchsMutex.Unlock()
+
+	// n.SetBlockchainSettings(bs, db)
+	return bs, nil
+}
+
+// SetBlockchainSettings sets the blockchain settings and saves them to db
+func (n *Node) SetBlockchainSettings(stngs BlockchainSettings, db *bolt.DB) error {
+	bchsMutex.Lock()
+	settings = &stngs
+	bchsMutex.Unlock()
+	settingsBts, _ := json.Marshal(&stngs)
+	err := db.Update(func(tx *bolt.Tx) error {
+		bchBucket := tx.Bucket([]byte(blockchainBucket))
+		return bchBucket.Put([]byte("settings"), settingsBts)
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetNodeSettings returns the node settings
+func (n *Node) GetNodeSettings() NodeSettings {
+	st := n.GetBlockchainSettings()
+	return NodeSettings{
+		BinLayerEngineEnabled: n.BinLayerEngine.Enabled,
+		BlockchainSettings:    st,
+	}
+}
+
 // GetBlockchainSettings returns the genesis data
-func GetBlockchainSettings() BlockchainSettings {
-	gen := BlockchainSettings{
+func (n *Node) GetBlockchainSettings() BlockchainSettings {
+	bchsMutex.RLock()
+	defer bchsMutex.RUnlock()
+	if settings == nil {
+		settings = n.GetGenesisSettings()
+	}
+	return *settings
+}
+
+// GetGenesisSettings gets initial blockchain settings
+func (n *Node) GetGenesisSettings() *BlockchainSettings {
+	return &BlockchainSettings{
 		BlockchainVersion:  "0.9.3",
-		Chain:              hexutil.MustDecode("0x01"), // 1 for Mainnet, anything else for other chains
+		Chain:              BlockchainChainID, // 1 for Mainnet, anything else for other chains
 		GenesisHash:        "c2005c6ea44df4800bbd56d857bb6cb727acde486869553d212056bea38438e9",
 		BlockTimeSeconds:   10,
 		InitialBlockReward: "15000000000000000000",        // 15 zarans
@@ -68,5 +142,4 @@ func GetBlockchainSettings() BlockchainSettings {
 			},
 		},
 	}
-	return gen
 }

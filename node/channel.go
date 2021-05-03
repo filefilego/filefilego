@@ -10,7 +10,7 @@ import (
 )
 
 // IsValidChannelPayload checks if a valid channel payload
-func IsValidChannelPayload(t Transaction, currentBalance *big.Int) bool {
+func (bc *Blockchain) IsValidChannelPayload(t Transaction, currentBalance *big.Int) bool {
 	ap := TransactionDataPayload{}
 	bts, _ := proto.Marshal(&ap)
 	originHex := hexutil.Encode(bts) // need this to see if the ChanActionPayload is the same after unmarshalling
@@ -25,7 +25,7 @@ func IsValidChannelPayload(t Transaction, currentBalance *big.Int) bool {
 	// ALL channel operations must send the tx to valid verifier addrs
 	if originHex != afterUnmarshalHex {
 		destinationAddrIsVerifier := false
-		for _, v := range GetBlockchainSettings().Verifiers {
+		for _, v := range bc.Node.GetBlockchainSettings().Verifiers {
 			if v.Address == t.To {
 				destinationAddrIsVerifier = true
 				break
@@ -52,7 +52,7 @@ func IsValidChannelPayload(t Transaction, currentBalance *big.Int) bool {
 		if err != nil {
 			return false
 		}
-		var regFee, _ = new(big.Int).SetString(GetBlockchainSettings().NamespaceRegistrationFee, 10)
+		var regFee, _ = new(big.Int).SetString(bc.Node.GetBlockchainSettings().NamespaceRegistrationFee, 10)
 		var totalBalanceRequired, _ = new(big.Int).SetString("0", 10)
 		for _, chaNode := range chEnvs.Nodes {
 			// if channel, MUST have no parent hash, and enough balance

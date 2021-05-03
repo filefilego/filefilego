@@ -41,12 +41,12 @@ func (api *FilefilegoAPI) PeerCount(ctx context.Context) (int, error) {
 
 // Verifier list of the first verifier
 func (api *FilefilegoAPI) Verifier(ctx context.Context) (string, error) {
-	return GetBlockchainSettings().Verifiers[0].Address, nil
+	return api.Node.GetBlockchainSettings().Verifiers[0].Address, nil
 }
 
 // Settings returns current settings of the network
-func (api *FilefilegoAPI) Settings(ctx context.Context) (BlockchainSettings, error) {
-	return GetBlockchainSettings(), nil
+func (api *FilefilegoAPI) Settings(ctx context.Context) (NodeSettings, error) {
+	return api.Node.GetNodeSettings(), nil
 }
 
 // PeerID returns the current node peer ID
