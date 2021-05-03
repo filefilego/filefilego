@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"math/big"
@@ -35,6 +36,7 @@ const memPool = "mempool"
 const blocksBucket = "blocks"
 const accountsBucket = "accounts"
 const nodesBucket = "nodes"
+const blockchainBucket = "blockchain"
 
 // TransactionTimestamp represents a transaction and its timestamps
 type TransactionTimestamp struct {
@@ -50,11 +52,11 @@ type Blockchain struct {
 	txIndexDB *sql.DB
 	FilePath  string
 	Key       *keystore.Key
-	HeightMux sync.Mutex
+	HeightMux sync.RWMutex
 	Height    uint64
 	// BlockPool    []Block
 	BlockPool    map[string]Block
-	BlockPoolMux sync.Mutex
+	BlockPoolMux sync.RWMutex
 	MemPool      []Transaction
 	MemPoolMux   sync.Mutex
 	Node         *Node
@@ -87,9 +89,9 @@ func (bc *Blockchain) AddHeight(h uint64) {
 
 // GetHeight gets the height of the blockchain
 func (bc *Blockchain) GetHeight() uint64 {
-	bc.HeightMux.Lock()
+	bc.HeightMux.RLock()
 	height := bc.Height
-	bc.HeightMux.Unlock()
+	bc.HeightMux.RUnlock()
 	return height
 }
 
@@ -458,8 +460,8 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 					p := bluemonday.NewPolicy()
 					p.AllowElements("h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "p", "a", "ul", "ol", "nl", "li", "b", "i", "strong", "em", "strike", "code", "hr", "br", "div", "table", "thead", "caption", "tbody", "tr", "th", "td", "pre", "style")
 					chaNode.Description = p.Sanitize(chaNode.Description)
-
-					chaNode.Owner = t.From
+					tf, _ := hexutil.Decode(t.From)
+					chaNode.Owner = tf
 					chaNode.Timestamp = time.Now().Unix()
 
 					// if channel remove parent as a security measure
@@ -575,14 +577,16 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 							if parentNode.ParentHash == "" {
 								hasPermission, isPoster, isGuest := false, false, false
 
+								tfrom, _ := hexutil.Decode(t.From)
+
 								// if an admin
-								if parentNode.Owner == t.From {
+								if bytes.Equal(parentNode.Owner, tfrom) {
 									hasPermission = true
 								}
 
 								// if in admins
 								for _, v := range parentNode.Admins {
-									if v == t.From {
+									if bytes.Equal(v, tfrom) {
 										hasPermission = true
 										break
 									}
@@ -590,11 +594,11 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 
 								// if in posters or wildcard * is applied then allow as poster
 								for _, v := range parentNode.Posters {
-									if v == t.From {
+									if bytes.Equal(v, tfrom) {
 										hasPermission = true
 										isPoster = true
 										break
-									} else if v == "*" {
+									} else if string(v) == "*" {
 										hasPermission = true
 										isPoster = true
 									}
@@ -685,11 +689,11 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 							parentHashBits, _ := hexutil.Decode(chaNode.ParentHash)
 							nodeHashBits, _ := hexutil.Decode(chaNode.Hash)
 
-							statement, err := bc.txIndexDB.Prepare("insert into node_nodes(parenthash, hash) values(?,?)")
+							statement, err := bc.txIndexDB.Prepare("insert into node_nodes(parenthash, hash, nodeType) values(?,?,?)")
 							if err != nil {
 								return err
 							}
-							_, err = statement.Exec(parentHashBits, nodeHashBits)
+							_, err = statement.Exec(parentHashBits, nodeHashBits, chaNode.NodeType)
 							statement.Close()
 
 						}
@@ -710,10 +714,6 @@ func (bc *Blockchain) MutateChannel(t Transaction, vbalances map[string]*big.Int
 				}
 			}
 		case TransactionDataPayloadType_UPDATE_NODE:
-			{
-				//
-			}
-		case TransactionDataPayloadType_UPDATE_BLOCKCHAIN_SETTINGS:
 			{
 				//
 			}
@@ -815,6 +815,40 @@ func (bc *Blockchain) MutateAddressStateFromTransaction(transaction Transaction,
 			log.Error("Unable to add balance to verifier ", err)
 			return err
 		}
+
+		// check if it's a blockchain update tx
+		ap := TransactionDataPayload{}
+		bts, _ := proto.Marshal(&ap)
+		originHex := hexutil.Encode(bts)
+		if err := proto.Unmarshal(transaction.Data, &ap); err != nil {
+			return nil
+		}
+		bts, _ = proto.Marshal(&ap)
+		afterUnmarshalHex := hexutil.Encode(bts)
+
+		// ensure that we have a non-empty payload
+		if originHex != afterUnmarshalHex {
+			switch ap.Type {
+			case TransactionDataPayloadType_UPDATE_BLOCKCHAIN_SETTINGS:
+				{
+					// if tx came from the first verifier
+					if bc.Node.GetBlockchainSettings().Verifiers[0].Address == transaction.From {
+						bchSettings := BlockchainSettings{}
+						err := json.Unmarshal(ap.Payload, &bchSettings)
+						if err != nil {
+							return nil
+						}
+
+						err = bc.Node.SetBlockchainSettings(bchSettings, bc.db)
+						if err != nil {
+							log.Error("unable to set blockchainsettings from tx ", err)
+						}
+
+					}
+				}
+			}
+		}
+
 	}
 
 	return nil
@@ -1682,10 +1716,10 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 		},
 		Height:       0,
 		Node:         n,
-		BlockPoolMux: sync.Mutex{},
+		BlockPoolMux: sync.RWMutex{},
 		BlockPool:    make(map[string]Block),
 		MemPoolMux:   sync.Mutex{},
-		HeightMux:    sync.Mutex{},
+		HeightMux:    sync.RWMutex{},
 	}
 
 	if mineKeypath != "" {
@@ -1715,7 +1749,7 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 
 	sqlStmt := `CREATE TABLE IF NOT EXISTS txblocks (id integer not null primary key, tx blob, block blob);
 	CREATE TABLE IF NOT EXISTS addrtxs (id integer not null primary key, addr blob, txhash blob);
-	CREATE TABLE IF NOT EXISTS node_nodes (id integer not null primary key, parenthash blob, hash blob);
+	CREATE TABLE IF NOT EXISTS node_nodes (id integer not null primary key, parenthash blob, hash blob, nodeType INTEGER);
 	CREATE TABLE IF NOT EXISTS channels (id integer not null primary key, hash blob);
 	CREATE INDEX IF NOT EXISTS txIdx ON txblocks (tx);
 	CREATE INDEX IF NOT EXISTS addrIdx ON addrtxs (addr);
@@ -1771,7 +1805,21 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 			tx.CreateBucketIfNotExists([]byte(nodesBucket))
 
 			accBucket, err := tx.CreateBucketIfNotExists([]byte(accountsBucket))
+			if err != nil {
+				log.Panic(err)
+			}
+			bchBucket, err := tx.CreateBucketIfNotExists([]byte(blockchainBucket))
 			// accBucket, err := tx.CreateBucket([]byte(accountsBucket))
+			if err != nil {
+				log.Panic(err)
+			}
+
+			settingBts, err := json.Marshal(n.GetGenesisSettings())
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = bchBucket.Put([]byte("settings"), settingBts)
 			if err != nil {
 				log.Panic(err)
 			}
@@ -1822,6 +1870,9 @@ func CreateOrLoadBlockchain(n *Node, dataDir string, mineKeypath string, mineKey
 	if err != nil {
 		log.Panic(err)
 	}
+
+	// load the settings from db
+	n.LoadBlockchainSettingsFromDB(db)
 
 	log.Println("Verifying blocks")
 	bc.TraverseChain(func(blc Block) {

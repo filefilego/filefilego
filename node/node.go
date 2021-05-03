@@ -304,6 +304,7 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 			unavailableNodes := []string{}
 			totalSize := uint64(0)
 			totalCountItems := 0
+			totalFiles := 0
 			err := n.BlockChain.db.View(func(tx *bolt.Tx) error {
 				b := tx.Bucket([]byte(nodesBucket))
 				for queue.Len() > 0 {
@@ -329,6 +330,7 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 
 					} else {
 						// check if exists in binlayer tables
+						totalFiles++
 						_, err := n.BinLayerEngine.GetBinaryItem(tmp.Hash)
 						if err != nil {
 							unavailableNodes = append(unavailableNodes, tmp.Hash)
@@ -352,20 +354,22 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 				return err
 			}
 
-			// stop if there are unavailable nodes
-			if len(unavailableNodes) > 0 {
-
+			// stop if nothing is available
+			log.Println("unavailable nodes count ", len(unavailableNodes), " , totalfiles: ", totalFiles)
+			if len(unavailableNodes) >= totalFiles {
 				return nil
 			}
 
 			if totalSize > 0 {
 				var feesGB, _ = new(big.Int).SetString(n.BinLayerEngine.FeesPerGB, 10)
-				var gbInBytes, _ = new(big.Int).SetString("1073741824", 10)
-				ts := hexutil.EncodeUint64(totalSize)
-				tsBig, _ := hexutil.DecodeBig(ts)
-				factor := gbInBytes.Div(gbInBytes, tsBig)
-				finalAmount := feesGB.Div(feesGB, factor)
-				finalAmountHex := hexutil.EncodeBig(finalAmount)
+				// var gbInBytes, _ = new(big.Int).SetString("1073741824", 10)
+				// ts := hexutil.EncodeUint64(totalSize)
+				// tsBig, _ := hexutil.DecodeBig(ts)
+				// factor := gbInBytes.Div(gbInBytes, tsBig)
+				// finalAmount := feesGB.Div(feesGB, factor)
+				// finalAmountHex := hexutil.EncodeBig(finalAmount)
+				finalAmountHex := hexutil.EncodeBig(feesGB)
+
 				pubKeyBytes, err := n.GetPublicKeyBytes()
 				if err != nil {
 					log.Error("Unable to get public key bytes")
@@ -378,13 +382,20 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 					availableNodesBytes = append(availableNodesBytes, bt)
 				}
 
+				unavailableNodesBytes := [][]byte{}
+				for _, unavailableNode := range unavailableNodes {
+					bt, _ := hexutil.Decode(unavailableNode)
+					unavailableNodesBytes = append(availableNodesBytes, bt)
+				}
+
 				dqres := DataQueryResponse{
-					Nodes:             availableNodesBytes,
-					FromPeerAddr:      n.GetReachableAddr(),
-					TotalFeesRequired: finalAmountHex,
-					Hash:              dqr.Hash,
-					PubKey:            pubKeyBytes,
-					Timestamp:         time.Now().Unix(),
+					UnavailableNodes: unavailableNodesBytes,
+					Nodes:            availableNodesBytes,
+					FromPeerAddr:     n.GetReachableAddr(),
+					TotalFeesGB:      finalAmountHex,
+					Hash:             dqr.Hash,
+					PubKey:           pubKeyBytes,
+					Timestamp:        time.Now().Unix(),
 				}
 
 				bts, err := proto.Marshal(&dqres)

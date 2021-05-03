@@ -45,8 +45,8 @@ func (api *FilefilegoAPI) Verifier(ctx context.Context) (string, error) {
 }
 
 // Settings returns current settings of the network
-func (api *FilefilegoAPI) Settings(ctx context.Context) (BlockchainSettings, error) {
-	return api.Node.GetBlockchainSettings(), nil
+func (api *FilefilegoAPI) Settings(ctx context.Context) (NodeSettings, error) {
+	return api.Node.GetNodeSettings(), nil
 }
 
 // PeerID returns the current node peer ID

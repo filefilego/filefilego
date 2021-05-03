@@ -67,6 +67,7 @@ type ChanNodeJSONResponse struct {
 	Node   ChanNode   `json:"node"`
 	Parent ChanNode   `json:"parent"`
 	Childs []ChanNode `json:"childs"`
+	Path   []ChanNode `json:"path"`
 }
 
 // GetNode gets a node given its hash
@@ -86,6 +87,7 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 		if err != nil {
 			return err
 		}
+		response.Path = append(response.Path, response.Node)
 		// get parrent if not is not a channel
 		if response.Node.NodeType != ChanNodeType_CHANNEL {
 			v := b.Get([]byte(response.Node.ParentHash))
@@ -95,6 +97,23 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 			err := proto.Unmarshal(v, &response.Parent)
 			if err != nil {
 				return err
+			}
+
+			response.Path = append(response.Path, response.Parent)
+
+			tmp := response.Parent
+
+			for tmp.ParentHash != "" {
+				v := b.Get([]byte(tmp.ParentHash))
+				if v == nil {
+					break
+				}
+
+				err := proto.Unmarshal(v, &tmp)
+				if err != nil {
+					break
+				}
+				response.Path = append(response.Path, tmp)
 			}
 		}
 
@@ -111,6 +130,7 @@ func (api *ChannelAPI) GetNode(ctx context.Context, hash string) (response ChanN
 			}
 			response.Childs = append(response.Childs, tmpNode)
 		}
+
 		return nil
 	}); err != nil {
 
@@ -243,6 +263,9 @@ type DataContractJSON struct {
 	ContractHash string
 	HexPayload   string
 	VerifierAddr string
+	Nodes        []string
+	NodesNames   []string
+	FileInfos    [][]NodeToFileInfo
 }
 
 // PrepareDataContract prepares a data contract
@@ -326,6 +349,34 @@ func (api *ChannelAPI) PrepareDataContract(ctx context.Context, hash string, fro
 			dcj.HexPayload = hexutil.Encode(plBits)
 			dcj.VerifierAddr = verifierAddr
 
+			for _, n := range contract.HostResponse.Nodes {
+				respNode := hexutil.Encode(n)
+				files, err := api.ExtractFilesFromEntryFolder(context.Background(), respNode)
+				if err != nil {
+					continue
+				}
+				dcj.FileInfos = append(dcj.FileInfos, files)
+				tmp := ChanNode{}
+				err = api.Node.BlockChain.db.View(func(tx *bolt.Tx) error {
+					b := tx.Bucket([]byte(nodesBucket))
+					bts := b.Get([]byte(respNode))
+					err := proto.Unmarshal(bts, &tmp)
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+				if err != nil {
+					continue
+				}
+				dcj.NodesNames = append(dcj.NodesNames, tmp.Name)
+				dcj.Nodes = append(dcj.Nodes, respNode)
+			}
+
+			if len(dcj.Nodes) == 0 {
+				return dcj, errors.New("no valid files in this contract")
+			}
+
 			return dcj, nil
 
 		}
@@ -368,10 +419,12 @@ func (api *ChannelAPI) ExtractFilesFromEntryFolder(ctx context.Context, nodes st
 
 	err := api.Node.BlockChain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(nodesBucket))
+		path := ""
 		for queue.Len() > 0 {
 			el := queue.Front()
 			tmp := el.Value.(ChanNode)
 			if tmp.NodeType == ChanNodeType_ENTRY || tmp.NodeType == ChanNodeType_DIR {
+				path += tmp.Name + "/"
 				// get its childs and append to queue accordingly
 				childNodes, _ := api.Node.BlockChain.GetNodeNodes(tmp.Hash)
 				for _, v := range childNodes {
@@ -385,7 +438,13 @@ func (api *ChannelAPI) ExtractFilesFromEntryFolder(ctx context.Context, nodes st
 					if err != nil {
 						return err
 					}
-					queue.PushBack(tmpNode)
+
+					if tmp.NodeType == ChanNodeType_DIR {
+						queue.PushFront(tmpNode)
+
+					} else {
+						queue.PushBack(tmpNode)
+					}
 				}
 
 			} else {
@@ -395,6 +454,7 @@ func (api *ChannelAPI) ExtractFilesFromEntryFolder(ctx context.Context, nodes st
 					Name: tmp.Name,
 					Hash: hashBts,
 					Size: size,
+					Path: path + tmp.Name,
 				}
 				files = append(files, finfo)
 			}

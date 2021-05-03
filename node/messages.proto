@@ -64,15 +64,15 @@ message ChanNode {
     bytes MerkleRoot = 3;
     string BinlayerHash = 4;
     string Size = 5;
-    string Owner = 6;
+    bytes Owner = 6;
     bool Enabled = 7;
     ChanNodeType NodeType = 8;
     string ParentHash = 9;
     string Description = 10;
     string ContentType = 11;
     repeated string Attributes = 12;
-    repeated string Admins = 13;
-    repeated string Posters = 14;
+    repeated bytes Admins = 13;
+    repeated bytes Posters = 14;
     int64 Timestamp = 15;
 }
 
@@ -92,12 +92,13 @@ message DataQueryRequest {
 
 message DataQueryResponse {
     string FromPeerAddr = 1;
-    string TotalFeesRequired = 2;
+    string TotalFeesGB = 2;
     string Hash = 3;
     bytes PubKey = 4;
     bytes Signature = 5;
     repeated bytes Nodes = 6;
-    int64 Timestamp = 7;
+    repeated bytes UnavailableNodes = 7;
+    int64 Timestamp = 8;
 }
 
 message DataContract {
@@ -126,6 +127,7 @@ message NodeToFileInfo {
     string Name = 1;
     bytes Hash = 2;
     uint64 Size = 3;
+    string Path = 4;
 }
 
 message GossipPayload {

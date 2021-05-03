@@ -76,7 +76,7 @@ type ContractTransaction struct {
 type DataVerificationProtocol struct {
 	VerifierMode              bool
 	Node                      *Node
-	contMutex                 sync.Mutex
+	contMutex                 sync.RWMutex
 	contracts                 map[string]ContractTransaction
 	nodeContractDownloadSetup map[string]NodeDownloadSetupData
 }
@@ -120,8 +120,8 @@ func (dqp *DataVerificationProtocol) GetOrCreateNodeContractDownloadSetup(contra
 
 // GetContractTransaction returns a a contract transaction
 func (dqp *DataVerificationProtocol) GetContractTransaction(hash string) (ContractTransaction, bool) {
-	dqp.contMutex.Lock()
-	defer dqp.contMutex.Unlock()
+	dqp.contMutex.RLock()
+	defer dqp.contMutex.RUnlock()
 	c, ok := dqp.contracts[hash]
 	if !ok {
 		return c, false
@@ -132,8 +132,8 @@ func (dqp *DataVerificationProtocol) GetContractTransaction(hash string) (Contra
 
 // GetContractFromContractTransaction returns a contract that has been validated before
 func (dqp *DataVerificationProtocol) GetContractFromContractTransaction(hash string) (dataContract DataContract, _ bool) {
-	dqp.contMutex.Lock()
-	defer dqp.contMutex.Unlock()
+	dqp.contMutex.RLock()
+	defer dqp.contMutex.RUnlock()
 
 	c, ok := dqp.contracts[hash]
 	if !ok {
@@ -286,10 +286,12 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 
 	err := dqp.Node.BlockChain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(nodesBucket))
+		path := ""
 		for queue.Len() > 0 {
 			el := queue.Front()
 			tmp := el.Value.(ChanNode)
 			if tmp.NodeType == ChanNodeType_ENTRY || tmp.NodeType == ChanNodeType_DIR {
+				path += tmp.Name + "/"
 				// get its childs and append to queue accordingly
 
 				childNodes, _ := dqp.Node.BlockChain.GetNodeNodes(tmp.Hash)
@@ -304,7 +306,12 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 					if err != nil {
 						return err
 					}
-					queue.PushBack(tmpNode)
+					if tmp.NodeType == ChanNodeType_DIR {
+						queue.PushFront(tmpNode)
+
+					} else {
+						queue.PushBack(tmpNode)
+					}
 				}
 			} else {
 				size, _ := hexutil.DecodeUint64(tmp.Size)
@@ -313,6 +320,7 @@ func (dqp *DataVerificationProtocol) GetFileNodesFromContract(contract DataContr
 					Name: tmp.Name,
 					Hash: hashBts,
 					Size: size,
+					Path: path + tmp.Name,
 				}
 				files = append(files, finfo)
 			}
@@ -522,7 +530,6 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 	}
 
 	fileNodes, _ := dqp.GetFileNodesFromContract(contract)
-	log.Println("total filenodes for this contract: ", len(fileNodes))
 
 	for _, fn := range fileNodes {
 		if bytes.Equal(fn.Hash, nrdr.Node) {
@@ -614,7 +621,7 @@ func (dqp *DataVerificationProtocol) onNodeDataRangeRequest(s network.Stream) {
 func NewDataVerificationProtocol(n *Node) *DataVerificationProtocol {
 	p := &DataVerificationProtocol{
 		Node:                      n,
-		contMutex:                 sync.Mutex{},
+		contMutex:                 sync.RWMutex{},
 		contracts:                 make(map[string]ContractTransaction),
 		nodeContractDownloadSetup: make(map[string]NodeDownloadSetupData),
 	}
@@ -682,6 +689,7 @@ func (dqp *DataVerificationProtocol) HandleIncomingBlock(block Block) {
 	}
 }
 
+// verifyContract
 func (dqp *DataVerificationProtocol) verifyContract(contract DataContract, tx *Transaction) (hostID peer.ID, downloaderID peer.ID, _ bool) {
 
 	// check validity of verifier in contract
@@ -750,17 +758,17 @@ func (dqp *DataVerificationProtocol) verifyContract(contract DataContract, tx *T
 	}
 	contract.HostResponse.Signature = sig
 
-	txValue, _ := hexutil.DecodeBig(tx.Value)
-	totalFeesRequired, err := hexutil.DecodeBig(contract.HostResponse.TotalFeesRequired)
-	if err != nil {
-		log.Error("invalid TotalFeesRequired value in the contract")
-		return hostID, downloaderID, false
-	}
+	// txValue, _ := hexutil.DecodeBig(tx.Value)
+	// totalFeesRequired, err := hexutil.DecodeBig(contract.HostResponse.TotalFeesGB)
+	// if err != nil {
+	// 	log.Error("invalid TotalFeesGB value in the contract")
+	// 	return hostID, downloaderID, false
+	// }
 
-	if txValue.Cmp(totalFeesRequired) == -1 {
-		log.Warn("transaction value amount is smaller than TotalFeesRequired")
-		return hostID, downloaderID, false
-	}
+	// if txValue.Cmp(totalFeesRequired) == -1 {
+	// 	log.Warn("transaction value amount is smaller than TotalFeesGB")
+	// 	return hostID, downloaderID, false
+	// }
 
 	return hostID, downloaderID, true
 

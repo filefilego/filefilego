@@ -21,9 +21,9 @@ const DataQueryResponseID = "/ffg/dqresponse/1.0.0"
 type DataQueryProtocol struct {
 	Node             *Node
 	queryHistory     map[string]DataQueryRequest
-	queryHistoryMux  *sync.Mutex
+	queryHistoryMux  *sync.RWMutex
 	queryResponse    map[string][]DataQueryResponse
-	queryResponseMux *sync.Mutex
+	queryResponseMux *sync.RWMutex
 }
 
 // PutQueryHistory put into history
@@ -36,8 +36,8 @@ func (dqp *DataQueryProtocol) PutQueryHistory(key string, val DataQueryRequest) 
 
 // GetQueryHistory gets a val from history
 func (dqp *DataQueryProtocol) GetQueryHistory(key string) (DataQueryRequest, bool) {
-	dqp.queryHistoryMux.Lock()
-	defer dqp.queryHistoryMux.Unlock()
+	dqp.queryHistoryMux.RLock()
+	defer dqp.queryHistoryMux.RUnlock()
 	v, ok := dqp.queryHistory[key]
 	return v, ok
 
@@ -67,8 +67,8 @@ func (dqp *DataQueryProtocol) PutQueryResponse(key string, val DataQueryResponse
 
 // GetQueryResponse gets a val from responses
 func (dqp *DataQueryProtocol) GetQueryResponse(key string) ([]DataQueryResponse, bool) {
-	dqp.queryResponseMux.Lock()
-	defer dqp.queryResponseMux.Unlock()
+	dqp.queryResponseMux.RLock()
+	defer dqp.queryResponseMux.RUnlock()
 	v, ok := dqp.queryResponse[key]
 	return v, ok
 }
@@ -91,8 +91,8 @@ func (dqp *DataQueryProtocol) GetQueryResponse(key string) ([]DataQueryResponse,
 func NewDataQueryProtocol(n *Node) *DataQueryProtocol {
 	p := &DataQueryProtocol{
 		Node:             n,
-		queryHistoryMux:  &sync.Mutex{},
-		queryResponseMux: &sync.Mutex{},
+		queryHistoryMux:  &sync.RWMutex{},
+		queryResponseMux: &sync.RWMutex{},
 		queryHistory:     make(map[string]DataQueryRequest),
 		queryResponse:    make(map[string][]DataQueryResponse),
 	}
