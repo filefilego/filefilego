@@ -400,6 +400,13 @@ Binlayer is the storage layer that keeps track of binary files and uses hashes t
 | **Zaran** (Default unit) | **1.000.000.000.000.000.000**     |
 | **Kzaran**               | **1.000.000.000.000.000.000.000** |
 
+
+**Block time:** ~10 Seconds
+
 **Total Supply:** 500 Million Zarans
+
 **Validation/Stake Reward:** 15 Zarans per Block
-**Supply Decrease Rate:** Divide by 2 every 24 months
+
+**Supply Decrease Rate:** Divide by 2 every 3153600 blocks (365 days)
+
+
