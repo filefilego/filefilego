@@ -29,6 +29,11 @@ var (
 		Usage: "Keystore directory",
 	}
 
+	NodePassFlag = cli.StringFlag{
+		Name:  "nodepass",
+		Usage: "Keystore directory",
+	}
+
 	MineFlag = cli.BoolFlag{
 		Name:  "mine",
 		Usage: "Enable Mining",
@@ -199,6 +204,7 @@ var AppFlags = []cli.Flag{
 	LogLevelFlag,
 	DataDirFlag,
 	KeystoreDirFlag,
+	NodePassFlag,
 
 	MineFlag,
 	MineKeypath,

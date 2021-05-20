@@ -5,6 +5,7 @@ type Global struct {
 	LogLevel            string
 	DataDir             string
 	KeystoreDir         string
+	NodePass            string
 	Mine                bool
 	MineKeypath         string
 	MinePass            string

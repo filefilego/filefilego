@@ -19,6 +19,7 @@ func DefaultConfig() *GlobalConfig {
 			LogLevel:            "TRACE",
 			DataDir:             DefaultDataDir(),
 			KeystoreDir:         filepath.Join(DefaultDataDir(), "keystore"),
+			NodePass:            "",
 			Mine:                false,
 			MineKeypath:         "",
 			MinePass:            "",
@@ -99,6 +100,10 @@ func ApplyFlags(ctx *cli.Context, cfg *GlobalConfig) {
 	}
 	if ctx.GlobalIsSet(KeystoreDirFlag.Name) {
 		cfg.Global.KeystoreDir = ctx.GlobalString(KeystoreDirFlag.Name)
+	}
+
+	if ctx.GlobalIsSet(NodePassFlag.Name) {
+		cfg.Global.NodePass = ctx.GlobalString(NodePassFlag.Name)
 	}
 
 	if ctx.GlobalIsSet(MineFlag.Name) {

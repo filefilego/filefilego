@@ -356,6 +356,7 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 
 			// stop if nothing is available
 			log.Println("unavailable nodes count ", len(unavailableNodes), " , totalfiles: ", totalFiles)
+			log.Println(unavailableNodes)
 			if len(unavailableNodes) >= totalFiles {
 				return nil
 			}

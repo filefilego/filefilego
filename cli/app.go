@@ -52,17 +52,23 @@ func entry(ctx *cli.Context) error {
 
 	// check for node identity file first
 	key := &keystore.Key{}
-	if !common.FileExists(cfg.Global.KeystoreDir + "/node_identity.json") {
+	if !common.FileExists(path.Join(cfg.Global.KeystoreDir, "node_identity.json")) {
 		log.Fatal("node identity file doesnt exists. Please run \"filefilego account create_node_key <passphrase>\"")
 	} else {
 
-		term := newTerminal()
-		pass, err := term.GetPassphrase("Please enter your passphrase to unlock the node identity file", true)
-		if err != nil {
-			log.Fatal(err)
+		pass := ""
+		if cfg.Global.NodePass != "" {
+			pass = cfg.Global.NodePass
+		} else {
+			term := newTerminal()
+			pwd, err := term.GetPassphrase("Please enter your passphrase to unlock the node identity file", true)
+			if err != nil {
+				log.Fatal(err)
+			}
+			pass = pwd
 		}
 
-		bts, err := ioutil.ReadFile(cfg.Global.KeystoreDir + "/node_identity.json")
+		bts, err := ioutil.ReadFile(path.Join(cfg.Global.KeystoreDir, "node_identity.json"))
 		if err != nil {
 			log.Fatal("Error while reading the node identity file")
 		}
