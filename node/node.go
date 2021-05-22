@@ -355,8 +355,7 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 			}
 
 			// stop if nothing is available
-			log.Println("unavailable nodes count ", len(unavailableNodes), " , totalfiles: ", totalFiles)
-			log.Println(unavailableNodes)
+			// log.Println("unavailable nodes count ", len(unavailableNodes), " , totalfiles: ", totalFiles)
 			if len(unavailableNodes) >= totalFiles {
 				return nil
 			}
@@ -379,14 +378,22 @@ func (n *Node) HandleGossip(msg *pubsub.Message) error {
 
 				availableNodesBytes := [][]byte{}
 				for _, availableNode := range availableNodes {
-					bt, _ := hexutil.Decode(availableNode.Hash)
+					bt, err := hexutil.Decode(availableNode.Hash)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
 					availableNodesBytes = append(availableNodesBytes, bt)
 				}
 
 				unavailableNodesBytes := [][]byte{}
 				for _, unavailableNode := range unavailableNodes {
-					bt, _ := hexutil.Decode(unavailableNode)
-					unavailableNodesBytes = append(availableNodesBytes, bt)
+					bt, err := hexutil.Decode(unavailableNode)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+					unavailableNodesBytes = append(unavailableNodesBytes, bt)
 				}
 
 				dqres := DataQueryResponse{

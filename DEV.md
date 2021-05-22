@@ -112,3 +112,19 @@ and then run a container using:
 ```
 docker run -it ffg --rpc --http --httpport=8090 --httpaddr=0.0.0.0 --bootstrapnodes="/ip4/192.168.0.10/tcp/10209/p2p/16Uiu2HAmKR42X3hxnRBQnKCGB9VfAfbg54ajhFA9MDvJtesBxrYS" --rpcservices="channel,transaction,account,block,ffg"
 ```
+
+
+### Docker-compose Simulation
+
+Using docker-compose we setup 2 full nodes and 1 verifier which connect to the host running an instance of filefilego cli.
+
+```
+docker-compose up   // starts the containers
+docker-compose down // kills everything
+```
+
+to see logs of a specific container:
+
+```
+docker-compose logs -f node1
+```
