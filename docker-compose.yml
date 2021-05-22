@@ -9,6 +9,8 @@ services:
 
   node1:
     hostname: node1.local
+    depends_on: 
+      - nameresolver
     image: ffg
     extra_hosts:
         - "host.docker.internal:host-gateway"
