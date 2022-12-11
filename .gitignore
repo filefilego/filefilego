@@ -1,0 +1,19 @@
+# binaries and plugins
+*.exe
+*.exe~
+*.dll
+*.DS_Store
+cmd/filefilego/filefilego
+
+# test binary
+*.test
+coverage.txt
+
+# go coverage
+*.out
+
+# Idea project files
+.idea/
+
+# VSCode files
+.vscode/
