@@ -14,6 +14,7 @@ import (
 )
 
 const chainID = "0x01"
+
 const maxTransactionDataSizeBytes = 300000
 
 // Transaction represents a transaction.

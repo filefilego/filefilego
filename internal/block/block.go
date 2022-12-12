@@ -8,7 +8,7 @@ import (
 
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
-	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"google.golang.org/protobuf/proto"
 )
 
