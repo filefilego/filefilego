@@ -21,47 +21,47 @@ func TestGetTransactionHash(t *testing.T) {
 		},
 		"invalid nounce": {
 			tx: Transaction{
-				PublickKey: []byte{12},
+				PublicKey: []byte{12},
 			},
 			expErr: "nounce is empty",
 		},
 		"invalid from": {
 			tx: Transaction{
-				PublickKey: []byte{12},
-				Nounce:     []byte{222},
+				PublicKey: []byte{12},
+				Nounce:    []byte{222},
 			},
 			expErr: "from is empty",
 		},
 		"invalid to": {
 			tx: Transaction{
-				PublickKey: []byte{12},
-				Nounce:     []byte{222},
-				From:       "0x0123",
+				PublicKey: []byte{12},
+				Nounce:    []byte{222},
+				From:      "0x0123",
 			},
 			expErr: "to is empty",
 		},
 		"invalid value": {
 			tx: Transaction{
-				PublickKey: []byte{12},
-				Nounce:     []byte{222},
-				From:       "0x0123",
-				To:         "0x0123",
+				PublicKey: []byte{12},
+				Nounce:    []byte{222},
+				From:      "0x0123",
+				To:        "0x0123",
 			},
 			expErr: "value is empty",
 		},
 		"invalid transactionfees": {
 			tx: Transaction{
-				PublickKey: []byte{12},
-				Nounce:     []byte{222},
-				From:       "0x0123",
-				To:         "0x0123",
-				Value:      "0x123",
+				PublicKey: []byte{12},
+				Nounce:    []byte{222},
+				From:      "0x0123",
+				To:        "0x0123",
+				Value:     "0x123",
 			},
 			expErr: "transactionFees is empty",
 		},
 		"valid transaction": {
 			tx: Transaction{
-				PublickKey:      []byte{12},
+				PublicKey:       []byte{12},
 				Nounce:          []byte{222},
 				From:            "0x0123",
 				To:              "0x0123",
@@ -92,7 +92,7 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	publicKeyData, err := keypair.PublicKey.Raw()
 	assert.NoError(t, err)
 	tx := Transaction{
-		PublickKey:      publicKeyData,
+		PublicKey:       publicKeyData,
 		Nounce:          []byte{1},
 		From:            "0x0123",
 		To:              "0x0123",
@@ -175,7 +175,7 @@ func TestVerifyWithPublicKey(t *testing.T) {
 			expErr: "publicKey is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.PublickKey = []byte{}
+				tx.PublicKey = []byte{}
 				return tx
 			},
 		},
@@ -215,7 +215,7 @@ func TestVerifyWithPublicKey(t *testing.T) {
 			expErr: "transaction is altered and doesn't match the hash",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.PublickKey = []byte{1}
+				tx.PublicKey = []byte{1}
 				return tx
 			},
 		},
@@ -265,7 +265,7 @@ func validTransaction(t *testing.T) *Transaction {
 	assert.NoError(t, err)
 
 	tx := Transaction{
-		PublickKey:      pkyData,
+		PublicKey:       pkyData,
 		Nounce:          []byte{1},
 		Data:            []byte{1},
 		From:            addr,

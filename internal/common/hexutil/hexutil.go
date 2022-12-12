@@ -1,6 +1,8 @@
 package hexutil
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -104,6 +106,23 @@ func DecodeBig(input string) (*big.Int, error) {
 	}
 	dec := new(big.Int).SetBits(words)
 	return dec, nil
+}
+
+// Hex2Bytes returns the bytes represented by the hexadecimal string str.
+func Hex2Bytes(str string) []byte {
+	h, _ := hex.DecodeString(str)
+	return h
+}
+
+// IntToHex converts an int64 to a byte array
+func IntToHex(num int64) ([]byte, error) {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, num)
+	if err != nil {
+		return buff.Bytes(), err
+	}
+
+	return buff.Bytes(), nil
 }
 
 func checkNumber(input string) (raw string, err error) {

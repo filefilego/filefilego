@@ -8,3 +8,6 @@ test:
 	go test ./... -race -count=1 -failfast
 coverage:
 	go test ./... -race -count=1 -failfast -coverprofile=coverage.out && go tool cover -html=coverage.out && rm coverage.out
+genproto:
+	protoc --go_out=internal/transaction internal/transaction/transaction.proto
+	protoc --proto_path=internal --go_out=internal/block internal/block/block.proto transaction/transaction.proto

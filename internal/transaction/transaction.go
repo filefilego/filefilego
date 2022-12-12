@@ -10,6 +10,7 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"google.golang.org/protobuf/proto"
 )
 
 const chainID = "0x01"
@@ -22,7 +23,7 @@ type Transaction struct {
 	Signature []byte
 
 	// required
-	PublickKey      []byte
+	PublicKey       []byte
 	Nounce          []byte
 	Data            []byte
 	From            string
@@ -39,7 +40,7 @@ func (tx Transaction) GetTransactionHash() ([]byte, error) {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
 	}
 
-	if len(tx.PublickKey) == 0 {
+	if len(tx.PublicKey) == 0 {
 		return nil, errors.New("publicKey is empty")
 	}
 
@@ -65,7 +66,7 @@ func (tx Transaction) GetTransactionHash() ([]byte, error) {
 
 	data := bytes.Join(
 		[][]byte{
-			tx.PublickKey,
+			tx.PublicKey,
 			tx.Nounce,
 			tx.Data,
 			[]byte(tx.From),
@@ -146,7 +147,7 @@ func (tx Transaction) Validate() (bool, error) {
 		return false, errors.New("nounce is empty")
 	}
 
-	if len(tx.PublickKey) == 0 {
+	if len(tx.PublicKey) == 0 {
 		return false, errors.New("publicKey is empty")
 	}
 
@@ -184,7 +185,7 @@ func (tx Transaction) Validate() (bool, error) {
 		return false, errors.New("transaction is altered and doesn't match the hash")
 	}
 
-	newPubKey, err := ffgcrypto.PublicKeyFromBytes(tx.PublickKey)
+	newPubKey, err := ffgcrypto.PublicKeyFromBytes(tx.PublicKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to get publicKey: %w", err)
 	}
@@ -194,7 +195,7 @@ func (tx Transaction) Validate() (bool, error) {
 		return false, fmt.Errorf("failed to verify: %w", err)
 	}
 
-	fromAddr, err := ffgcrypto.RawPublicToAddress(tx.PublickKey)
+	fromAddr, err := ffgcrypto.RawPublicToAddress(tx.PublicKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to get address from publicKey: %w", err)
 	}
@@ -204,4 +205,72 @@ func (tx Transaction) Validate() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ToProtoTransaction converts a transaction to protobuf message.
+func ToProtoTransaction(tx Transaction) *ProtoTransaction {
+	ptx := &ProtoTransaction{
+		Hash:            make([]byte, len(tx.Hash)),
+		Signature:       make([]byte, len(tx.Signature)),
+		PublicKey:       make([]byte, len(tx.PublicKey)),
+		Nounce:          make([]byte, len(tx.Nounce)),
+		Data:            make([]byte, len(tx.Data)),
+		From:            tx.From,
+		To:              tx.To,
+		Value:           tx.Value,
+		TransactionFees: tx.TransactionFees,
+		Chain:           make([]byte, len(tx.Chain)),
+	}
+
+	copy(ptx.Hash, tx.Hash)
+	copy(ptx.Signature, tx.Signature)
+	copy(ptx.PublicKey, tx.PublicKey)
+	copy(ptx.Nounce, tx.Nounce)
+	copy(ptx.Data, tx.Data)
+	copy(ptx.Chain, tx.Chain)
+
+	return ptx
+}
+
+// ProtoTransactionToTransaction returns a domain transaction from a protobuf message.
+func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
+	tx := Transaction{
+		Hash:            make([]byte, len(ptx.Hash)),
+		Signature:       make([]byte, len(ptx.Signature)),
+		PublicKey:       make([]byte, len(ptx.PublicKey)),
+		Nounce:          make([]byte, len(ptx.Nounce)),
+		Data:            make([]byte, len(ptx.Data)),
+		From:            ptx.From,
+		To:              ptx.To,
+		Value:           ptx.Value,
+		TransactionFees: ptx.TransactionFees,
+		Chain:           make([]byte, len(ptx.Chain)),
+	}
+
+	copy(tx.Hash, ptx.Hash)
+	copy(tx.Signature, ptx.Signature)
+	copy(tx.PublicKey, ptx.PublicKey)
+	copy(tx.Nounce, ptx.Nounce)
+	copy(tx.Data, ptx.Data)
+	copy(tx.Chain, ptx.Chain)
+
+	return tx
+}
+
+// MarshalProtoTransaction serializes a block to a protobuf message.
+func MarshalProtoTransaction(tx *ProtoTransaction) ([]byte, error) {
+	txData, err := proto.Marshal(tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal transaction: %w", err)
+	}
+	return txData, nil
+}
+
+// UnmarshalProtoBlock unserializes a byte array to a protobuf transaction.
+func UnmarshalProtoBlock(data []byte) (*ProtoTransaction, error) {
+	tx := ProtoTransaction{}
+	if err := proto.Unmarshal(data, &tx); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal a transaction: %w", err)
+	}
+	return &tx, nil
 }
