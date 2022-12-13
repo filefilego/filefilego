@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/filefilego/filefilego/internal/common/hexutil"
+	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"google.golang.org/protobuf/proto"
@@ -23,16 +24,37 @@ type Block struct {
 	Data              []byte
 	PreviousBlockHash []byte
 	Transactions      []transaction.Transaction
+	Number            uint64
 }
 
 // GetCoinbaseTransaction gets the coinbase transaction.
-// func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
+// A coinbase transaction is the first transaction and the public key
+// of the transaction should match the block signer
+func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
+	if len(b.Transactions) == 0 {
+		return transaction.Transaction{}, errors.New("no transactions in block")
+	}
 
-// 	return nil, nil
-// }
+	coinbaseTx := b.Transactions[0]
+	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbaseTx.PublicKey)
+	if err != nil {
+		return transaction.Transaction{}, fmt.Errorf("failed to derive public key from transaction: %w", err)
+	}
 
-// GetBlockHash hashes all the transaction's hashes in the block.
-func (b Block) GetBlockHash() ([]byte, error) {
+	err = b.VerifyWithPublicKey(pubKey)
+	if err != nil {
+		return transaction.Transaction{}, fmt.Errorf("coinbase transaction signer doesn't match the block signer: %w", err)
+	}
+
+	return coinbaseTx, nil
+}
+
+// GetTransactionsHash hashes all the transaction's hashes in the block.
+func (b Block) GetTransactionsHash() ([]byte, error) {
+	if len(b.Transactions) == 0 {
+		return nil, errors.New("no transactions to hash")
+	}
+
 	txHashes := make([][]byte, len(b.Transactions))
 	for i, tx := range b.Transactions {
 		data, err := tx.GetTransactionHash()
@@ -45,16 +67,20 @@ func (b Block) GetBlockHash() ([]byte, error) {
 	return txHash[:], nil
 }
 
-// Sign signs a block with a private key.
-func (b *Block) Sign(key crypto.PrivKey) error {
-	blockHash, err := b.GetBlockHash()
+// GetBlockHash hashes the block
+func (b Block) GetBlockHash() ([]byte, error) {
+	blockTxsHash, err := b.GetTransactionsHash()
 	if err != nil {
-		return fmt.Errorf("failed to get block hash: %w", err)
+		return nil, fmt.Errorf("failed to get block's transactions hash: %w", err)
 	}
-
 	timestampBytes, err := hexutil.IntToHex(b.Timestamp)
 	if err != nil {
-		return fmt.Errorf("failed to convert int to byte array: %w", err)
+		return nil, fmt.Errorf("failed to convert int to byte array: %w", err)
+	}
+
+	blockNumberBytes, err := hexutil.Uint64ToHex(b.Number)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert int to byte array: %w", err)
 	}
 
 	data := bytes.Join(
@@ -62,15 +88,25 @@ func (b *Block) Sign(key crypto.PrivKey) error {
 			timestampBytes,
 			b.Data,
 			b.PreviousBlockHash,
-			blockHash,
+			blockTxsHash,
+			blockNumberBytes,
 		},
 		[]byte{},
 	)
 
 	hash := sha256.Sum256(data)
+	return hash[:], nil
+}
+
+// Sign signs a block with a private key.
+func (b *Block) Sign(key crypto.PrivKey) error {
+	hash, err := b.GetBlockHash()
+	if err != nil {
+		return fmt.Errorf("failed to get block's hash: %w", err)
+	}
 
 	b.Hash = make([]byte, len(hash))
-	copy(b.Hash, hash[:])
+	copy(b.Hash, hash)
 
 	sig, err := key.Sign(b.Hash)
 	if err != nil {
@@ -95,6 +131,7 @@ func (b Block) VerifyWithPublicKey(key crypto.PubKey) error {
 	return nil
 }
 
+// Validate validates a block.
 func (b Block) Validate() (bool, error) {
 	if len(b.Hash) == 0 || b.Hash == nil {
 		return false, errors.New("hash is empty")
@@ -116,6 +153,21 @@ func (b Block) Validate() (bool, error) {
 		return false, fmt.Errorf("data with size %d is greater than %d bytes", len(b.Data), maxBlockDataSizeBytes)
 	}
 
+	coinbase, err := b.GetCoinbaseTransaction()
+	if err != nil {
+		return false, fmt.Errorf("failed to get coinbase transaction: %w", err)
+	}
+
+	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbase.PublicKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to derive public key from coinbase transaction: %w", err)
+	}
+
+	err = b.VerifyWithPublicKey(pubKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify block: %w", err)
+	}
+
 	hash, err := b.GetBlockHash()
 	if err != nil {
 		return false, errors.New("failed to get block hash")
@@ -123,6 +175,15 @@ func (b Block) Validate() (bool, error) {
 
 	if !bytes.Equal(b.Hash, hash) {
 		return false, errors.New("block is altered and doesn't match the hash")
+	}
+
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(coinbase.PublicKey)
+	if err != nil {
+		return false, errors.New("failed to get verifier's address")
+	}
+
+	if !IsValidVerifier(verifierAddr) {
+		return false, errors.New("block was signed by a non-verifier")
 	}
 
 	return true, nil
@@ -147,7 +208,7 @@ func UnmarshalProtoBlock(data []byte) (*ProtoBlock, error) {
 }
 
 // ToProtoBlock returns a proto representation of a block.
-func ToProtoTransaction(block Block) *ProtoBlock {
+func ToProtoBlock(block Block) *ProtoBlock {
 	pblock := &ProtoBlock{
 		Hash:              make([]byte, len(block.Hash)),
 		Signature:         make([]byte, len(block.Signature)),
@@ -155,6 +216,7 @@ func ToProtoTransaction(block Block) *ProtoBlock {
 		Data:              make([]byte, len(block.Data)),
 		PreviousBlockHash: make([]byte, len(block.PreviousBlockHash)),
 		Transactions:      make([]*transaction.ProtoTransaction, 0, len(block.Transactions)),
+		Number:            block.Number,
 	}
 
 	copy(pblock.Hash, block.Hash)
@@ -177,6 +239,7 @@ func ProtoBlockToBlock(pblock *ProtoBlock) Block {
 		Data:              make([]byte, len(pblock.Data)),
 		PreviousBlockHash: make([]byte, len(pblock.PreviousBlockHash)),
 		Transactions:      make([]transaction.Transaction, 0, len(pblock.Transactions)),
+		Number:            pblock.Number,
 	}
 
 	copy(block.Hash, pblock.Hash)

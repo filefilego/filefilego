@@ -84,7 +84,7 @@ func (tx Transaction) GetTransactionHash() ([]byte, error) {
 }
 
 // SignTransaction signs a transaction with a private key.
-func (tx *Transaction) SignTransaction(key crypto.PrivKey) error {
+func (tx *Transaction) Sign(key crypto.PrivKey) error {
 	hash, err := tx.GetTransactionHash()
 	if err != nil {
 		return fmt.Errorf("failed to get transactionHash: %w", err)

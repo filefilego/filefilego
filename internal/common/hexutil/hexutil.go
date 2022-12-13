@@ -114,12 +114,23 @@ func Hex2Bytes(str string) []byte {
 	return h
 }
 
+// IntToHex converts an uint64 to a byte array
+func Uint64ToHex(num uint64) ([]byte, error) {
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, num)
+	if err != nil {
+		return buff.Bytes(), fmt.Errorf("failed to write to buffer: %w", err)
+	}
+
+	return buff.Bytes(), nil
+}
+
 // IntToHex converts an int64 to a byte array
 func IntToHex(num int64) ([]byte, error) {
 	buff := new(bytes.Buffer)
 	err := binary.Write(buff, binary.BigEndian, num)
 	if err != nil {
-		return buff.Bytes(), err
+		return buff.Bytes(), fmt.Errorf("failed to write to buffer: %w", err)
 	}
 
 	return buff.Bytes(), nil

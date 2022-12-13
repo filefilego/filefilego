@@ -103,7 +103,7 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	assert.Empty(t, tx.Hash)
 	assert.Empty(t, tx.Signature)
 	// sign tx with private key
-	err = tx.SignTransaction(keypair.PrivateKey)
+	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, tx.Hash)
 	assert.NotEmpty(t, tx.Signature)
@@ -124,7 +124,7 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	assert.EqualError(t, err, "failed to verify transaction: malformed signature: too short: 0 < 8")
 }
 
-func TestVerifyWithPublicKey(t *testing.T) {
+func TestValidate(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
 		when   func() *Transaction
@@ -138,7 +138,7 @@ func TestVerifyWithPublicKey(t *testing.T) {
 				return tx
 			},
 		},
-		"empty hashs": {
+		"data size is greater than defined": {
 			expErr: "data with size 300001 is greater than 300000 bytes",
 			when: func() *Transaction {
 				tx := validTransaction(t)
@@ -251,6 +251,47 @@ func TestVerifyWithPublicKey(t *testing.T) {
 	}
 }
 
+func TestProtoTransactionFunctions(t *testing.T) {
+	tx := validTransaction(t)
+	assert.NotNil(t, tx)
+	ptx := ToProtoTransaction(*tx)
+	assert.NotNil(t, ptx)
+	derviedTx := ProtoTransactionToTransaction(ptx)
+	assert.Equal(t, *tx, derviedTx)
+}
+
+func TestMarshalUnmarshalProtoTransaction(t *testing.T) {
+	tx := validTransaction(t)
+	assert.NotNil(t, tx)
+	ptx := ToProtoTransaction(*tx)
+	assert.NotNil(t, ptx)
+
+	// marshal
+	ptxData, err := MarshalProtoTransaction(ptx)
+	assert.NoError(t, err)
+	assert.NotNil(t, ptxData)
+
+	// unmarshal
+	derivedTx, err := UnmarshalProtoBlock(ptxData)
+	assert.NoError(t, err)
+	assert.NotNil(t, derivedTx)
+	equalTransactions(ptx, derivedTx, t)
+}
+
+func equalTransactions(ptx, derivedTx *ProtoTransaction, t *testing.T) {
+	assert.ElementsMatch(t, ptx.Data, derivedTx.Data)
+	assert.ElementsMatch(t, ptx.Hash, derivedTx.Hash)
+	assert.ElementsMatch(t, ptx.Signature, derivedTx.Signature)
+	assert.ElementsMatch(t, ptx.Nounce, derivedTx.Nounce)
+	assert.ElementsMatch(t, ptx.PublicKey, derivedTx.PublicKey)
+	assert.ElementsMatch(t, ptx.Chain, derivedTx.Chain)
+
+	assert.Equal(t, ptx.From, derivedTx.From)
+	assert.Equal(t, ptx.To, derivedTx.To)
+	assert.Equal(t, ptx.Value, derivedTx.Value)
+	assert.Equal(t, ptx.TransactionFees, derivedTx.TransactionFees)
+}
+
 func validTransaction(t *testing.T) *Transaction {
 	keypair, err := crypto.GenerateKeyPair()
 	assert.NoError(t, err)
@@ -274,7 +315,7 @@ func validTransaction(t *testing.T) *Transaction {
 		Value:           "0x64",
 		TransactionFees: "0x64",
 	}
-	err = tx.SignTransaction(keypair.PrivateKey)
+	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
 	return &tx
 }
