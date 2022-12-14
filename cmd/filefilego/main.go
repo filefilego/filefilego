@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc"
-	bolt "go.etcd.io/bbolt"
+	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/config"
 	ffgcli "github.com/filefilego/filefilego/internal/cli"
@@ -99,7 +99,7 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
-	db, err := bolt.Open("storage.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("storage.db", nil)
 	if err != nil {
 		return err
 	}

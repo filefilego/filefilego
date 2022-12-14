@@ -13,12 +13,12 @@ import (
 	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/stretchr/testify/assert"
-	bolt "go.etcd.io/bbolt"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	db, err := bolt.Open("storagetest.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("storagetest.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
 	assert.NoError(t, err)
@@ -70,7 +70,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestStorageMethods(t *testing.T) {
-	db, err := bolt.Open("storagetest2.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("storagetest2.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
 	assert.NoError(t, err)
@@ -122,7 +122,7 @@ func TestStorageMethods(t *testing.T) {
 	// get invalid access token
 	found, tk, err = storage.CanAccess("invalidtoken2222")
 	assert.Equal(t, false, found)
-	assert.EqualError(t, err, "record: invalidtoken2222 doesn't exist in bucket: tokens")
+	assert.EqualError(t, err, "failed to get value: leveldb: not found")
 	assert.Equal(t, AccessToken{}, tk)
 
 	// empty access token
@@ -191,7 +191,7 @@ func TestStorageMethods(t *testing.T) {
 }
 
 func TestAuthenticateHandler(t *testing.T) {
-	db, err := bolt.Open("storagetestauth.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("storagetestauth.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
 	assert.NoError(t, err)
@@ -246,7 +246,7 @@ func TestAuthenticateHandler(t *testing.T) {
 }
 
 func TestUploadHandler(t *testing.T) {
-	db, err := bolt.Open("storagetestuploading.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("storagetestuploading.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
 	assert.NoError(t, err)

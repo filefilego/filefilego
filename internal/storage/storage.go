@@ -64,11 +64,6 @@ func New(db database.Driver, storagePath string, enabled bool, adminToken string
 		return nil, errors.New("adminToken is empty")
 	}
 
-	err := db.CreateBuckets(tokensBucket, dataBucket, fileHashBucket)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create storage buckets: %w", err)
-	}
-
 	if !common.DirExists(storagePath) {
 		err := common.CreateDirectory(storagePath)
 		if err != nil {
@@ -88,7 +83,7 @@ func New(db database.Driver, storagePath string, enabled bool, adminToken string
 		ExpiresAt:  time.Now().Add(time.Hour * tokenAccessHours).Unix(),
 	}
 
-	err = storage.SaveToken(token)
+	err := storage.SaveToken(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save admin token: %w", err)
 	}
@@ -132,7 +127,7 @@ func (s *Storage) SaveToken(token AccessToken) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal access token: %w", err)
 	}
-	return s.db.Put(tokensBucket, token.Token, data)
+	return s.db.Put([]byte(token.Token), data)
 }
 
 // SaveFileMetadata saves a file's metadata in the database.
@@ -152,12 +147,12 @@ func (s *Storage) SaveFileMetadata(nodeHash string, metadata FileMetadata) error
 	// 	return errors.New("nodeHash already exists in the database")
 	// }
 
-	err = s.db.Put(dataBucket, nodeHash, data)
+	err = s.db.Put([]byte(nodeHash), data)
 	if err != nil {
 		return fmt.Errorf("failed to insert nodeHash %s to %s bucket", nodeHash, dataBucket)
 	}
 
-	err = s.db.Put(fileHashBucket, metadata.Hash, []byte(nodeHash))
+	err = s.db.Put([]byte(metadata.Hash), []byte(nodeHash))
 	if err != nil {
 		return fmt.Errorf("failed to insert fileHash %s to %s bucket", metadata.Hash, fileHashBucket)
 	}
@@ -169,7 +164,7 @@ func (s *Storage) GetFileMetadata(nodeHash string) (FileMetadata, error) {
 	if nodeHash == "" {
 		return FileMetadata{}, errors.New("nodeHash is empty")
 	}
-	data, err := s.db.Get(dataBucket, nodeHash)
+	data, err := s.db.Get([]byte(nodeHash))
 	if err != nil {
 		return FileMetadata{}, fmt.Errorf("failed to get file metadata: %w", err)
 	}
@@ -186,7 +181,7 @@ func (s *Storage) GetNodeHashFromFileHash(fileHash string) (string, bool) {
 	if fileHash == "" {
 		return "", false
 	}
-	nodeData, err := s.db.Get(fileHashBucket, fileHash)
+	nodeData, err := s.db.Get([]byte(fileHash))
 	if err != nil {
 		return "", false
 	}
@@ -199,7 +194,7 @@ func (s *Storage) CanAccess(token string) (bool, AccessToken, error) {
 		return false, AccessToken{}, errors.New("token is empty")
 	}
 
-	data, err := s.db.Get(tokensBucket, token)
+	data, err := s.db.Get([]byte(token))
 	if err != nil {
 		return false, AccessToken{}, err
 	}

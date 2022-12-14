@@ -4,28 +4,31 @@ import (
 	"errors"
 	"fmt"
 
-	bolt "go.etcd.io/bbolt"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
-// DBViewUpdater represents a database engine.
-type DBViewUpdater interface {
-	Update(func(tx *bolt.Tx) error) error
-	View(func(tx *bolt.Tx) error) error
+// DBPutGetter represents a database engine.
+type DBPutGetter interface {
+	Get(key []byte, ro *opt.ReadOptions) (value []byte, err error)
+	Put(key, value []byte, wo *opt.WriteOptions) error
 }
 
 // Driver represents the database functionalities.
 type Driver interface {
-	Put(bucket, key string, value []byte) error
-	Get(bucket, key string) ([]byte, error)
-	CreateBuckets(buckets ...string) error
+	Put(key, value []byte) error
+	Get(key []byte) ([]byte, error)
 }
 
 type DB struct {
-	engine DBViewUpdater
+	engine DBPutGetter
 }
 
 // New creates a new instance of a database.
-func New(engine DBViewUpdater) (*DB, error) {
+func New(engine DBPutGetter) (*DB, error) {
+
+	// s, v := leveldb.Open(storage.NewMemStorage(), &opt.Options{})
+	// s.Put()
+
 	if engine == nil {
 		return nil, errors.New("engine is nil")
 	}
@@ -35,51 +38,19 @@ func New(engine DBViewUpdater) (*DB, error) {
 }
 
 // Put a record based into a bucket.
-func (d *DB) Put(bucket, key string, value []byte) error {
-	return d.engine.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucket))
-		if b == nil {
-			return fmt.Errorf("bucket %s doesn't exist", bucket)
-		}
-		return b.Put([]byte(key), value)
-	})
+func (d *DB) Put(key, value []byte) error {
+	return d.engine.Put(key, value, nil)
 }
 
 // Get a record based on key.
-func (d *DB) Get(bucket, key string) ([]byte, error) {
-	var itemBytes []byte
-	err := d.engine.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucket))
-		if b == nil {
-			return fmt.Errorf("bucket %s doesn't exist", bucket)
-		}
-		record := b.Get([]byte(key))
-		if record == nil {
-			return fmt.Errorf("record: %s doesn't exist in bucket: %s", key, bucket)
-		}
-		itemBytes = make([]byte, len(record))
-		copy(itemBytes, record)
-		return nil
-	})
+func (d *DB) Get(key []byte) ([]byte, error) {
+	data, err := d.engine.Get(key, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get value: %w", err)
 	}
-	return itemBytes, nil
-}
-
-// CreateBucket creates a bucket.
-func (d *DB) CreateBuckets(buckets ...string) error {
-	if len(buckets) == 0 {
-		return errors.New("no bucket specified")
+	if data == nil {
+		return nil, fmt.Errorf("record: %s doesn't exist", string(key))
 	}
 
-	return d.engine.Update(func(tx *bolt.Tx) error {
-		for _, b := range buckets {
-			_, err := tx.CreateBucketIfNotExists([]byte(b))
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	return data, nil
 }

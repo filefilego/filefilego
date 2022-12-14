@@ -5,19 +5,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	bolt "go.etcd.io/bbolt"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	db, err := bolt.Open("file.db", os.ModePerm, nil)
+	db, err := leveldb.OpenFile("file.db", nil)
 	assert.NoError(t, err)
 	t.Cleanup(func() {
 		db.Close()
 		os.RemoveAll("file.db")
 	})
 	cases := map[string]struct {
-		dbEngine DBViewUpdater
+		dbEngine DBPutGetter
 		expErr   string
 	}{
 		"no engine": {
@@ -48,7 +49,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestDatabase(t *testing.T) {
-	bDB, err := bolt.Open("temp.db", os.ModePerm, nil)
+	bDB, err := leveldb.OpenFile("temp.db", nil)
 	assert.NoError(t, err)
 	t.Cleanup(func() {
 		bDB.Close()
@@ -56,32 +57,30 @@ func TestDatabase(t *testing.T) {
 	})
 	db, err := New(bDB)
 	assert.NoError(t, err)
-	err = db.CreateBuckets()
-	assert.EqualError(t, err, "no bucket specified")
-	err = db.CreateBuckets("bucket1", "transactions")
+
+	_, err = db.Get([]byte("wrongkey"))
+	assert.EqualError(t, err, "failed to get value: leveldb: not found")
+	err = db.Put([]byte("somekey"), []byte{})
 	assert.NoError(t, err)
-	_, err = db.Get("nobucket", "wrongkey")
-	assert.EqualError(t, err, "bucket nobucket doesn't exist")
-	err = db.Put("anothernonexistingbucket", "somekey", []byte{})
-	assert.EqualError(t, err, "bucket anothernonexistingbucket doesn't exist")
-	err = db.Put("transactions", "12345", []byte{1})
+	err = db.Put([]byte("12345"), []byte{1})
 	assert.NoError(t, err)
-	data, err := db.Get("transactions", "12345")
+	data, err := db.Get([]byte("12345"))
 	assert.NoError(t, err)
 	assert.Equal(t, []byte{1}, data)
-	data, err = db.Get("transactions", "wrongkey")
-	assert.EqualError(t, err, "record: wrongkey doesn't exist in bucket: transactions")
+	data, err = db.Get([]byte("wrongkey"))
+	assert.EqualError(t, err, "failed to get value: leveldb: not found")
 	assert.Nil(t, data)
 }
 
 type dbEngineStub struct {
-	err error
+	err  error
+	data []byte
 }
 
-func (e dbEngineStub) Update(func(tx *bolt.Tx) error) error {
+func (e dbEngineStub) Put(key, value []byte, wo *opt.WriteOptions) error {
 	return e.err
 }
 
-func (e dbEngineStub) View(func(tx *bolt.Tx) error) error {
-	return e.err
+func (e dbEngineStub) Get(key []byte, ro *opt.ReadOptions) (value []byte, err error) {
+	return e.data, e.err
 }
