@@ -2,7 +2,9 @@ package blockchain
 
 import (
 	"errors"
+	"log"
 
+	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/database"
 )
 
@@ -62,7 +64,8 @@ import (
 // type AddressDataResult int
 
 type Blockchain struct {
-	db database.Driver
+	db     database.Driver
+	blocks []block.Block
 }
 
 func New(db database.Driver) (*Blockchain, error) {
@@ -70,8 +73,19 @@ func New(db database.Driver) (*Blockchain, error) {
 		return nil, errors.New("db is nil")
 	}
 	return &Blockchain{
-		db: db,
+		db:     db,
+		blocks: make([]block.Block, 0),
 	}, nil
 }
 
-// func (b *Blockchain) GetTransactionByHash(hash string)
+func (b *Blockchain) AddBlockToDB(blck block.Block) {
+	protoblock := block.ToProtoBlock(blck)
+	data, err := block.MarshalProtoBlock(protoblock)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = b.db.Put(blck.Hash, data)
+	if err != nil {
+		log.Fatal(err)
+	}
+}

@@ -18,9 +18,6 @@ import (
 )
 
 const (
-	tokensBucket     = "tokens"
-	dataBucket       = "data"
-	fileHashBucket   = "fhashes"
 	tokenAccessHours = 2160
 
 	// AdminAccess represents full access.
@@ -141,20 +138,14 @@ func (s *Storage) SaveFileMetadata(nodeHash string, metadata FileMetadata) error
 		return fmt.Errorf("failed to marshal file metadata: %w", err)
 	}
 
-	// _, err = s.db.Get(dataBucket, nodeHash)
-	// if err == nil {
-	// 	// nodeHash already exists
-	// 	return errors.New("nodeHash already exists in the database")
-	// }
-
 	err = s.db.Put([]byte(nodeHash), data)
 	if err != nil {
-		return fmt.Errorf("failed to insert nodeHash %s to %s bucket", nodeHash, dataBucket)
+		return fmt.Errorf("failed to insert nodeHash %s", nodeHash)
 	}
 
 	err = s.db.Put([]byte(metadata.Hash), []byte(nodeHash))
 	if err != nil {
-		return fmt.Errorf("failed to insert fileHash %s to %s bucket", metadata.Hash, fileHashBucket)
+		return fmt.Errorf("failed to insert fileHash %s", metadata.Hash)
 	}
 	return nil
 }

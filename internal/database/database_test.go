@@ -84,3 +84,11 @@ func (e dbEngineStub) Put(key, value []byte, wo *opt.WriteOptions) error {
 func (e dbEngineStub) Get(key []byte, ro *opt.ReadOptions) (value []byte, err error) {
 	return e.data, e.err
 }
+
+func (e dbEngineStub) Close() error {
+	return e.err
+}
+
+func (e dbEngineStub) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
+	return e.err
+}

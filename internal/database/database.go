@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
@@ -11,12 +12,16 @@ import (
 type DBPutGetter interface {
 	Get(key []byte, ro *opt.ReadOptions) (value []byte, err error)
 	Put(key, value []byte, wo *opt.WriteOptions) error
+	Close() error
+	Write(batch *leveldb.Batch, wo *opt.WriteOptions) error
 }
 
 // Driver represents the database functionalities.
 type Driver interface {
 	Put(key, value []byte) error
 	Get(key []byte) ([]byte, error)
+	Close() error
+	Write(batch *leveldb.Batch, wo *opt.WriteOptions) error
 }
 
 type DB struct {
@@ -25,10 +30,6 @@ type DB struct {
 
 // New creates a new instance of a database.
 func New(engine DBPutGetter) (*DB, error) {
-
-	// s, v := leveldb.Open(storage.NewMemStorage(), &opt.Options{})
-	// s.Put()
-
 	if engine == nil {
 		return nil, errors.New("engine is nil")
 	}
@@ -53,4 +54,14 @@ func (d *DB) Get(key []byte) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// Close the database engine.
+func (d *DB) Close() error {
+	return d.engine.Close()
+}
+
+// Write batch write.
+func (d *DB) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
+	return d.engine.Write(batch, wo)
 }
