@@ -29,7 +29,7 @@ func TestNew(t *testing.T) {
 		os.RemoveAll("/tmp/invalidpathffg")
 	})
 	cases := map[string]struct {
-		db          database.Driver
+		db          database.Database
 		storagePath string
 		enabled     bool
 		adminToken  string

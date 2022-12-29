@@ -79,7 +79,7 @@ func RandomEntropy(length int) ([]byte, error) {
 	buf := make([]byte, length)
 	n, err := io.ReadFull(rand.Reader, buf)
 	if err != nil || n != length {
-		return nil, errors.New("cant read random bytes")
+		return nil, errors.New("failed to read random bytes")
 	}
 	return buf, nil
 }

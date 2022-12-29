@@ -16,8 +16,8 @@ type DBPutGetter interface {
 	Write(batch *leveldb.Batch, wo *opt.WriteOptions) error
 }
 
-// Driver represents the database functionalities.
-type Driver interface {
+// Database represents the database functionalities.
+type Database interface {
 	Put(key, value []byte) error
 	Get(key []byte) ([]byte, error)
 	Close() error
@@ -38,7 +38,7 @@ func New(engine DBPutGetter) (*DB, error) {
 	}, nil
 }
 
-// Put a record based into a bucket.
+// Put a record into the db.
 func (d *DB) Put(key, value []byte) error {
 	return d.engine.Put(key, value, nil)
 }

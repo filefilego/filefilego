@@ -3,8 +3,8 @@ package blockchain;
 
 option go_package = "github.com/filefilego/filefilego/internal/blockchain";
 
-// AddressState represents the state of an address.
-message AddressState {
+// AddressStateProto represents the state of an address in a proto message.
+message AddressStateProto {
     // balance represents the address balance.
 	bytes balance = 1;
     // nounce represents the current nounce of the address.

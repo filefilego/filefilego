@@ -2,10 +2,13 @@ package blockchain
 
 import (
 	"errors"
-	"log"
+	"fmt"
+	sync "sync"
 
 	"github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/transaction"
 )
 
 // Blockchain represents a blockchain.
@@ -63,29 +66,161 @@ import (
 // type transformNode func(ChanNode)
 // type AddressDataResult int
 
+const addressPrefix = "address"
+
+// Blockchain represents a blockchain structure.
 type Blockchain struct {
-	db     database.Driver
-	blocks []block.Block
+	db        database.Database
+	blockPool map[string]block.Block
+	bmu       sync.RWMutex
+
+	memPool map[string]transaction.Transaction
+	tmu     sync.RWMutex
 }
 
-func New(db database.Driver) (*Blockchain, error) {
+// New creates a new blockchain instance.
+func New(db database.Database) (*Blockchain, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
 	return &Blockchain{
-		db:     db,
-		blocks: make([]block.Block, 0),
+		db:        db,
+		blockPool: make(map[string]block.Block),
+		memPool:   make(map[string]transaction.Transaction),
 	}, nil
 }
 
-func (b *Blockchain) AddBlockToDB(blck block.Block) {
+// GetBlocksFromPool get all the block from blockpool.
+func (b *Blockchain) GetBlocksFromPool() []block.Block {
+	b.bmu.RLock()
+	defer b.bmu.RUnlock()
+
+	blocks := make([]block.Block, 0, len(b.blockPool))
+	for _, blc := range b.blockPool {
+		blocks = append(blocks, blc)
+	}
+
+	return blocks
+}
+
+// PutBlockPool adds a block to blockPool.
+func (b *Blockchain) PutBlockPool(block block.Block) error {
+	b.bmu.Lock()
+	defer b.bmu.Unlock()
+
+	blockHash := hexutil.Encode(block.Hash)
+	b.blockPool[blockHash] = block
+	return nil
+}
+
+// DeleteFromBlockPool deletes a block from mempool.
+func (b *Blockchain) DeleteFromBlockPool(block block.Block) error {
+	b.bmu.Lock()
+	defer b.bmu.Unlock()
+
+	blockHash := hexutil.Encode(block.Hash)
+	delete(b.blockPool, blockHash)
+	return nil
+}
+
+// PutMemPool adds a transaction to mempool.
+func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
+	b.tmu.Lock()
+	defer b.tmu.Unlock()
+
+	txHash := hexutil.Encode(tx.Hash)
+	b.memPool[txHash] = tx
+	return nil
+}
+
+// DeleteFromMemPool deletes a transaction from mempool.
+func (b *Blockchain) DeleteFromMemPool(tx transaction.Transaction) error {
+	b.tmu.Lock()
+	defer b.tmu.Unlock()
+
+	txHash := hexutil.Encode(tx.Hash)
+	delete(b.memPool, txHash)
+	return nil
+}
+
+// GetTransactionsFromPool get all the transactions from mempool.
+func (b *Blockchain) GetTransactionsFromPool() []transaction.Transaction {
+	b.tmu.RLock()
+	defer b.tmu.RUnlock()
+
+	txs := make([]transaction.Transaction, 0, len(b.memPool))
+	for _, tx := range b.memPool {
+		txs = append(txs, tx)
+	}
+
+	return txs
+}
+
+// SaveBlockInDB saves a block into the database.
+func (b *Blockchain) SaveBlockInDB(blck block.Block) error {
+	if len(blck.Hash) == 0 {
+		return errors.New("blockhash is empty")
+	}
 	protoblock := block.ToProtoBlock(blck)
 	data, err := block.MarshalProtoBlock(protoblock)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to marshal protoblock: %w", err)
 	}
 	err = b.db.Put(blck.Hash, data)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to save data into db: %w", err)
 	}
+	return nil
+}
+
+// GetBlockByHash gets a block by its hash.
+func (b *Blockchain) GetBlockByHash(blockHash []byte) (block.Block, error) {
+	if len(blockHash) == 0 {
+		return block.Block{}, errors.New("blockhash is empty")
+	}
+
+	blockData, err := b.db.Get(blockHash)
+	if err != nil {
+		return block.Block{}, fmt.Errorf("failed to get block from database: %w", err)
+	}
+
+	protoBlock, err := block.UnmarshalProtoBlock(blockData)
+	if err != nil {
+		return block.Block{}, fmt.Errorf("failed to get unmarshal protoblock: %w", err)
+	}
+
+	return block.ProtoBlockToBlock(protoBlock), nil
+}
+
+// GetAddressState returns the state of the address from the db.
+func (b *Blockchain) GetAddressState(address []byte) (AddressState, error) {
+	data, err := b.db.Get(append([]byte(addressPrefix), address...))
+	if err != nil {
+		return AddressState{}, fmt.Errorf("failed to get address state: %w", err)
+	}
+	protoAddrState, err := UnmarshalAddressStateProto(data)
+	if err != nil {
+		return AddressState{}, fmt.Errorf("failed to unmarshal address state: %w", err)
+	}
+	return AddressStateProtoToAddressState(protoAddrState), nil
+}
+
+// UpdateAddressState updates the state of the address in the db.
+func (b *Blockchain) UpdateAddressState(address []byte, state AddressState) error {
+	if len(address) == 0 {
+		return errors.New("address is empty")
+	}
+
+	protoAddrState := ToAddressStateProto(state)
+	data, err := MarshalAddressStateProto(protoAddrState)
+	if err != nil {
+		return fmt.Errorf("failed to marshal address state: %w", err)
+	}
+
+	err = b.db.Put(append([]byte(addressPrefix), address...), data)
+	if err != nil {
+		return fmt.Errorf("failed to put to database: %w", err)
+	}
+
+	return nil
 }

@@ -42,13 +42,13 @@ type AccessToken struct {
 
 // Storage represents the storage engine and the metadata.
 type Storage struct {
-	db          database.Driver
+	db          database.Database
 	storagePath string
 	enabled     bool
 }
 
 // New creates a new storage instance.
-func New(db database.Driver, storagePath string, enabled bool, adminToken string) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}

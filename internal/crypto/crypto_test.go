@@ -39,6 +39,16 @@ func TestPublicKeyToAndFromHex(t *testing.T) {
 	assert.EqualError(t, err, "malformed public key: invalid length: 2")
 }
 
+func TestPublicKeyFromBytes(t *testing.T) {
+	keyPair, err := GenerateKeyPair()
+	assert.NoError(t, err)
+	pubKeyData, err := keyPair.PublicKey.Raw()
+	assert.NoError(t, err)
+	derivedPubKey, err := PublicKeyFromBytes(pubKeyData)
+	assert.NoError(t, err)
+	assert.Equal(t, keyPair.PublicKey, derivedPubKey)
+}
+
 func TestKeccak256(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
