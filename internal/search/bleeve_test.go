@@ -95,7 +95,7 @@ func indexItem(t *testing.T, bleveEngine *BleveSearch) {
 	err = bleveEngine.Index(IndexItem{
 		Hash:        "233",
 		Type:        2,
-		Name:        "another title with dates 10/2/2021.",
+		Name:        "another title with dates 10/2/2021 10-02-2021.",
 		Description: "description",
 	})
 	assert.NoError(t, err)
