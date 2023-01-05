@@ -29,6 +29,7 @@ type IndexItem struct {
 type IndexSearcher interface {
 	Index(item IndexItem) error
 	Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error)
+	Close() error
 }
 
 // Search implements full-text searching and indexing.
@@ -60,4 +61,9 @@ func (s *Search) Search(ctx context.Context, query string, size, currentPage int
 // Index implements a indexing.
 func (s *Search) Index(item IndexItem) error {
 	return s.engine.Index(item)
+}
+
+// Close implements closing the db.
+func (s *Search) Close() error {
+	return s.engine.Close()
 }

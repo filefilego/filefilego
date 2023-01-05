@@ -22,6 +22,7 @@ import (
 	"github.com/gorilla/rpc/json"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
@@ -114,13 +115,25 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
-	node, err := node.NewNode(host, kademliaDHT, routingDiscovery, searchEngine)
+	optsPS := []pubsub.Option{
+		pubsub.WithMessageSigning(true),
+		pubsub.WithMaxMessageSize(10 * pubsub.DefaultMaxMessageSize), // 10 MB
+	}
+
+	gossip, err := pubsub.NewGossipSub(ctx.Context, host, optsPS...)
+	if err != nil {
+		return err
+	}
+
+	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine)
 	if err != nil {
 		return err
 	}
 
 	peers := node.Peers()
 	log.Println(peers)
+
+	log.Println("Address: ", node.GetID())
 
 	port := ":8081"
 

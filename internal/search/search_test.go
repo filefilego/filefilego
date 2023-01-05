@@ -124,6 +124,7 @@ func TestIndex(t *testing.T) {
 type engineStub struct {
 	hashes      []string
 	indexingErr error
+	closingErr  error
 	err         error
 }
 
@@ -133,4 +134,8 @@ func (e engineStub) Search(ctx context.Context, query string, limit, offset int,
 
 func (e engineStub) Index(item IndexItem) error {
 	return e.indexingErr
+}
+
+func (e engineStub) Close() error {
+	return e.closingErr
 }
