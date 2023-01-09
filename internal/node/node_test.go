@@ -7,7 +7,13 @@ import (
 	"testing"
 	"time"
 
+	block "github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/blockchain"
+	"github.com/filefilego/filefilego/internal/common/hexutil"
+	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
+	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/search"
+	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -21,7 +27,62 @@ import (
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
+	"github.com/syndtr/goleveldb/leveldb"
+	"google.golang.org/protobuf/proto"
 )
+
+func TestProtobufMessage(t *testing.T) {
+	// block
+	payload := GossipPayload{
+		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{}}},
+	}
+	msg := payload.GetMessage()
+	switch msg.(type) {
+	case *GossipPayload_Blocks:
+	case *GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
+	}
+
+	// tx
+	payload = GossipPayload{
+		Message: &GossipPayload_Transaction{&transaction.ProtoTransaction{Hash: []byte{2}}},
+	}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *GossipPayload_Transaction:
+	case *GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
+	}
+
+	// query
+	payload = GossipPayload{
+		Message: &GossipPayload_Query{Query: &DataQuery{}},
+	}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *GossipPayload_Query:
+	}
+
+	// message is nil and not of any type
+	payload = GossipPayload{}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
+	}
+}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -36,6 +97,7 @@ func TestNew(t *testing.T) {
 		discovery    libp2pdiscovery.Discovery
 		pubSub       PublishSubscriber
 		searchEngine search.IndexSearcher
+		blockchain   blockchain.InterfaceBlockchain
 		expErr       string
 	}{
 		"no host": {
@@ -63,12 +125,21 @@ func TestNew(t *testing.T) {
 			searchEngine: &search.BleveSearch{},
 			expErr:       "pubSub is nil",
 		},
+		"no blockchain": {
+			host:         h,
+			dht:          kademliaDHT,
+			discovery:    &drouting.RoutingDiscovery{},
+			searchEngine: &search.BleveSearch{},
+			pubSub:       &pubsub.PubSub{},
+			expErr:       "blockchain is nil",
+		},
 		"success": {
 			host:         h,
 			dht:          kademliaDHT,
 			discovery:    &drouting.RoutingDiscovery{},
 			searchEngine: &search.BleveSearch{},
 			pubSub:       &pubsub.PubSub{},
+			blockchain:   &blockchain.Blockchain{},
 		},
 	}
 
@@ -76,7 +147,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine)
+			node, err := New(tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -99,14 +170,22 @@ func TestGetMultiAddrFromString(t *testing.T) {
 
 func TestBootstrap(t *testing.T) {
 	ctx := context.Background()
-	n1 := createNode(t, "6558", "bootstrapdb.bin")
-	n2 := createNode(t, "6557", "bootstrapdb2.bin")
+	n1 := createNode(t, "6558", "bootstrapdb.bin", "bootstrapdbchain.bin")
+	n2 := createNode(t, "6557", "bootstrapdb2.bin", "bootstrapdbchain2.bin")
 	t.Cleanup(func() {
 		n1.searchEngine.Close()
 		n2.searchEngine.Close()
 
+		// nolint:errcheck
+		n1.blockchain.CloseDB()
+		// nolint:errcheck
+		n2.blockchain.CloseDB()
+
 		os.RemoveAll("bootstrapdb.bin")
 		os.RemoveAll("bootstrapdb2.bin")
+
+		os.RemoveAll("bootstrapdbchain.bin")
+		os.RemoveAll("bootstrapdbchain2.bin")
 	})
 	err := n1.Bootstrap(ctx, []string{})
 	assert.NoError(t, err)
@@ -124,17 +203,29 @@ func TestBootstrap(t *testing.T) {
 func TestNodeMethods(t *testing.T) {
 	ctx := context.Background()
 
-	n1 := createNode(t, "65512", "node1search.bin")
-	n2 := createNode(t, "65513", "node2search.bin")
-	n3 := createNode(t, "65514", "node3search.bin")
+	n1 := createNode(t, "65512", "node1search.bin", "mainchaindb1.bin")
+	n2 := createNode(t, "65513", "node2search.bin", "mainchaindb2.bin")
+	n3 := createNode(t, "65514", "node3search.bin", "mainchaindb3.bin")
+
 	t.Cleanup(func() {
 		n1.searchEngine.Close()
 		n2.searchEngine.Close()
 		n3.searchEngine.Close()
 
+		// nolint:errcheck
+		n1.blockchain.CloseDB()
+		// nolint:errcheck
+		n2.blockchain.CloseDB()
+		// nolint:errcheck
+		n3.blockchain.CloseDB()
+
 		os.RemoveAll("node1search.bin")
 		os.RemoveAll("node2search.bin")
 		os.RemoveAll("node3search.bin")
+
+		os.RemoveAll("mainchaindb1.bin")
+		os.RemoveAll("mainchaindb2.bin")
+		os.RemoveAll("mainchaindb3.bin")
 	})
 
 	ns := "randevouz"
@@ -218,7 +309,78 @@ func TestNodeMethods(t *testing.T) {
 	// node3 publishes a message to network
 	// PublishMessageToNetwork
 	err = n3.PublishMessageToNetwork(ctx, []byte("hello world"))
+	time.Sleep(50 * time.Millisecond)
 	assert.NoError(t, err)
+
+	// send an invalid transaction to the network
+	tx := transaction.Transaction{
+		Hash: []byte{1},
+		From: "0x2",
+	}
+
+	payload := GossipPayload{
+		Message: &GossipPayload_Transaction{transaction.ToProtoTransaction(tx)},
+	}
+	blockData, err := proto.Marshal(&payload)
+	assert.NoError(t, err)
+	err = n3.PublishMessageToNetwork(ctx, blockData)
+	assert.NoError(t, err)
+	time.Sleep(50 * time.Millisecond)
+
+	// mempool should be empty
+	transactions := n2.blockchain.GetTransactionsFromPool()
+	assert.Empty(t, transactions)
+
+	// create a valid transaction and propagate to network
+	validtx, _ := validTransaction(t)
+	payload = GossipPayload{
+		Message: &GossipPayload_Transaction{transaction.ToProtoTransaction(*validtx)},
+	}
+	blockData, err = proto.Marshal(&payload)
+	assert.NoError(t, err)
+	err = n3.PublishMessageToNetwork(ctx, blockData)
+	assert.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+
+	// mempool should not be empty
+	transactions = n2.blockchain.GetTransactionsFromPool()
+	assert.NotEmpty(t, transactions)
+	transactions = n1.blockchain.GetTransactionsFromPool()
+	assert.NotEmpty(t, transactions)
+
+	// send an invalid block to the network
+	blk := block.Block{
+		Hash: []byte{1},
+	}
+	payload = GossipPayload{
+		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(blk)}}},
+	}
+	blockData, err = proto.Marshal(&payload)
+	assert.NoError(t, err)
+	err = n3.PublishMessageToNetwork(ctx, blockData)
+	assert.NoError(t, err)
+	time.Sleep(80 * time.Millisecond)
+
+	// blockpool should be empty
+	blockPoolData := n2.blockchain.GetBlocksFromPool()
+	assert.Empty(t, blockPoolData)
+
+	// valid block
+	validBlock, kp := validBlock(t)
+	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+		Address: kp.Address,
+	})
+	validBlock.Sign(kp.PrivateKey)
+	payload = GossipPayload{
+		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(*validBlock)}}},
+	}
+	blockData, err = proto.Marshal(&payload)
+	assert.NoError(t, err)
+	err = n3.PublishMessageToNetwork(ctx, blockData)
+	assert.NoError(t, err)
+	time.Sleep(80 * time.Millisecond)
+	blockPoolData = n2.blockchain.GetBlocksFromPool()
+	assert.NotEmpty(t, blockPoolData)
 }
 
 func newHost(t *testing.T, port string) host.Host {
@@ -245,7 +407,7 @@ func newHost(t *testing.T, port string) host.Host {
 	return host
 }
 
-func createNode(t *testing.T, port string, searchDB string) *Node {
+func createNode(t *testing.T, port string, searchDB string, blockchainDBPath string) *Node {
 	bgCtx := context.Background()
 
 	host := newHost(t, port)
@@ -266,7 +428,63 @@ func createNode(t *testing.T, port string, searchDB string) *Node {
 	gossip, err := pubsub.NewGossipSub(bgCtx, host, optsPS...)
 	assert.NoError(t, err)
 
-	node, err := New(host, kademliaDHT, routingDiscovery, gossip, searchEngine)
+	db, err := leveldb.OpenFile(blockchainDBPath, nil)
+	assert.NoError(t, err)
+
+	blockchainDB, err := database.New(db)
+	assert.NoError(t, err)
+
+	bchain, err := blockchain.New(blockchainDB)
+	assert.NoError(t, err)
+
+	node, err := New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain)
 	assert.NoError(t, err)
 	return node
+}
+
+func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair) {
+	const chainID = "0x01"
+
+	keypair, err := ffgcrypto.GenerateKeyPair()
+	assert.NoError(t, err)
+
+	pkyData, err := keypair.PublicKey.Raw()
+	assert.NoError(t, err)
+
+	mainChain, err := hexutil.Decode(chainID)
+	assert.NoError(t, err)
+
+	addr, err := ffgcrypto.RawPublicToAddress(pkyData)
+	assert.NoError(t, err)
+
+	tx := transaction.Transaction{
+		PublicKey:       pkyData,
+		Nounce:          []byte{1},
+		Data:            []byte{1},
+		From:            addr,
+		To:              addr,
+		Chain:           mainChain,
+		Value:           "0x64",
+		TransactionFees: "0x64",
+	}
+	err = tx.Sign(keypair.PrivateKey)
+	assert.NoError(t, err)
+	return &tx, keypair
+}
+
+// generate a block and propagate the keypair used for the tx
+func validBlock(t *testing.T) (*block.Block, ffgcrypto.KeyPair) {
+	validTx, kp := validTransaction(t)
+	b := block.Block{
+		Timestamp:         time.Now().Unix(),
+		Data:              []byte{1},
+		PreviousBlockHash: []byte{1, 1},
+		Transactions: []transaction.Transaction{
+			// its a coinbase tx
+			*validTx,
+		},
+		Number: 12,
+	}
+
+	return &b, kp
 }

@@ -49,6 +49,22 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestGetHeightAndIncrement(t *testing.T) {
+	db, err := leveldb.OpenFile("height.db", nil)
+	assert.NoError(t, err)
+	driver, err := database.New(db)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		db.Close()
+		os.RemoveAll("height.db")
+	})
+	blockchain, err := New(driver)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(0), blockchain.GetHeight())
+	blockchain.IncrementHeightBy(1)
+	assert.Equal(t, uint64(1), blockchain.GetHeight())
+}
+
 func TestSaveAndGetBlockInDB(t *testing.T) {
 	db, err := leveldb.OpenFile("savedhain.db", nil)
 	assert.NoError(t, err)

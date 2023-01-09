@@ -1,0 +1,26 @@
+syntax = "proto3";
+package messages;
+
+import "transaction/transaction.proto";
+import "block/block.proto";
+
+option go_package = "github.com/filefilego/filefilego/internal/node/protocols/messages";
+
+// GossipPayload represents a gossip payload.
+message GossipPayload {
+    oneof message {
+        ProtoBlocks blocks = 1;
+        transaction.ProtoTransaction transaction = 2;
+        DataQuery query = 3;
+    }
+}
+
+// ProtoBlocks is the proto representation of blocks envelope.
+message ProtoBlocks {
+    repeated block.ProtoBlock blocks = 1;
+}
+
+// DataQuery is the proto representation of a data query.
+message DataQuery {
+
+}

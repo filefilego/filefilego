@@ -68,6 +68,23 @@ import (
 
 const addressPrefix = "address"
 
+// InterfaceBlockchain wraps the functionality of a blockchain.
+type InterfaceBlockchain interface {
+	GetBlocksFromPool() []block.Block
+	PutBlockPool(block block.Block) error
+	DeleteFromBlockPool(block block.Block) error
+	PutMemPool(tx transaction.Transaction) error
+	DeleteFromMemPool(tx transaction.Transaction) error
+	GetTransactionsFromPool() []transaction.Transaction
+	SaveBlockInDB(blck block.Block) error
+	GetBlockByHash(blockHash []byte) (block.Block, error)
+	GetAddressState(address []byte) (AddressState, error)
+	UpdateAddressState(address []byte, state AddressState) error
+	CloseDB() error
+	IncrementHeightBy(h uint64)
+	GetHeight() uint64
+}
+
 // Blockchain represents a blockchain structure.
 type Blockchain struct {
 	db        database.Database
@@ -76,6 +93,9 @@ type Blockchain struct {
 
 	memPool map[string]transaction.Transaction
 	tmu     sync.RWMutex
+
+	height uint64
+	hmu    sync.RWMutex
 }
 
 // New creates a new blockchain instance.
@@ -88,6 +108,22 @@ func New(db database.Database) (*Blockchain, error) {
 		blockPool: make(map[string]block.Block),
 		memPool:   make(map[string]transaction.Transaction),
 	}, nil
+}
+
+// IncrementHeightBy increments the blockchain height by the given number.
+func (b *Blockchain) IncrementHeightBy(h uint64) {
+	b.hmu.Lock()
+	defer b.hmu.Unlock()
+
+	b.height += h
+}
+
+// GetHeight gets the height of the blockchain.
+func (b *Blockchain) GetHeight() uint64 {
+	b.hmu.RLock()
+	defer b.hmu.RUnlock()
+
+	return b.height
 }
 
 // GetBlocksFromPool get all the block from blockpool.
@@ -223,4 +259,9 @@ func (b *Blockchain) UpdateAddressState(address []byte, state AddressState) erro
 	}
 
 	return nil
+}
+
+// CloseDB closes the db.
+func (b *Blockchain) CloseDB() error {
+	return b.db.Close()
 }

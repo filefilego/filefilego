@@ -11,6 +11,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/config"
+	"github.com/filefilego/filefilego/internal/blockchain"
 	ffgcli "github.com/filefilego/filefilego/internal/cli"
 	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/database"
@@ -125,7 +126,22 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
-	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine)
+	bdb, err := leveldb.OpenFile("chain.db", nil)
+	if err != nil {
+		return err
+	}
+
+	blockchainDB, err := database.New(bdb)
+	if err != nil {
+		return err
+	}
+
+	bchain, err := blockchain.New(blockchainDB)
+	if err != nil {
+		return err
+	}
+
+	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain)
 	if err != nil {
 		return err
 	}

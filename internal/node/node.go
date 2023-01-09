@@ -8,13 +8,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/search"
+	"github.com/filefilego/filefilego/internal/transaction"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
+	"google.golang.org/protobuf/proto"
 )
 
 const findPeerTimeoutSeconds = 5
@@ -41,12 +45,12 @@ type Node struct {
 	discovery    libp2pdiscovery.Discovery
 	pubSub       PublishSubscriber
 	searchEngine search.IndexSearcher
-
-	gossipTopic *pubsub.Topic
+	blockchain   blockchain.InterfaceBlockchain
+	gossipTopic  *pubsub.Topic
 }
 
 // New creates a new node.
-func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher) (*Node, error) {
+func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.InterfaceBlockchain) (*Node, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -67,12 +71,17 @@ func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.D
 		return nil, errors.New("pubSub is nil")
 	}
 
+	if blockchain == nil {
+		return nil, errors.New("blockchain is nil")
+	}
+
 	return &Node{
 		host:         host,
 		dht:          dht,
 		discovery:    discovery,
 		pubSub:       pubSub,
 		searchEngine: search,
+		blockchain:   blockchain,
 	}, nil
 }
 
@@ -161,14 +170,65 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 				log.Println("error ", err)
 				continue
 			}
-			n.processIncomingMessage(msg)
+
+			err = n.processIncomingMessage(msg)
+			if err != nil {
+				log.Println("error ", err)
+			}
 		}
 	}()
 	return nil
 }
 
-func (n *Node) processIncomingMessage(msg *pubsub.Message) {
-	log.Println(msg.ReceivedFrom, ": ", string(msg.Message.Data))
+func (n *Node) processIncomingMessage(message *pubsub.Message) error {
+	payload := GossipPayload{}
+	if err := proto.Unmarshal(message.Data, &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal pubsub data: %w", err)
+	}
+	msg := payload.GetMessage()
+	switch msg.(type) {
+	case *GossipPayload_Blocks:
+		// handle incoming blocks
+		if n.host.ID().String() == message.ReceivedFrom.String() {
+			return nil
+		}
+
+		protoBlocks := payload.GetBlocks().GetBlocks()
+		for _, b := range protoBlocks {
+			retrivedBlock := block.ProtoBlockToBlock(b)
+			ok, err := retrivedBlock.Validate()
+			if err != nil {
+				return fmt.Errorf("failed to validate incoming block: %w", err)
+			}
+			if ok {
+				err := n.blockchain.PutBlockPool(retrivedBlock)
+				if err != nil {
+					return fmt.Errorf("failed to insert block to blockPool: %w", err)
+				}
+			}
+		}
+
+	case *GossipPayload_Transaction:
+		// handle incoming transaction
+		if n.host.ID().String() == message.ReceivedFrom.String() {
+			return nil
+		}
+		tx := transaction.ProtoTransactionToTransaction(payload.GetTransaction())
+		ok, err := tx.Validate()
+		if err != nil {
+			return fmt.Errorf("failed to validate incoming transaction: %w", err)
+		}
+		if ok {
+			err := n.blockchain.PutMemPool(tx)
+			if err != nil {
+				return fmt.Errorf("failed to insert transaction to mempool: %w", err)
+			}
+		}
+
+	case *GossipPayload_Query:
+		// handle incoming data query
+	}
+	return nil
 }
 
 // GetMultiaddr returns the peers multiaddr.
