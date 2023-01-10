@@ -1,10 +1,11 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc"
@@ -17,6 +18,7 @@ import (
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/keystore"
 	"github.com/filefilego/filefilego/internal/node"
+	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	internalrpc "github.com/filefilego/filefilego/internal/rpc"
 	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/storage"
@@ -141,7 +143,9 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
-	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain)
+	dataQueryProtocol := dataquery.New()
+
+	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
 	if err != nil {
 		return err
 	}

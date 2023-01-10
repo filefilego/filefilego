@@ -11,7 +11,7 @@ message GossipPayload {
     oneof message {
         ProtoBlocks blocks = 1;
         transaction.ProtoTransaction transaction = 2;
-        DataQuery query = 3;
+        DataQueryRequestProto query = 3;
     }
 }
 
@@ -20,7 +20,22 @@ message ProtoBlocks {
     repeated block.ProtoBlock blocks = 1;
 }
 
-// DataQuery is the proto representation of a data query.
-message DataQuery {
+// DataQueryRequestProto represents a data query message.
+message DataQueryRequestProto {
+    repeated bytes nodes = 1;
+    string fromPeerAddr = 2;
+    bytes hash = 3;
+    int64 timestamp = 4;
+}
 
+// DataQueryResponseProto represents a data query response.
+message DataQueryResponseProto {
+    string fromPeerAddr = 1;
+    string totalFeesGB = 2;
+    bytes hash = 3;
+    bytes publicKey = 4;
+    bytes signature = 5;
+    repeated bytes nodes = 6;
+    repeated bytes unavailableNodes = 7;
+    int64 timestamp = 8;
 }

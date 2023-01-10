@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
+	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
+	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -40,17 +43,19 @@ type PeerFinderBootstrapper interface {
 
 // Node represents all the node functionalities
 type Node struct {
-	host         host.Host
-	dht          PeerFinderBootstrapper
-	discovery    libp2pdiscovery.Discovery
-	pubSub       PublishSubscriber
-	searchEngine search.IndexSearcher
-	blockchain   blockchain.InterfaceBlockchain
-	gossipTopic  *pubsub.Topic
+	host              host.Host
+	dht               PeerFinderBootstrapper
+	discovery         libp2pdiscovery.Discovery
+	pubSub            PublishSubscriber
+	searchEngine      search.IndexSearcher
+	blockchain        blockchain.Interface
+	dataQueryProtocol dataquery.Interface
+
+	gossipTopic *pubsub.Topic
 }
 
 // New creates a new node.
-func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.InterfaceBlockchain) (*Node, error) {
+func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface) (*Node, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -75,23 +80,19 @@ func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.D
 		return nil, errors.New("blockchain is nil")
 	}
 
-	return &Node{
-		host:         host,
-		dht:          dht,
-		discovery:    discovery,
-		pubSub:       pubSub,
-		searchEngine: search,
-		blockchain:   blockchain,
-	}, nil
-}
-
-// GetMultiAddrFromString gets the multiaddress from the string encoded address.
-func GetMultiAddrFromString(addr string) (multiaddr.Multiaddr, error) {
-	maddr, err := multiaddr.NewMultiaddr(addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate multiaddr: %w", err)
+	if dataQuery == nil {
+		return nil, errors.New("dataQuery is nil")
 	}
-	return maddr, nil
+
+	return &Node{
+		host:              host,
+		dht:               dht,
+		discovery:         discovery,
+		pubSub:            pubSub,
+		searchEngine:      search,
+		blockchain:        blockchain,
+		dataQueryProtocol: dataQuery,
+	}, nil
 }
 
 // ConnectToPeerWithMultiaddr connects to a node given its full address.
@@ -124,9 +125,9 @@ func (n *Node) DiscoverPeers(ctx context.Context, ns string) error {
 		}
 		err := n.host.Connect(ctx, peer)
 		if err != nil {
-			log.Println("Failed connecting to ", peer.ID.Pretty(), ", error:", err)
+			log.Warnf("failed connecting to %s with error: %v", peer.ID.Pretty(), err)
 		} else {
-			log.Println("Connected to:", peer.ID.Pretty())
+			log.Info("Connected to: ", peer.ID.Pretty())
 		}
 	}
 	return nil
@@ -167,13 +168,13 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 		for {
 			msg, err := sub.Next(ctx)
 			if err != nil {
-				log.Println("error ", err)
+				log.Errorf("failed to read next message from subscription: %v", err)
 				continue
 			}
 
 			err = n.processIncomingMessage(msg)
 			if err != nil {
-				log.Println("error ", err)
+				log.Errorf("failed to process incoming message: %v", err)
 			}
 		}
 	}()
@@ -181,13 +182,13 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 }
 
 func (n *Node) processIncomingMessage(message *pubsub.Message) error {
-	payload := GossipPayload{}
+	payload := messages.GossipPayload{}
 	if err := proto.Unmarshal(message.Data, &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal pubsub data: %w", err)
 	}
 	msg := payload.GetMessage()
 	switch msg.(type) {
-	case *GossipPayload_Blocks:
+	case *messages.GossipPayload_Blocks:
 		// handle incoming blocks
 		if n.host.ID().String() == message.ReceivedFrom.String() {
 			return nil
@@ -208,11 +209,12 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 			}
 		}
 
-	case *GossipPayload_Transaction:
+	case *messages.GossipPayload_Transaction:
 		// handle incoming transaction
 		if n.host.ID().String() == message.ReceivedFrom.String() {
 			return nil
 		}
+
 		tx := transaction.ProtoTransactionToTransaction(payload.GetTransaction())
 		ok, err := tx.Validate()
 		if err != nil {
@@ -225,8 +227,14 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 			}
 		}
 
-	case *GossipPayload_Query:
+	case *messages.GossipPayload_Query:
 		// handle incoming data query
+		dataQueryRequest := payload.GetQuery()
+		fromPeer, err := peer.Decode(dataQueryRequest.FromPeerAddr)
+		if err != nil {
+			return fmt.Errorf("failed to decode the peer from the proto request: %w", err)
+		}
+		log.Info("from peer: ", fromPeer)
 	}
 	return nil
 }
@@ -273,11 +281,11 @@ func (n *Node) Bootstrap(ctx context.Context, bootstrapPeers []string) error {
 				defer wg.Done()
 				maddr, err := GetMultiAddrFromString(peer)
 				if err != nil {
-					log.Println("failed to get multiaddr: ", err)
+					log.Warnf("failed to get multiaddr: %v", err)
 				}
 				_, err = n.ConnectToPeerWithMultiaddr(ctx, maddr)
 				if err != nil {
-					log.Println("failed to connect to peer: ", err)
+					log.Warnf("failed to connect to peer: %v", err)
 				}
 			}(peerAddr)
 		}
@@ -308,4 +316,13 @@ func (n *Node) FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 	}
 	wg.Wait()
 	return discoveredPeers
+}
+
+// GetMultiAddrFromString gets the multiaddress from the string encoded address.
+func GetMultiAddrFromString(addr string) (multiaddr.Multiaddr, error) {
+	maddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate multiaddr: %w", err)
+	}
+	return maddr, nil
 }

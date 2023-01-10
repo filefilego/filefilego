@@ -12,6 +12,8 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
+	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p"
@@ -31,59 +33,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestProtobufMessage(t *testing.T) {
-	// block
-	payload := GossipPayload{
-		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{}}},
-	}
-	msg := payload.GetMessage()
-	switch msg.(type) {
-	case *GossipPayload_Blocks:
-	case *GossipPayload_Transaction:
-		assert.Fail(t, "shouldnt be a transaction")
-	case *GossipPayload_Query:
-		assert.Fail(t, "shouldnt be a query")
-	}
-
-	// tx
-	payload = GossipPayload{
-		Message: &GossipPayload_Transaction{&transaction.ProtoTransaction{Hash: []byte{2}}},
-	}
-	msg = payload.GetMessage()
-	switch msg.(type) {
-	case *GossipPayload_Blocks:
-		assert.Fail(t, "shouldnt be a block")
-	case *GossipPayload_Transaction:
-	case *GossipPayload_Query:
-		assert.Fail(t, "shouldnt be a query")
-	}
-
-	// query
-	payload = GossipPayload{
-		Message: &GossipPayload_Query{Query: &DataQuery{}},
-	}
-	msg = payload.GetMessage()
-	switch msg.(type) {
-	case *GossipPayload_Blocks:
-		assert.Fail(t, "shouldnt be a block")
-	case *GossipPayload_Transaction:
-		assert.Fail(t, "shouldnt be a transaction")
-	case *GossipPayload_Query:
-	}
-
-	// message is nil and not of any type
-	payload = GossipPayload{}
-	msg = payload.GetMessage()
-	switch msg.(type) {
-	case *GossipPayload_Blocks:
-		assert.Fail(t, "shouldnt be a block")
-	case *GossipPayload_Transaction:
-		assert.Fail(t, "shouldnt be a transaction")
-	case *GossipPayload_Query:
-		assert.Fail(t, "shouldnt be a query")
-	}
-}
-
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -92,13 +41,14 @@ func TestNew(t *testing.T) {
 	assert.NoError(t, err)
 
 	cases := map[string]struct {
-		host         host.Host
-		dht          PeerFinderBootstrapper
-		discovery    libp2pdiscovery.Discovery
-		pubSub       PublishSubscriber
-		searchEngine search.IndexSearcher
-		blockchain   blockchain.InterfaceBlockchain
-		expErr       string
+		host              host.Host
+		dht               PeerFinderBootstrapper
+		discovery         libp2pdiscovery.Discovery
+		pubSub            PublishSubscriber
+		searchEngine      search.IndexSearcher
+		blockchain        blockchain.Interface
+		dataQueryProtocol dataquery.Interface
+		expErr            string
 	}{
 		"no host": {
 			expErr: "host is nil",
@@ -133,13 +83,23 @@ func TestNew(t *testing.T) {
 			pubSub:       &pubsub.PubSub{},
 			expErr:       "blockchain is nil",
 		},
-		"success": {
+		"no dataquery": {
 			host:         h,
 			dht:          kademliaDHT,
 			discovery:    &drouting.RoutingDiscovery{},
 			searchEngine: &search.BleveSearch{},
 			pubSub:       &pubsub.PubSub{},
 			blockchain:   &blockchain.Blockchain{},
+			expErr:       "dataQuery is nil",
+		},
+		"success": {
+			host:              h,
+			dht:               kademliaDHT,
+			discovery:         &drouting.RoutingDiscovery{},
+			searchEngine:      &search.BleveSearch{},
+			pubSub:            &pubsub.PubSub{},
+			blockchain:        &blockchain.Blockchain{},
+			dataQueryProtocol: dataquery.New(),
 		},
 	}
 
@@ -147,7 +107,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain)
+			node, err := New(tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain, tt.dataQueryProtocol)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -155,6 +115,61 @@ func TestNew(t *testing.T) {
 				assert.NotNil(t, node)
 			}
 		})
+	}
+}
+
+func TestProtobufMessage(t *testing.T) {
+	// block
+	payload := messages.GossipPayload{
+		Message: &messages.GossipPayload_Blocks{Blocks: &messages.ProtoBlocks{Blocks: []*block.ProtoBlock{}}},
+	}
+	msg := payload.GetMessage()
+	switch msg.(type) {
+	case *messages.GossipPayload_Blocks:
+	case *messages.GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *messages.GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
+	}
+
+	// tx
+	payload = messages.GossipPayload{
+		Message: &messages.GossipPayload_Transaction{
+			Transaction: &transaction.ProtoTransaction{Hash: []byte{2}},
+		},
+	}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *messages.GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *messages.GossipPayload_Transaction:
+	case *messages.GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
+	}
+
+	// query
+	payload = messages.GossipPayload{
+		Message: &messages.GossipPayload_Query{Query: &messages.DataQueryRequestProto{}},
+	}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *messages.GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *messages.GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *messages.GossipPayload_Query:
+	}
+
+	// message is nil and not of any type
+	payload = messages.GossipPayload{}
+	msg = payload.GetMessage()
+	switch msg.(type) {
+	case *messages.GossipPayload_Blocks:
+		assert.Fail(t, "shouldnt be a block")
+	case *messages.GossipPayload_Transaction:
+		assert.Fail(t, "shouldnt be a transaction")
+	case *messages.GossipPayload_Query:
+		assert.Fail(t, "shouldnt be a query")
 	}
 }
 
@@ -309,7 +324,7 @@ func TestNodeMethods(t *testing.T) {
 	// node3 publishes a message to network
 	// PublishMessageToNetwork
 	err = n3.PublishMessageToNetwork(ctx, []byte("hello world"))
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	assert.NoError(t, err)
 
 	// send an invalid transaction to the network
@@ -318,14 +333,14 @@ func TestNodeMethods(t *testing.T) {
 		From: "0x2",
 	}
 
-	payload := GossipPayload{
-		Message: &GossipPayload_Transaction{transaction.ToProtoTransaction(tx)},
+	payload := messages.GossipPayload{
+		Message: &messages.GossipPayload_Transaction{Transaction: transaction.ToProtoTransaction(tx)},
 	}
 	blockData, err := proto.Marshal(&payload)
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// mempool should be empty
 	transactions := n2.blockchain.GetTransactionsFromPool()
@@ -333,8 +348,8 @@ func TestNodeMethods(t *testing.T) {
 
 	// create a valid transaction and propagate to network
 	validtx, _ := validTransaction(t)
-	payload = GossipPayload{
-		Message: &GossipPayload_Transaction{transaction.ToProtoTransaction(*validtx)},
+	payload = messages.GossipPayload{
+		Message: &messages.GossipPayload_Transaction{Transaction: transaction.ToProtoTransaction(*validtx)},
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
@@ -352,14 +367,14 @@ func TestNodeMethods(t *testing.T) {
 	blk := block.Block{
 		Hash: []byte{1},
 	}
-	payload = GossipPayload{
-		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(blk)}}},
+	payload = messages.GossipPayload{
+		Message: &messages.GossipPayload_Blocks{Blocks: &messages.ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(blk)}}},
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// blockpool should be empty
 	blockPoolData := n2.blockchain.GetBlocksFromPool()
@@ -370,15 +385,16 @@ func TestNodeMethods(t *testing.T) {
 	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
 		Address: kp.Address,
 	})
-	validBlock.Sign(kp.PrivateKey)
-	payload = GossipPayload{
-		Message: &GossipPayload_Blocks{Blocks: &ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(*validBlock)}}},
+	err = validBlock.Sign(kp.PrivateKey)
+	assert.NoError(t, err)
+	payload = messages.GossipPayload{
+		Message: &messages.GossipPayload_Blocks{Blocks: &messages.ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(*validBlock)}}},
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	blockPoolData = n2.blockchain.GetBlocksFromPool()
 	assert.NotEmpty(t, blockPoolData)
 }
@@ -437,7 +453,9 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	bchain, err := blockchain.New(blockchainDB)
 	assert.NoError(t, err)
 
-	node, err := New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain)
+	dataQueryProtocol := dataquery.New()
+
+	node, err := New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
 	assert.NoError(t, err)
 	return node
 }

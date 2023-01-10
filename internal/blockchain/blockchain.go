@@ -68,8 +68,8 @@ import (
 
 const addressPrefix = "address"
 
-// InterfaceBlockchain wraps the functionality of a blockchain.
-type InterfaceBlockchain interface {
+// Interface wraps the functionality of a blockchain.
+type Interface interface {
 	GetBlocksFromPool() []block.Block
 	PutBlockPool(block block.Block) error
 	DeleteFromBlockPool(block block.Block) error

@@ -261,7 +261,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if formName == "node_hash" {
 			nodeHashData, err := io.ReadAll(part)
 			if err != nil {
-				log.Warnf("failed to read: %v", err)
+				log.Warnf("failed to read from multipart: %v", err)
 			}
 			nodeHash = string(nodeHashData)
 			continue
