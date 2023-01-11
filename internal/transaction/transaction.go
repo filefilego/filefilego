@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/cbergoon/merkletree"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -34,8 +35,8 @@ type Transaction struct {
 	Chain           []byte
 }
 
-// GetTransactionHash gets a hash of a transaction.
-func (tx Transaction) GetTransactionHash() ([]byte, error) {
+// Serialize the transaction to bytes.
+func (tx Transaction) Serialize() ([]byte, error) {
 	mainChain, err := hexutil.Decode(chainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
@@ -78,14 +79,41 @@ func (tx Transaction) GetTransactionHash() ([]byte, error) {
 		},
 		[]byte{},
 	)
-	hash := sha256.Sum256(data)
-	bts := hash[:]
-	return bts, nil
+	return data, nil
+}
+
+// CalculateHash gets a hash of a transaction.
+func (tx Transaction) CalculateHash() ([]byte, error) {
+	data, err := tx.Serialize()
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	if _, err := h.Write(data); err != nil {
+		return nil, err
+	}
+
+	return h.Sum(nil), nil
+}
+
+// Equals tests for equality of two Contents.
+func (tx Transaction) Equals(other merkletree.Content) (bool, error) {
+	data, err := tx.Serialize()
+	if err != nil {
+		return false, err
+	}
+
+	dataOther, err := other.(Transaction).Serialize()
+	if err != nil {
+		return false, err
+	}
+
+	return bytes.Equal(data, dataOther), nil
 }
 
 // SignTransaction signs a transaction with a private key.
 func (tx *Transaction) Sign(key crypto.PrivKey) error {
-	hash, err := tx.GetTransactionHash()
+	hash, err := tx.CalculateHash()
 	if err != nil {
 		return fmt.Errorf("failed to get transactionHash: %w", err)
 	}
@@ -177,7 +205,7 @@ func (tx Transaction) Validate() (bool, error) {
 		return false, errors.New("transactionFees is negative")
 	}
 
-	hash, err := tx.GetTransactionHash()
+	hash, err := tx.CalculateHash()
 	if err != nil {
 		return false, errors.New("failed to get transaction hash")
 	}

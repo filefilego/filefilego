@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cbergoon/merkletree"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
@@ -49,27 +50,29 @@ func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
 	return coinbaseTx, nil
 }
 
-// GetTransactionsHash hashes all the transaction's hashes in the block.
-func (b Block) GetTransactionsHash() ([]byte, error) {
+// GetMerkleHash gets the merkle tree hash of all transactions.
+func (b Block) GetMerkleHash() ([]byte, error) {
 	if len(b.Transactions) == 0 {
 		return nil, errors.New("no transactions to hash")
 	}
 
-	txHashes := make([][]byte, len(b.Transactions))
-	for i, tx := range b.Transactions {
-		data, err := tx.GetTransactionHash()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get transaction hash in block: %w", err)
-		}
-		txHashes[i] = data
+	list := make([]merkletree.Content, 0, len(b.Transactions))
+
+	for _, tx := range b.Transactions {
+		list = append(list, tx)
 	}
-	txHash := sha256.Sum256(bytes.Join(txHashes, []byte{}))
-	return txHash[:], nil
+
+	tree, err := merkletree.NewTree(list)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create merkle tree: %w", err)
+	}
+
+	return tree.MerkleRoot(), nil
 }
 
 // GetBlockHash hashes the block
 func (b Block) GetBlockHash() ([]byte, error) {
-	blockTxsHash, err := b.GetTransactionsHash()
+	blockMerkleHash, err := b.GetMerkleHash()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block's transactions hash: %w", err)
 	}
@@ -88,7 +91,7 @@ func (b Block) GetBlockHash() ([]byte, error) {
 			timestampBytes,
 			b.Data,
 			b.PreviousBlockHash,
-			blockTxsHash,
+			blockMerkleHash,
 			blockNumberBytes,
 		},
 		[]byte{},

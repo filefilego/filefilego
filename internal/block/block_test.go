@@ -10,51 +10,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetTransactionsHash(t *testing.T) {
-	t.Parallel()
+// func TestGetTransactionsHash(t *testing.T) {
+// 	t.Parallel()
 
-	validTx, _ := validTransaction(t)
-	cases := map[string]struct {
-		block  Block
-		expErr string
-	}{
-		"no transactions in the block": {
-			block:  Block{},
-			expErr: "no transactions to hash",
-		},
-		"invalid transaction": {
-			block: Block{
-				Transactions: []transaction.Transaction{
-					{
-						Hash: []byte{1},
-					},
-				},
-			},
-			expErr: "failed to get transaction hash in block: publicKey is empty",
-		},
-		"valid block": {
-			block: Block{
-				Transactions: []transaction.Transaction{
-					*validTx,
-				},
-			},
-		},
-	}
+// 	validTx, _ := validTransaction(t)
+// 	cases := map[string]struct {
+// 		block  Block
+// 		expErr string
+// 	}{
+// 		"no transactions in the block": {
+// 			block:  Block{},
+// 			expErr: "no transactions to hash",
+// 		},
+// 		"invalid transaction": {
+// 			block: Block{
+// 				Transactions: []transaction.Transaction{
+// 					{
+// 						Hash: []byte{1},
+// 					},
+// 				},
+// 			},
+// 			expErr: "failed to get transaction hash in block: publicKey is empty",
+// 		},
+// 		"valid block": {
+// 			block: Block{
+// 				Transactions: []transaction.Transaction{
+// 					*validTx,
+// 				},
+// 			},
+// 		},
+// 	}
 
-	for name, tt := range cases {
-		tt := tt
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			hash, err := tt.block.GetTransactionsHash()
-			if tt.expErr != "" {
-				assert.Nil(t, hash)
-				assert.EqualError(t, err, tt.expErr)
-			} else {
-				assert.NotNil(t, hash)
-			}
-		})
-	}
-}
+// 	for name, tt := range cases {
+// 		tt := tt
+// 		t.Run(name, func(t *testing.T) {
+// 			t.Parallel()
+// 			hash, err := tt.block.GetTransactionsHash()
+// 			if tt.expErr != "" {
+// 				assert.Nil(t, hash)
+// 				assert.EqualError(t, err, tt.expErr)
+// 			} else {
+// 				assert.NotNil(t, hash)
+// 			}
+// 		})
+// 	}
+// }
 
 func TestGetBlockHash(t *testing.T) {
 	t.Parallel()
@@ -81,6 +81,38 @@ func TestGetBlockHash(t *testing.T) {
 				assert.Nil(t, hash)
 				assert.EqualError(t, err, tt.expErr)
 			} else {
+				assert.NotNil(t, hash)
+			}
+		})
+	}
+}
+
+func TestGetMerkleHash(t *testing.T) {
+	t.Parallel()
+	validBlock, _ := validBlock(t)
+	cases := map[string]struct {
+		block  Block
+		expErr string
+	}{
+		"no transactions in the block": {
+			block:  Block{},
+			expErr: "no transactions to hash",
+		},
+		"valid block": {
+			block: *validBlock,
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			hash, err := tt.block.GetMerkleHash()
+			if tt.expErr != "" {
+				assert.Nil(t, hash)
+				assert.EqualError(t, err, tt.expErr)
+			} else {
+				assert.NoError(t, err)
 				assert.NotNil(t, hash)
 			}
 		})

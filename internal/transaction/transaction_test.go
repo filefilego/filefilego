@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetTransactionHash(t *testing.T) {
+func TestCalculateHash(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
@@ -75,7 +75,7 @@ func TestGetTransactionHash(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			hash, err := tt.tx.GetTransactionHash()
+			hash, err := tt.tx.CalculateHash()
 			if tt.expErr != "" {
 				assert.Nil(t, hash)
 				assert.EqualError(t, err, tt.expErr)
