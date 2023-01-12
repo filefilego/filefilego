@@ -278,6 +278,28 @@ func TestMarshalUnmarshalProtoTransaction(t *testing.T) {
 	equalTransactions(ptx, derivedTx, t)
 }
 
+func TestEquals(t *testing.T) {
+	tx := *validTransaction(t)
+	assert.NotNil(t, tx)
+
+	tx2 := *validTransaction(t)
+	assert.NotNil(t, tx2)
+
+	// nolint:gocritic
+	ok, err := tx.Equals(tx)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	ok, _ = tx.Equals(tx2)
+	assert.False(t, ok)
+
+	// invalid tx
+	tx3 := Transaction{}
+	ok, err = tx3.Equals(tx2)
+	assert.EqualError(t, err, "publicKey is empty")
+	assert.False(t, ok)
+}
+
 func equalTransactions(ptx, derivedTx *ProtoTransaction, t *testing.T) {
 	assert.ElementsMatch(t, ptx.Data, derivedTx.Data)
 	assert.ElementsMatch(t, ptx.Hash, derivedTx.Hash)

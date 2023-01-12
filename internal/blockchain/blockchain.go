@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	sync "sync"
@@ -67,6 +68,8 @@ import (
 // type AddressDataResult int
 
 const addressPrefix = "address"
+
+const blockPrefix = "blocks"
 
 // Interface wraps the functionality of a blockchain.
 type Interface interface {
@@ -159,10 +162,46 @@ func (b *Blockchain) DeleteFromBlockPool(block block.Block) error {
 	return nil
 }
 
+// func (b *Blockchain) GetNounceFromMemPool(address string) ([]byte, error) {
+// 	b.tmu.RLock()
+// 	defer b.tmu.RUnlock()
+
+// 	tmp := uint64(0)
+
+// 	for _, v := range b.memPool {
+// 		if v.From == address {
+// 			nounce, _ := hexutil.DecodeUint64(v.Nounce)
+// 			if nounceInt > tmp {
+// 				tmp = nounceInt
+// 			}
+// 		}
+// 	}
+// }
+
 // PutMemPool adds a transaction to mempool.
 func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 	b.tmu.Lock()
 	defer b.tmu.Unlock()
+
+	for idx, transaction := range b.memPool {
+		// transaction is already in mempool with this nounce
+		// pick the one with higher fee
+		if bytes.Equal(transaction.Nounce, tx.Nounce) && transaction.From == tx.From {
+			txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+			if err != nil {
+				return fmt.Errorf("failed to decode transaction fees: %w", err)
+			}
+			txFeesInMempool, err := hexutil.DecodeBig(transaction.TransactionFees)
+			if err != nil {
+				return fmt.Errorf("failed to decode transaction fees from mempool: %w", err)
+			}
+
+			if txFees.Cmp(txFeesInMempool) == 1 {
+				b.memPool[idx] = tx
+				return nil
+			}
+		}
+	}
 
 	txHash := hexutil.Encode(tx.Hash)
 	b.memPool[txHash] = tx
@@ -202,7 +241,7 @@ func (b *Blockchain) SaveBlockInDB(blck block.Block) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal protoblock: %w", err)
 	}
-	err = b.db.Put(blck.Hash, data)
+	err = b.db.Put(append([]byte(blockPrefix), blck.Hash...), data)
 	if err != nil {
 		return fmt.Errorf("failed to save data into db: %w", err)
 	}
@@ -215,7 +254,7 @@ func (b *Blockchain) GetBlockByHash(blockHash []byte) (block.Block, error) {
 		return block.Block{}, errors.New("blockhash is empty")
 	}
 
-	blockData, err := b.db.Get(blockHash)
+	blockData, err := b.db.Get(append([]byte(blockPrefix), blockHash...))
 	if err != nil {
 		return block.Block{}, fmt.Errorf("failed to get block from database: %w", err)
 	}

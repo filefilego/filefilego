@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	ffgconfig "github.com/filefilego/filefilego/config"
 	block "github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
@@ -48,27 +49,36 @@ func TestNew(t *testing.T) {
 		searchEngine      search.IndexSearcher
 		blockchain        blockchain.Interface
 		dataQueryProtocol dataquery.Interface
+		config            *ffgconfig.Config
 		expErr            string
 	}{
+		"no config": {
+			expErr: "config is nil",
+		},
 		"no host": {
+			config: &ffgconfig.Config{},
 			expErr: "host is nil",
 		},
 		"no dht": {
+			config: &ffgconfig.Config{},
 			host:   h,
 			expErr: "dht is nil",
 		},
 		"no discovery": {
+			config: &ffgconfig.Config{},
 			host:   h,
 			dht:    kademliaDHT,
 			expErr: "discovery is nil",
 		},
 		"no search": {
+			config:    &ffgconfig.Config{},
 			host:      h,
 			dht:       kademliaDHT,
 			discovery: &drouting.RoutingDiscovery{},
 			expErr:    "search is nil",
 		},
 		"no pubSub": {
+			config:       &ffgconfig.Config{},
 			host:         h,
 			dht:          kademliaDHT,
 			discovery:    &drouting.RoutingDiscovery{},
@@ -76,6 +86,7 @@ func TestNew(t *testing.T) {
 			expErr:       "pubSub is nil",
 		},
 		"no blockchain": {
+			config:       &ffgconfig.Config{},
 			host:         h,
 			dht:          kademliaDHT,
 			discovery:    &drouting.RoutingDiscovery{},
@@ -84,6 +95,7 @@ func TestNew(t *testing.T) {
 			expErr:       "blockchain is nil",
 		},
 		"no dataquery": {
+			config:       &ffgconfig.Config{},
 			host:         h,
 			dht:          kademliaDHT,
 			discovery:    &drouting.RoutingDiscovery{},
@@ -93,6 +105,7 @@ func TestNew(t *testing.T) {
 			expErr:       "dataQuery is nil",
 		},
 		"success": {
+			config:            &ffgconfig.Config{},
 			host:              h,
 			dht:               kademliaDHT,
 			discovery:         &drouting.RoutingDiscovery{},
@@ -107,7 +120,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain, tt.dataQueryProtocol)
+			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain, tt.dataQueryProtocol)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -455,7 +468,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 
 	dataQueryProtocol := dataquery.New()
 
-	node, err := New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
+	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
 	assert.NoError(t, err)
 	return node
 }

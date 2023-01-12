@@ -70,6 +70,7 @@ func TestDatabase(t *testing.T) {
 	data, err = db.Get([]byte("wrongkey"))
 	assert.EqualError(t, err, "failed to get value: leveldb: not found")
 	assert.Nil(t, data)
+	assert.NoError(t, db.Close())
 }
 
 type dbEngineStub struct {

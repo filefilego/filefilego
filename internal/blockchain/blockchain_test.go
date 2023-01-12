@@ -85,6 +85,7 @@ func TestSaveAndGetBlockInDB(t *testing.T) {
 	// valid block
 	validBlock := block.Block{
 		Hash:              []byte{1, 2},
+		MerkleHash:        []byte{3, 4},
 		Number:            1,
 		PreviousBlockHash: []byte{2},
 		Signature:         []byte{1},
@@ -177,15 +178,28 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 		From:            "0x01",
 		To:              "0x02",
 		Value:           "0x03",
-		TransactionFees: "0x04",
+		TransactionFees: "0x1",
 		Chain:           []byte{1},
 	}
+	err = blockchain.PutMemPool(tx)
+	assert.NoError(t, err)
+
+	// re-add to mempool with errors
+	tx.TransactionFees = "f"
+	err = blockchain.PutMemPool(tx)
+	assert.EqualError(t, err, "failed to decode transaction fees: hex string without 0x prefix")
+
+	// re-add to mempool with higher fee
+	tx.TransactionFees = "0x2"
 	err = blockchain.PutMemPool(tx)
 	assert.NoError(t, err)
 
 	transactions = blockchain.GetTransactionsFromPool()
 	assert.Len(t, transactions, 1)
 	assert.Equal(t, transactions[0], tx)
+
+	// transaction fee should be the "0x2"
+	assert.Equal(t, "0x2", transactions[0].TransactionFees)
 
 	err = blockchain.DeleteFromMemPool(tx)
 	assert.NoError(t, err)
@@ -195,6 +209,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 
 	block := block.Block{
 		Hash:              []byte{1},
+		MerkleHash:        []byte{2},
 		Signature:         []byte{12},
 		Timestamp:         int64(123),
 		Data:              []byte{3},

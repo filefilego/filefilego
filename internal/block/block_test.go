@@ -63,9 +63,9 @@ func TestGetBlockHash(t *testing.T) {
 		block  Block
 		expErr string
 	}{
-		"no transactions in the block": {
+		"empty merkle": {
 			block:  Block{},
-			expErr: "failed to get block's transactions hash: no transactions to hash",
+			expErr: "merkle root hash is empty",
 		},
 		"valid block": {
 			block: *validBlock,
@@ -76,18 +76,24 @@ func TestGetBlockHash(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// get merkle hash for valid block because its needed
+			if tt.expErr == "" {
+				merkleHash, _ := tt.block.GetMerkleHash()
+				tt.block.MerkleHash = merkleHash
+			}
 			hash, err := tt.block.GetBlockHash()
 			if tt.expErr != "" {
 				assert.Nil(t, hash)
 				assert.EqualError(t, err, tt.expErr)
 			} else {
 				assert.NotNil(t, hash)
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
-func TestGetMerkleHash(t *testing.T) {
+func TestGetMerkleHashGetBlockHash(t *testing.T) {
 	t.Parallel()
 	validBlock, _ := validBlock(t)
 	cases := map[string]struct {
@@ -107,13 +113,13 @@ func TestGetMerkleHash(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			hash, err := tt.block.GetMerkleHash()
+			mhash, err := tt.block.GetMerkleHash()
 			if tt.expErr != "" {
-				assert.Nil(t, hash)
+				assert.Nil(t, mhash)
 				assert.EqualError(t, err, tt.expErr)
 			} else {
 				assert.NoError(t, err)
-				assert.NotNil(t, hash)
+				assert.NotNil(t, mhash)
 			}
 		})
 	}
@@ -138,7 +144,7 @@ func TestSignAndVerifyBlock(t *testing.T) {
 	block2, _ := validBlock(t)
 	block2.Transactions = nil
 	err = block2.Sign(keypair.PrivateKey)
-	assert.EqualError(t, err, "failed to get block's hash: failed to get block's transactions hash: no transactions to hash")
+	assert.EqualError(t, err, "failed to get block's merkle hash: no transactions to hash")
 }
 
 func TestGetCoinbaseTransaction(t *testing.T) {
@@ -185,6 +191,18 @@ func TestValidate(t *testing.T) {
 					return nil, kp
 				}
 				block.Hash = []byte{}
+				return block, kp
+			},
+		},
+		"empty merkle hash": {
+			expErr: "merkle hash is empty",
+			when: func() (*Block, crypto.KeyPair) {
+				block, kp := validBlock(t)
+				err := block.Sign(kp.PrivateKey)
+				if err != nil {
+					return nil, kp
+				}
+				block.MerkleHash = []byte{}
 				return block, kp
 			},
 		},
@@ -313,6 +331,7 @@ func TestMarshalUnmarshalProtoBlock(t *testing.T) {
 
 	assert.ElementsMatch(t, pblock.Data, derivedBlock.Data)
 	assert.ElementsMatch(t, pblock.Hash, derivedBlock.Hash)
+	assert.ElementsMatch(t, pblock.MerkleHash, derivedBlock.MerkleHash)
 	assert.ElementsMatch(t, pblock.PreviousBlockHash, derivedBlock.PreviousBlockHash)
 	assert.ElementsMatch(t, pblock.Signature, derivedBlock.Signature)
 

@@ -79,6 +79,7 @@ func TestSearch(t *testing.T) {
 			} else {
 				assert.Equal(t, tt.results, results)
 			}
+			engine.Close()
 		})
 	}
 }

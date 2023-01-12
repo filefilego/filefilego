@@ -53,7 +53,7 @@ func main() {
 }
 
 func run(ctx *cli.Context) error {
-	// conf := config.New(ctx)
+	conf := config.New(ctx)
 	// log.Fatal(conf.Global.LogPathLine)
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
@@ -94,6 +94,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
+
 	blv, err := search.NewBleeveSearch("database.bin")
 	if err != nil {
 		return err
@@ -145,7 +146,7 @@ func run(ctx *cli.Context) error {
 
 	dataQueryProtocol := dataquery.New()
 
-	node, err := node.New(host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
+	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,8 @@ package math
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type operation byte
@@ -82,6 +84,17 @@ func TestHexOrDecimal64(t *testing.T) {
 			t.Errorf("ParseUint64(%q) -> %d, want %d", test.input, num, test.num)
 		}
 	}
+}
+
+func TestHexOrDecimal64MarshalText(t *testing.T) {
+	var num HexOrDecimal64
+	var num2 HexOrDecimal64
+	num = 0x12345678abc
+	marshalBytes, err := num.MarshalText()
+	assert.NoError(t, err)
+	err = num2.UnmarshalText(marshalBytes)
+	assert.NoError(t, err)
+	assert.Equal(t, num, num2)
 }
 
 func TestMustParseUint64(t *testing.T) {

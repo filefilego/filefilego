@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	ffgconfig "github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
@@ -51,11 +52,16 @@ type Node struct {
 	blockchain        blockchain.Interface
 	dataQueryProtocol dataquery.Interface
 
+	config      *ffgconfig.Config
 	gossipTopic *pubsub.Topic
 }
 
 // New creates a new node.
-func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface) (*Node, error) {
+	if cfg == nil {
+		return nil, errors.New("config is nil")
+	}
+
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -92,6 +98,7 @@ func New(host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.D
 		searchEngine:      search,
 		blockchain:        blockchain,
 		dataQueryProtocol: dataQuery,
+		config:            cfg,
 	}, nil
 }
 
@@ -229,6 +236,9 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 
 	case *messages.GossipPayload_Query:
 		// handle incoming data query
+		if !n.config.Global.Storage {
+			return nil
+		}
 		dataQueryRequest := payload.GetQuery()
 		fromPeer, err := peer.Decode(dataQueryRequest.FromPeerAddr)
 		if err != nil {

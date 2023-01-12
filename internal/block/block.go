@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/cbergoon/merkletree"
-	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -18,8 +18,9 @@ const maxBlockDataSizeBytes = 300000
 
 // Block represents a block.
 type Block struct {
-	Hash      []byte
-	Signature []byte
+	Hash       []byte
+	MerkleHash []byte
+	Signature  []byte
 
 	Timestamp         int64
 	Data              []byte
@@ -72,26 +73,21 @@ func (b Block) GetMerkleHash() ([]byte, error) {
 
 // GetBlockHash hashes the block
 func (b Block) GetBlockHash() ([]byte, error) {
-	blockMerkleHash, err := b.GetMerkleHash()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block's transactions hash: %w", err)
-	}
-	timestampBytes, err := hexutil.IntToHex(b.Timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert int to byte array: %w", err)
+	if len(b.MerkleHash) == 0 {
+		return nil, errors.New("merkle root hash is empty")
 	}
 
-	blockNumberBytes, err := hexutil.Uint64ToHex(b.Number)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert int to byte array: %w", err)
-	}
+	timestampBytes := big.NewInt(b.Timestamp).Bytes()
+
+	bNum := big.NewInt(0)
+	blockNumberBytes := bNum.SetUint64(b.Number).Bytes()
 
 	data := bytes.Join(
 		[][]byte{
 			timestampBytes,
 			b.Data,
 			b.PreviousBlockHash,
-			blockMerkleHash,
+			b.MerkleHash,
 			blockNumberBytes,
 		},
 		[]byte{},
@@ -103,6 +99,13 @@ func (b Block) GetBlockHash() ([]byte, error) {
 
 // Sign signs a block with a private key.
 func (b *Block) Sign(key crypto.PrivKey) error {
+	blockMerkleHash, err := b.GetMerkleHash()
+	if err != nil {
+		return fmt.Errorf("failed to get block's merkle hash: %w", err)
+	}
+	b.MerkleHash = make([]byte, len(blockMerkleHash))
+	copy(b.MerkleHash, blockMerkleHash)
+
 	hash, err := b.GetBlockHash()
 	if err != nil {
 		return fmt.Errorf("failed to get block's hash: %w", err)
@@ -138,6 +141,10 @@ func (b Block) VerifyWithPublicKey(key crypto.PubKey) error {
 func (b Block) Validate() (bool, error) {
 	if len(b.Hash) == 0 || b.Hash == nil {
 		return false, errors.New("hash is empty")
+	}
+
+	if len(b.MerkleHash) == 0 || b.MerkleHash == nil {
+		return false, errors.New("merkle hash is empty")
 	}
 
 	if len(b.PreviousBlockHash) == 0 || b.PreviousBlockHash == nil {
@@ -214,6 +221,7 @@ func UnmarshalProtoBlock(data []byte) (*ProtoBlock, error) {
 func ToProtoBlock(block Block) *ProtoBlock {
 	pblock := &ProtoBlock{
 		Hash:              make([]byte, len(block.Hash)),
+		MerkleHash:        make([]byte, len(block.MerkleHash)),
 		Signature:         make([]byte, len(block.Signature)),
 		Timestamp:         block.Timestamp,
 		Data:              make([]byte, len(block.Data)),
@@ -223,6 +231,7 @@ func ToProtoBlock(block Block) *ProtoBlock {
 	}
 
 	copy(pblock.Hash, block.Hash)
+	copy(pblock.MerkleHash, block.MerkleHash)
 	copy(pblock.Signature, block.Signature)
 	copy(pblock.Data, block.Data)
 	copy(pblock.PreviousBlockHash, block.PreviousBlockHash)
@@ -237,6 +246,7 @@ func ToProtoBlock(block Block) *ProtoBlock {
 func ProtoBlockToBlock(pblock *ProtoBlock) Block {
 	block := Block{
 		Hash:              make([]byte, len(pblock.Hash)),
+		MerkleHash:        make([]byte, len(pblock.MerkleHash)),
 		Signature:         make([]byte, len(pblock.Signature)),
 		Timestamp:         pblock.Timestamp,
 		Data:              make([]byte, len(pblock.Data)),
@@ -246,6 +256,7 @@ func ProtoBlockToBlock(pblock *ProtoBlock) Block {
 	}
 
 	copy(block.Hash, pblock.Hash)
+	copy(block.MerkleHash, pblock.MerkleHash)
 	copy(block.Signature, pblock.Signature)
 	copy(block.Data, pblock.Data)
 	copy(block.PreviousBlockHash, pblock.PreviousBlockHash)

@@ -1,12 +1,11 @@
 package hexutil
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 )
 
 const badNibble = ^uint64(0)
@@ -77,6 +76,43 @@ func Has0xPrefix(input string) bool {
 	return len(input) >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')
 }
 
+// DecodeUint64 decodes a hex string with 0x prefix as a quantity.
+func DecodeUint64(input string) (uint64, error) {
+	raw, err := checkNumber(input)
+	if err != nil {
+		return 0, err
+	}
+	dec, err := strconv.ParseUint(raw, 16, 64)
+	if err != nil {
+		return 0, err
+	}
+	return dec, nil
+}
+
+// EncodeUint64 encodes i as a hex string with 0x prefix.
+func EncodeUint64(i uint64) string {
+	enc := make([]byte, 2, 10)
+	copy(enc, "0x")
+	return string(strconv.AppendUint(enc, i, 16))
+}
+
+// EncodeInt64 encodes i as a hex string with 0x prefix.
+func EncodeInt64(i int64) string {
+	enc := make([]byte, 2, 10)
+	copy(enc, "0x")
+	return string(strconv.AppendInt(enc, i, 16))
+}
+
+// EncodeBig encodes bigint as a hex string with 0x prefix.
+// The sign of the integer is ignored.
+func EncodeBig(bigint *big.Int) string {
+	nbits := bigint.BitLen()
+	if nbits == 0 {
+		return "0x0"
+	}
+	return fmt.Sprintf("%#x", bigint)
+}
+
 // DecodeBig decodes a hex string with 0x prefix as a quantity.
 // Numbers larger than 256 bits are not accepted.
 func DecodeBig(input string) (*big.Int, error) {
@@ -106,34 +142,6 @@ func DecodeBig(input string) (*big.Int, error) {
 	}
 	dec := new(big.Int).SetBits(words)
 	return dec, nil
-}
-
-// Hex2Bytes returns the bytes represented by the hexadecimal string str.
-func Hex2Bytes(str string) []byte {
-	h, _ := hex.DecodeString(str)
-	return h
-}
-
-// IntToHex converts an uint64 to a byte array
-func Uint64ToHex(num uint64) ([]byte, error) {
-	buff := new(bytes.Buffer)
-	err := binary.Write(buff, binary.BigEndian, num)
-	if err != nil {
-		return buff.Bytes(), fmt.Errorf("failed to write to buffer: %w", err)
-	}
-
-	return buff.Bytes(), nil
-}
-
-// IntToHex converts an int64 to a byte array
-func IntToHex(num int64) ([]byte, error) {
-	buff := new(bytes.Buffer)
-	err := binary.Write(buff, binary.BigEndian, num)
-	if err != nil {
-		return buff.Bytes(), fmt.Errorf("failed to write to buffer: %w", err)
-	}
-
-	return buff.Bytes(), nil
 }
 
 func checkNumber(input string) (raw string, err error) {
