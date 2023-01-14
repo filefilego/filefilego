@@ -245,7 +245,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 
 	accountAddr := []byte{12}
 	amount := big.NewInt(10)
-	err = blockchain.AddBalanceTo(accountAddr, amount)
+	err = blockchain.addBalanceTo(accountAddr, amount)
 	assert.NoError(t, err)
 	newState, err := blockchain.GetAddressState(accountAddr)
 	assert.NoError(t, err)
@@ -256,11 +256,11 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 	assert.Equal(t, "10", newStateBalance.String())
 
 	// subtract a bigger amount than what is in db
-	err = blockchain.SubBalanceFrom(accountAddr, amount.Add(amount, amount), 10)
+	err = blockchain.subBalanceFrom(accountAddr, amount.Add(amount, amount), 10)
 	assert.EqualError(t, err, "failed to subtract: amount is greater than balance")
 
 	// subtract the right amount
-	err = blockchain.SubBalanceFrom(accountAddr, big.NewInt(10), 11)
+	err = blockchain.subBalanceFrom(accountAddr, big.NewInt(10), 11)
 	assert.NoError(t, err)
 
 	// balance should be zero
@@ -275,7 +275,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 
 	// add a negative big int
 	negativeBig := big.NewInt(-10)
-	err = blockchain.AddBalanceTo(accountAddr, negativeBig)
+	err = blockchain.addBalanceTo(accountAddr, negativeBig)
 	assert.EqualError(t, err, "amount is negative")
 	newState, err = blockchain.GetAddressState(accountAddr)
 	assert.NoError(t, err)
@@ -284,7 +284,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 	assert.Equal(t, "0", newBalance.String())
 
 	// subtract negative
-	err = blockchain.SubBalanceFrom(accountAddr, negativeBig, 12)
+	err = blockchain.subBalanceFrom(accountAddr, negativeBig, 12)
 	assert.EqualError(t, err, "amount is negative")
 
 	err = blockchain.CloseDB()

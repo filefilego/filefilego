@@ -144,6 +144,11 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
+	err = bchain.InitOrLoad()
+	if err != nil {
+		return err
+	}
+
 	dataQueryProtocol := dataquery.New()
 
 	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
@@ -179,6 +184,7 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
 	r.Handle("/uploads", storageEngine)

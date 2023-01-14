@@ -72,6 +72,8 @@ const addressPrefix = "address"
 
 const blockPrefix = "blocks"
 
+const lastBlockPrefix = "last_block"
+
 // Interface wraps the functionality of a blockchain.
 type Interface interface {
 	GetBlocksFromPool() []block.Block
@@ -100,6 +102,8 @@ type Blockchain struct {
 
 	height uint64
 	hmu    sync.RWMutex
+
+	lastBlockHash []byte
 }
 
 // New creates a new blockchain instance.
@@ -108,10 +112,25 @@ func New(db database.Database) (*Blockchain, error) {
 		return nil, errors.New("db is nil")
 	}
 	return &Blockchain{
-		db:        db,
-		blockPool: make(map[string]block.Block),
-		memPool:   make(map[string]transaction.Transaction),
+		db:            db,
+		blockPool:     make(map[string]block.Block),
+		memPool:       make(map[string]transaction.Transaction),
+		lastBlockHash: make([]byte, 0),
 	}, nil
+}
+
+// InitOrLoad increments the blockchain height by the given number.
+func (b *Blockchain) InitOrLoad() error {
+	lastBlockHash, err := b.db.Get([]byte(lastBlockPrefix))
+	if err != nil && len(lastBlockHash) == 0 {
+		// init blockchain
+		return nil
+	}
+
+	// load blockchain
+	// logic
+
+	return nil
 }
 
 // IncrementHeightBy increments the blockchain height by the given number.
@@ -163,8 +182,8 @@ func (b *Blockchain) DeleteFromBlockPool(block block.Block) error {
 	return nil
 }
 
-// AddBalanceTo adds balance to address.
-func (b *Blockchain) AddBalanceTo(address []byte, amount *big.Int) error {
+// addBalanceTo adds balance to address.
+func (b *Blockchain) addBalanceTo(address []byte, amount *big.Int) error {
 	zeroBig := big.NewInt(0)
 	if amount.Cmp(zeroBig) == -1 {
 		return errors.New("amount is negative")
@@ -200,8 +219,8 @@ func (b *Blockchain) AddBalanceTo(address []byte, amount *big.Int) error {
 	return nil
 }
 
-// SubBalanceFrom subtracts balance from address.
-func (b *Blockchain) SubBalanceFrom(address []byte, amount *big.Int, nounce uint64) error {
+// subBalanceFrom subtracts balance from address.
+func (b *Blockchain) subBalanceFrom(address []byte, amount *big.Int, nounce uint64) error {
 	zeroBig := big.NewInt(0)
 	if amount.Cmp(zeroBig) == -1 {
 		return errors.New("amount is negative")
@@ -264,7 +283,7 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 			return fmt.Errorf("failed to decode from address: %w", err)
 		}
 
-		err = b.SubBalanceFrom(addrBytes, totalFees, hexutil.DecodeBigFromBytesToUint64(transaction.Nounce))
+		err = b.subBalanceFrom(addrBytes, totalFees, hexutil.DecodeBigFromBytesToUint64(transaction.Nounce))
 		if err != nil {
 			return fmt.Errorf("failed to subtract total value from address: %w", err)
 		}
@@ -280,12 +299,12 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 		return fmt.Errorf("failed to decode transaction value: %w", err)
 	}
 
-	err = b.AddBalanceTo(toAddrBytes, txValue)
+	err = b.addBalanceTo(toAddrBytes, txValue)
 	if err != nil {
 		return fmt.Errorf("failed to add amount to balance: %w", err)
 	}
 
-	err = b.AddBalanceTo(verifierAddr, txFees)
+	err = b.addBalanceTo(verifierAddr, txFees)
 	if err != nil {
 		return fmt.Errorf("failed to add amount to verifier's balance: %w", err)
 	}
