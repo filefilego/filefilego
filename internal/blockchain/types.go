@@ -1,8 +1,11 @@
 package blockchain
 
 import (
+	"errors"
 	"fmt"
+	"math/big"
 
+	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -10,6 +13,39 @@ import (
 type AddressState struct {
 	Balance []byte
 	Nounce  []byte
+}
+
+// GetBalance returns the balance as big int.
+func (a *AddressState) GetBalance() (*big.Int, error) {
+	if len(a.Balance) == 0 {
+		return nil, errors.New("balance is empty")
+	}
+	return big.NewInt(0).SetBytes(a.Balance), nil
+}
+
+// SetBalance sets the balance to byte array.
+func (a *AddressState) SetBalance(amount *big.Int) error {
+	zeroBig := big.NewInt(0)
+	if zeroBig.Cmp(amount) == 0 {
+		a.Balance = []byte{0}
+	} else {
+		a.Balance = amount.Bytes()
+	}
+	return nil
+}
+
+// GetNounce returns the nounce as uint64.
+func (a *AddressState) GetNounce() (uint64, error) {
+	if len(a.Nounce) == 0 {
+		return 0, errors.New("nounce is empty")
+	}
+	return hexutil.DecodeBigFromBytesToUint64(a.Nounce), nil
+}
+
+// SetNounce sets the balance to byte array.
+func (a *AddressState) SetNounce(number uint64) error {
+	a.Nounce = big.NewInt(0).SetUint64(number).Bytes()
+	return nil
 }
 
 // ToAddressStateProto returns the proto representation of a state.

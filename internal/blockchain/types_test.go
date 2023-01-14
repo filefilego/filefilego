@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,7 +9,7 @@ import (
 
 func TestAddressStateFunctions(t *testing.T) {
 	addrState := AddressState{
-		Balance: []byte{22},
+		Balance: []byte{3},
 		Nounce:  []byte{4},
 	}
 
@@ -19,6 +20,41 @@ func TestAddressStateFunctions(t *testing.T) {
 	// back to addressState
 	derived := AddressStateProtoToAddressState(protoAddr)
 	assert.Equal(t, addrState, derived)
+
+	// get balance
+	balance, err := addrState.GetBalance()
+	assert.NoError(t, err)
+	assert.EqualValues(t, addrState.Balance, balance.Bytes())
+
+	// reset balance
+	addrState.Balance = []byte{}
+	balance, err = addrState.GetBalance()
+	assert.EqualError(t, err, "balance is empty")
+	assert.Nil(t, balance)
+
+	// get nounce
+	nounce, err := addrState.GetNounce()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(4), nounce)
+
+	// reset nounce
+	addrState.Nounce = []byte{}
+	nounce, err = addrState.GetNounce()
+	assert.EqualError(t, err, "nounce is empty")
+	assert.Equal(t, uint64(0), nounce)
+
+	tmpState := AddressState{}
+	err = tmpState.SetBalance(big.NewInt(12))
+	assert.NoError(t, err)
+	err = tmpState.SetNounce(11)
+	assert.NoError(t, err)
+	assert.Equal(t, AddressState{Balance: []byte{12}, Nounce: []byte{11}}, tmpState)
+
+	// set balance with zero
+	tmpState = AddressState{}
+	err = tmpState.SetBalance(big.NewInt(0))
+	assert.NoError(t, err)
+	assert.NotEmpty(t, tmpState.Balance)
 }
 
 func TestMarshalUnmarshalAddressStateProto(t *testing.T) {

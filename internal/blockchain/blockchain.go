@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
 	sync "sync"
 
 	"github.com/filefilego/filefilego/internal/block"
@@ -162,26 +163,170 @@ func (b *Blockchain) DeleteFromBlockPool(block block.Block) error {
 	return nil
 }
 
-// func (b *Blockchain) GetNounceFromMemPool(address string) ([]byte, error) {
-// 	b.tmu.RLock()
-// 	defer b.tmu.RUnlock()
+// AddBalanceTo adds balance to address.
+func (b *Blockchain) AddBalanceTo(address []byte, amount *big.Int) error {
+	zeroBig := big.NewInt(0)
+	if amount.Cmp(zeroBig) == -1 {
+		return errors.New("amount is negative")
+	}
+	state, err := b.GetAddressState(address)
+	// address has no balance
+	if err != nil {
+		err := state.SetBalance(big.NewInt(0))
+		if err != nil {
+			return fmt.Errorf("failed to set balance: %w", err)
+		}
+		err = state.SetNounce(0)
+		if err != nil {
+			return fmt.Errorf("failed to set nounce: %w", err)
+		}
+	}
 
-// 	tmp := uint64(0)
+	balance, err := state.GetBalance()
+	if err != nil {
+		return fmt.Errorf("failed to get balance: %w", err)
+	}
 
-// 	for _, v := range b.memPool {
-// 		if v.From == address {
-// 			nounce, _ := hexutil.DecodeUint64(v.Nounce)
-// 			if nounceInt > tmp {
-// 				tmp = nounceInt
-// 			}
-// 		}
-// 	}
-// }
+	err = state.SetBalance(balance.Add(balance, amount))
+	if err != nil {
+		return fmt.Errorf("failed to set balance: %w", err)
+	}
+
+	err = b.UpdateAddressState(address, state)
+	if err != nil {
+		return fmt.Errorf("failed to update balance state: %w", err)
+	}
+
+	return nil
+}
+
+// SubBalanceFrom subtracts balance from address.
+func (b *Blockchain) SubBalanceFrom(address []byte, amount *big.Int, nounce uint64) error {
+	zeroBig := big.NewInt(0)
+	if amount.Cmp(zeroBig) == -1 {
+		return errors.New("amount is negative")
+	}
+	state, err := b.GetAddressState(address)
+	// address has no balance
+	if err != nil {
+		return fmt.Errorf("address has no balance: %w", err)
+	}
+
+	balance, err := state.GetBalance()
+	if err != nil {
+		return fmt.Errorf("failed to get balance: %w", err)
+	}
+
+	if balance.Cmp(amount) < 0 {
+		return errors.New("failed to subtract: amount is greater than balance")
+	}
+
+	err = state.SetBalance(balance.Sub(balance, amount))
+	if err != nil {
+		return fmt.Errorf("failed to set balance: %w", err)
+	}
+
+	err = state.SetNounce(nounce)
+	if err != nil {
+		return fmt.Errorf("failed to set nounce: %w", err)
+	}
+
+	err = b.UpdateAddressState(address, state)
+	if err != nil {
+		return fmt.Errorf("failed to update balance state: %w", err)
+	}
+
+	return nil
+}
+
+// PerformAddressStateUpdate performs state update.
+// This function should be able to rollback to previous state in case of failure.
+// APPLYING OPERATIONS ON BIG INTS MODIFIES THE UNDERLYING DATA.
+func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transaction, verifierAddr []byte, isCoinbase bool) error {
+	ok, err := transaction.Validate()
+	if err != nil || !ok {
+		return fmt.Errorf("failed to validate transaction: %w", err)
+	}
+	txFees, err := hexutil.DecodeBig(transaction.TransactionFees)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction fees: %w", err)
+	}
+
+	// if not coinbase tx, then subtract the amount from the account
+	if !isCoinbase {
+		txValue, err := hexutil.DecodeBig(transaction.Value)
+		if err != nil {
+			return fmt.Errorf("failed to decode transaction value: %w", err)
+		}
+		totalFees := txValue.Add(txValue, txFees)
+		addrBytes, err := hexutil.Decode(transaction.From)
+		if err != nil {
+			return fmt.Errorf("failed to decode from address: %w", err)
+		}
+
+		err = b.SubBalanceFrom(addrBytes, totalFees, hexutil.DecodeBigFromBytesToUint64(transaction.Nounce))
+		if err != nil {
+			return fmt.Errorf("failed to subtract total value from address: %w", err)
+		}
+	}
+
+	toAddrBytes, err := hexutil.Decode(transaction.To)
+	if err != nil {
+		return fmt.Errorf("failed to decode to address: %w", err)
+	}
+
+	txValue, err := hexutil.DecodeBig(transaction.Value)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction value: %w", err)
+	}
+
+	err = b.AddBalanceTo(toAddrBytes, txValue)
+	if err != nil {
+		return fmt.Errorf("failed to add amount to balance: %w", err)
+	}
+
+	err = b.AddBalanceTo(verifierAddr, txFees)
+	if err != nil {
+		return fmt.Errorf("failed to add amount to verifier's balance: %w", err)
+	}
+
+	err = b.performStateUpdateFromDataPayload(transaction.Data)
+	if err != nil {
+		return fmt.Errorf("failed perform state update from transaction data: %w", err)
+	}
+
+	return nil
+}
+
+// performStateUpdateFromDataPayload performs updates from the transaction data.
+func (b *Blockchain) performStateUpdateFromDataPayload(dataPayload []byte) error {
+	return nil
+}
+
+// GetNounceFromMemPool get the nounce from mempool for an address.
+func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
+	b.tmu.RLock()
+	defer b.tmu.RUnlock()
+
+	tmp := uint64(0)
+	for _, v := range b.memPool {
+		if v.From == hexutil.Encode(address) {
+			nounce := hexutil.DecodeBigFromBytesToUint64(v.Nounce)
+			if nounce > tmp {
+				tmp = nounce
+			}
+		}
+	}
+
+	return tmp
+}
 
 // PutMemPool adds a transaction to mempool.
 func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 	b.tmu.Lock()
 	defer b.tmu.Unlock()
+
+	// TODO: handle the case when there is a tx with lower nounce than the one in db
 
 	for idx, transaction := range b.memPool {
 		// transaction is already in mempool with this nounce

@@ -92,6 +92,11 @@ func TestDecodeEncodeBig(t *testing.T) {
 	assert.Equal(t, "0x0", str)
 }
 
+func TestDecodeBigFromBytesToUint64(t *testing.T) {
+	num := DecodeBigFromBytesToUint64([]byte{1})
+	assert.Equal(t, uint64(1), num)
+}
+
 func TestBigNumberConversion(t *testing.T) {
 	timestampBig := big.NewInt(1)
 	assert.Equal(t, []byte{0x1}, timestampBig.Bytes())
@@ -100,5 +105,16 @@ func TestBigNumberConversion(t *testing.T) {
 	blockNumberBytes := bNum.Bytes()
 	assert.Equal(t, []byte{0x1}, blockNumberBytes)
 
-	// bNum.
+	// from bytes construct the
+	bNum2 := bNum.SetBytes(timestampBig.Bytes())
+	assert.Equal(t, int64(1), bNum2.Int64())
+
+	// one byte
+	assert.Len(t, bNum2.Bytes(), 1)
+	assert.Len(t, bNum2.Text(16), 1)
+
+	// one byte, 2 string bytes in hex
+	bNum3 := bNum2.SetInt64(16)
+	assert.Len(t, bNum3.Bytes(), 1)
+	assert.Len(t, bNum3.Text(16), 2)
 }

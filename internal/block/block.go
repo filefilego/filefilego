@@ -31,7 +31,7 @@ type Block struct {
 
 // GetCoinbaseTransaction gets the coinbase transaction.
 // A coinbase transaction is the first transaction and the public key
-// of the transaction should match the block signer
+// of the transaction should match the block signer.
 func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
 	if len(b.Transactions) == 0 {
 		return transaction.Transaction{}, errors.New("no transactions in block")
@@ -47,6 +47,9 @@ func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
 	if err != nil {
 		return transaction.Transaction{}, fmt.Errorf("coinbase transaction signer doesn't match the block signer: %w", err)
 	}
+
+	// TODO: calculate the reward allowed to put
+	// TODO: don't allow reward in the transactions fees
 
 	return coinbaseTx, nil
 }
@@ -71,7 +74,7 @@ func (b Block) GetMerkleHash() ([]byte, error) {
 	return tree.MerkleRoot(), nil
 }
 
-// GetBlockHash hashes the block
+// GetBlockHash hashes the block.
 func (b Block) GetBlockHash() ([]byte, error) {
 	if len(b.MerkleHash) == 0 {
 		return nil, errors.New("merkle root hash is empty")

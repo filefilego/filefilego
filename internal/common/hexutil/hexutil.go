@@ -113,6 +113,12 @@ func EncodeBig(bigint *big.Int) string {
 	return fmt.Sprintf("%#x", bigint)
 }
 
+// DecodeBigFromBytesToUint64 decodes a byte array to uint64.
+func DecodeBigFromBytesToUint64(data []byte) uint64 {
+	zeroBig := big.NewInt(0)
+	return zeroBig.SetBytes(data).Uint64()
+}
+
 // DecodeBig decodes a hex string with 0x prefix as a quantity.
 // Numbers larger than 256 bits are not accepted.
 func DecodeBig(input string) (*big.Int, error) {
