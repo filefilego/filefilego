@@ -9,8 +9,10 @@ import (
 
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
+	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/transaction"
+	log "github.com/sirupsen/logrus"
 )
 
 // Blockchain represents a blockchain.
@@ -103,34 +105,100 @@ type Blockchain struct {
 	height uint64
 	hmu    sync.RWMutex
 
-	lastBlockHash []byte
+	genesisBlockHash []byte
 }
 
 // New creates a new blockchain instance.
-func New(db database.Database) (*Blockchain, error) {
+func New(db database.Database, genesisBlockHash []byte) (*Blockchain, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	return &Blockchain{
-		db:            db,
-		blockPool:     make(map[string]block.Block),
-		memPool:       make(map[string]transaction.Transaction),
-		lastBlockHash: make([]byte, 0),
-	}, nil
+
+	if len(genesisBlockHash) == 0 {
+		return nil, errors.New("genesis block hash is empty")
+	}
+
+	b := &Blockchain{
+		db:               db,
+		blockPool:        make(map[string]block.Block),
+		memPool:          make(map[string]transaction.Transaction),
+		genesisBlockHash: make([]byte, len(genesisBlockHash)),
+	}
+
+	copy(b.genesisBlockHash, genesisBlockHash)
+
+	return b, nil
 }
 
 // InitOrLoad increments the blockchain height by the given number.
 func (b *Blockchain) InitOrLoad() error {
-	lastBlockHash, err := b.db.Get([]byte(lastBlockPrefix))
-	if err != nil && len(lastBlockHash) == 0 {
+	// reset height
+	b.SetHeight(0)
+
+	lastBlockHash := b.GetLastBlockHash()
+	if len(lastBlockHash) == 0 {
 		// init blockchain
+		genesisBlock, err := block.GetGenesisBlock("../block/genesis.protoblock")
+		if err != nil {
+			return fmt.Errorf("failed to get genesis block: %w", err)
+		}
+
+		log.Info("genesis block hash: ", hexutil.Encode(genesisBlock.Hash))
+		err = b.PerformStateUpdateFromBlock(*genesisBlock)
+		if err != nil {
+			return fmt.Errorf("failed to perform block state update: %w", err)
+		}
 		return nil
 	}
 
-	// load blockchain
-	// logic
+	// load blockchain and verify
+	for {
+		foundBlock, err := b.GetBlockByHash(lastBlockHash)
+		if err != nil {
+			return fmt.Errorf("failed to get block: %v with error: %w", hexutil.Encode(lastBlockHash), err)
+		}
+		ok, err := foundBlock.Validate()
+		if err != nil || !ok {
+			return fmt.Errorf("failed to verify block: %s", hexutil.Encode(lastBlockHash))
+		}
+
+		lastBlockHash = make([]byte, len(foundBlock.PreviousBlockHash))
+		copy(lastBlockHash, foundBlock.PreviousBlockHash)
+
+		// if we reach the genesis block
+		if bytes.Equal(lastBlockHash, []byte{0}) {
+			break
+		}
+		b.IncrementHeightBy(1)
+	}
 
 	return nil
+}
+
+// SetHeight sets the height of the blockchain.
+func (b *Blockchain) SetHeight(h uint64) {
+	b.hmu.Lock()
+	defer b.hmu.Unlock()
+
+	b.height = h
+}
+
+// SetLastBlockHash sets the last block hash.
+func (b *Blockchain) SetLastBlockHash(data []byte) error {
+	err := b.db.Put([]byte(lastBlockPrefix), data)
+	if err != nil {
+		return fmt.Errorf("failed to update last block hash in db: %w", err)
+	}
+	return nil
+}
+
+// GetLastBlockHash gets the last block hash.
+func (b *Blockchain) GetLastBlockHash() []byte {
+	data, err := b.db.Get([]byte(lastBlockPrefix))
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	return data
 }
 
 // IncrementHeightBy increments the blockchain height by the given number.
@@ -319,6 +387,76 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 
 // performStateUpdateFromDataPayload performs updates from the transaction data.
 func (b *Blockchain) performStateUpdateFromDataPayload(dataPayload []byte) error {
+	return nil
+}
+
+// PerformStateUpdateFromBlock performs updates from a block.
+func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
+	_, err := b.GetBlockByHash(validBlock.Hash)
+	if err == nil {
+		return errors.New("block is already within the blockchain")
+	}
+
+	// if the block is not genesis block then validate the previous block
+	isGenesisBlock := bytes.Equal(b.genesisBlockHash, validBlock.Hash)
+
+	if !isGenesisBlock {
+		_, err := b.GetBlockByHash(validBlock.PreviousBlockHash)
+		if err != nil {
+			return fmt.Errorf("previous block not found in database: %w", err)
+		}
+	}
+
+	coinbaseTx, err := validBlock.GetAndValidateCoinbaseTransaction()
+	if err != nil {
+		return fmt.Errorf("failed to get/validate coinbase transaction: %w", err)
+	}
+
+	verifierAddr, err := crypto.RawPublicToAddressBytes(coinbaseTx.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get address of verifier: %w", err)
+	}
+
+	for _, tx := range validBlock.Transactions {
+		isCoinbase, err := coinbaseTx.Equals(tx)
+		if err != nil {
+			return fmt.Errorf("failed to compare coinbase transaction: %w", err)
+		}
+
+		err = b.PerformAddressStateUpdate(tx, verifierAddr, isCoinbase)
+		if err != nil {
+			log.Errorf("failed to update the state of genesis block: %s", err.Error())
+			_ = b.DeleteFromMemPool(tx)
+			continue
+		}
+
+		if !isCoinbase {
+			err = b.DeleteFromMemPool(tx)
+			if err != nil {
+				log.Warnf("failed to delete transaction from mempool: %s", err.Error())
+			}
+		}
+	}
+
+	if !isGenesisBlock {
+		b.IncrementHeightBy(1)
+	}
+
+	err = b.SetLastBlockHash(validBlock.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to update last block hash in db: %w", err)
+	}
+
+	err = b.SaveBlockInDB(validBlock)
+	if err != nil {
+		return fmt.Errorf("failed to save genesis block in DB: %w", err)
+	}
+
+	err = b.DeleteFromBlockPool(validBlock)
+	if err != nil {
+		log.Warnf("failed to delete block %s from blockpool: %s", hexutil.Encode(validBlock.Hash), err.Error())
+	}
+
 	return nil
 }
 

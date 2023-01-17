@@ -6,7 +6,7 @@ We have seen the rise of the Internet from the first days until now. Open intern
 
 These days it's extremely difficult for sites like WikiLeaks, thepiratebay, and so on to operate without interruption and pressure from different oppressing parties. With these in mind, we have developed the FileFileGo protocol and stacks to allow users to access and share data without a single point of failure.
 
-FileFileGo is not controlled by any individual. It's a joint effort by the Open-source community. The coin distribution is designed to be as fair as possible, with the emission of 15 Zaran (the native currency) per block which is divided by 2 every 24 months.
+FileFileGo is not controlled by any individual. It's a joint effort by the Open-source community. The coin distribution is designed to be as fair as possible, with the emission of 15 FFG (the native currency) per block which is divided by 2 every 24 months.
 
 FileFileGo is launched fairly - free of ICO/STO/IEO or pre-mine. We rely on a current PoA (Proof of Authority) consensus algorithm which will eventually be replaced by a PoS (Proof of Stake) to allow more parties to participate in the project. Support the movement by contributing to the project and develop innovative ideas that respect our digital rights, privacy, freedom of information, freedom from Internet censorship, and net neutrality.
 
@@ -389,17 +389,17 @@ Binlayer is the storage layer that keeps track of binary files and uses hashes t
 
 ### The Coin
 
-| Unit                     | Value in Aran                     |
+| Unit                     | Value                  |
 | ------------------------ | --------------------------------- |
-| **Aran**                 | **1**                             |
-| **Karan**                | **1.000**                         |
-| **Maran**                | **1.000.000**                     |
-| **Garan**                | **1.000.000.000**                 |
-| **Microzaran**           | **1.000.000.000.000**             |
-| **Milizaran**            | **1.000.000.000.000.000**         |
-| **Zaran** (Default unit) | **1.000.000.000.000.000.000**     |
-| **Kzaran**               | **1.000.000.000.000.000.000.000** |
+| **FFGOne**               | **1**                             |
+| **KFFG**                 | **1.000**                         |
+| **MFFG**                 | **1.000.000**                     |
+| **GFFG**                 | **1.000.000.000**                 |
+| **MicroFFG**             | **1.000.000.000.000**             |
+| **MiliFFG**              | **1.000.000.000.000.000**         |
+| **FFG** (Default unit)   | **1.000.000.000.000.000.000**     |
+| **ZFFG**                 | **1.000.000.000.000.000.000.000** |
 
-**Total Supply:** 500 Million Zarans
-**Validation/Stake Reward:** 15 Zarans per Block
+**Total Supply:** 500 Million FFG
+**Validation/Stake Reward:** 15 FFG per Block
 **Supply Decrease Rate:** Divide by 2 every 24 months

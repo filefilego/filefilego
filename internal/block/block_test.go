@@ -108,25 +108,25 @@ func TestGetCoinbaseTransaction(t *testing.T) {
 	assert.NoError(t, err)
 
 	// get the coinbase tx and compare it to the one in the block
-	tx, err := block.GetCoinbaseTransaction()
+	tx, err := block.GetAndValidateCoinbaseTransaction()
 	assert.NoError(t, err)
 	assert.Equal(t, tx, block.Transactions[0])
 
 	// invalidate the public key data from the coinbase tx
 	block.Transactions[0].PublicKey = []byte{}
-	_, err = block.GetCoinbaseTransaction()
+	_, err = block.GetAndValidateCoinbaseTransaction()
 	assert.EqualError(t, err, "failed to derive public key from transaction: malformed public key: invalid length: 0")
 
 	// invalid coinabse
 	block.Transactions = nil
-	_, err = block.GetCoinbaseTransaction()
+	_, err = block.GetAndValidateCoinbaseTransaction()
 	assert.EqualError(t, err, "no transactions in block")
 
 	// different block signer with coinbase signer
 	block2, _ := validBlock(t)
 	err = block2.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
-	_, err = block2.GetCoinbaseTransaction()
+	_, err = block2.GetAndValidateCoinbaseTransaction()
 	assert.EqualError(t, err, "coinbase transaction signer doesn't match the block signer: failed verification of block")
 }
 
@@ -261,6 +261,7 @@ func TestValidate(t *testing.T) {
 				assert.EqualError(t, err, tt.expErr)
 			} else {
 				assert.True(t, ok)
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -332,7 +333,7 @@ func validBlock(t *testing.T) (*Block, crypto.KeyPair) {
 			// its a coinbase tx
 			*validTx,
 		},
-		Number: 12,
+		Number: 1,
 	}
 
 	return &b, kp
@@ -359,8 +360,8 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 		From:            addr,
 		To:              addr,
 		Chain:           mainChain,
-		Value:           "0x64",
-		TransactionFees: "0x64",
+		Value:           "0x22b1c8c1227a00000",
+		TransactionFees: "0x0",
 	}
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)

@@ -17,6 +17,9 @@ import (
 
 func TestNew(t *testing.T) {
 	t.Parallel()
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+
 	db, err := leveldb.OpenFile("blockchain.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -27,14 +30,20 @@ func TestNew(t *testing.T) {
 		os.RemoveAll("blockchain.db")
 	})
 	cases := map[string]struct {
-		db     database.Database
-		expErr string
+		db               database.Database
+		genesisBlockHash []byte
+		expErr           string
 	}{
 		"no database": {
 			expErr: "db is nil",
 		},
+		"no genesis block hash": {
+			db:     driver,
+			expErr: "genesis block hash is empty",
+		},
 		"success": {
-			db: driver,
+			db:               driver,
+			genesisBlockHash: genesisblockValid.Hash,
 		},
 	}
 
@@ -42,7 +51,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			blockchain, err := New(tt.db)
+			blockchain, err := New(tt.db, tt.genesisBlockHash)
 			if tt.expErr != "" {
 				assert.Nil(t, blockchain)
 				assert.EqualError(t, err, tt.expErr)
@@ -53,7 +62,73 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+
+	db, err := leveldb.OpenFile("init.db", nil)
+	assert.NoError(t, err)
+	driver, err := database.New(db)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		db.Close()
+		os.RemoveAll("init.db")
+	})
+	blockchain, err := New(driver, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	// first run will be init
+	err = blockchain.InitOrLoad()
+	assert.NoError(t, err)
+	genBlock, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+	from, err := hexutil.Decode(genBlock.Transactions[0].From)
+	assert.NoError(t, err)
+	addressState, err := blockchain.GetAddressState(from)
+	assert.NoError(t, err)
+	balance, err := addressState.GetBalance()
+	assert.NoError(t, err)
+	assert.Equal(t, "40000000000000000000", balance.String())
+
+	derviedGenesis, err := blockchain.GetBlockByHash(genBlock.Hash)
+	assert.NoError(t, err)
+	assert.Equal(t, *genBlock, derviedGenesis)
+	assert.EqualValues(t, derviedGenesis.Hash, blockchain.GetLastBlockHash())
+
+	// blockchain already has the genesis block
+	// add another block to the blockchain
+	validBlock2, kp, _ := validBlock(t)
+	validBlock2.PreviousBlockHash = make([]byte, len(genBlock.Hash))
+	copy(validBlock2.PreviousBlockHash, genBlock.Hash)
+
+	err = validBlock2.Sign(kp.PrivateKey)
+	assert.NoError(t, err)
+	pubKeyBytes, err := kp.PublicKey.Raw()
+	assert.NoError(t, err)
+	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+		Address:   kp.Address,
+		PublicKey: hexutil.Encode(pubKeyBytes),
+	})
+	err = blockchain.PerformStateUpdateFromBlock(*validBlock2)
+	assert.NoError(t, err)
+
+	// load and verify blockchain
+	// height should be 1
+	// last block hash should be validBlock2.Hash
+	blockchain2, err := New(driver, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	err = blockchain2.InitOrLoad()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), blockchain2.GetHeight())
+	assert.EqualValues(t, validBlock2.Hash, blockchain2.GetLastBlockHash())
+
+	err = blockchain.CloseDB()
+	assert.NoError(t, err)
+}
+
 func TestGetHeightAndIncrement(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+
 	db, err := leveldb.OpenFile("height.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -62,7 +137,7 @@ func TestGetHeightAndIncrement(t *testing.T) {
 		db.Close()
 		os.RemoveAll("height.db")
 	})
-	blockchain, err := New(driver)
+	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), blockchain.GetHeight())
 	blockchain.IncrementHeightBy(1)
@@ -70,6 +145,9 @@ func TestGetHeightAndIncrement(t *testing.T) {
 }
 
 func TestSaveAndGetBlockInDB(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+
 	db, err := leveldb.OpenFile("savedhain.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -78,7 +156,7 @@ func TestSaveAndGetBlockInDB(t *testing.T) {
 		db.Close()
 		os.RemoveAll("savedhain.db")
 	})
-	blockchain, err := New(driver)
+	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	// invalid block
@@ -120,6 +198,8 @@ func TestSaveAndGetBlockInDB(t *testing.T) {
 }
 
 func TestGetUpdateAddressState(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
 	db, err := leveldb.OpenFile("addressState.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -128,7 +208,7 @@ func TestGetUpdateAddressState(t *testing.T) {
 		db.Close()
 		os.RemoveAll("addressState.db")
 	})
-	blockchain, err := New(driver)
+	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	state := AddressState{
@@ -157,6 +237,8 @@ func TestGetUpdateAddressState(t *testing.T) {
 }
 
 func TestMemPoolBlockPoolFunctions(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
 	db, err := leveldb.OpenFile("pool.db", nil)
 	assert.NoError(t, err)
 
@@ -167,7 +249,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 		os.RemoveAll("pool.db")
 	})
 
-	blockchain, err := New(driver)
+	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	transactions := blockchain.GetTransactionsFromPool()
@@ -292,6 +374,8 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 }
 
 func TestPerformAddressStateUpdate(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
 	db, err := leveldb.OpenFile("internalmutation.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -300,7 +384,7 @@ func TestPerformAddressStateUpdate(t *testing.T) {
 		db.Close()
 		os.RemoveAll("internalmutation.db")
 	})
-	blockchain, err := New(driver)
+	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	validBlock, kp, kp2 := validBlock(t)
 	err = validBlock.Sign(kp.PrivateKey)
@@ -317,7 +401,7 @@ func TestPerformAddressStateUpdate(t *testing.T) {
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
 
-	coinbaseTx, err := validBlock.GetCoinbaseTransaction()
+	coinbaseTx, err := validBlock.GetAndValidateCoinbaseTransaction()
 	assert.NoError(t, err)
 
 	ok, err := validBlock.Validate()
@@ -337,10 +421,10 @@ func TestPerformAddressStateUpdate(t *testing.T) {
 	assert.NoError(t, err)
 
 	// balance should have tx value + tx fees
-	// coinbase tx contains hex of 0x9 and 0x0 for tx value and fees
-	// address should have 8 since we send another tx with value of 0x1 and transaction fee of 0x1
+	// coinbase tx contains hex of 40999999999999999999 and 0x0 for tx value and fees
+	// address should have 39999999999999999999 since we send another tx with value of 0x1 and transaction fee of 0x1
 	// but we send back the 0x1 fee to the verfier
-	assert.Equal(t, "8", addressBalance.String())
+	assert.Equal(t, "39999999999999999999", addressBalance.String())
 
 	address2Bytes, err := hexutil.Decode(kp2.Address)
 	assert.NoError(t, err)
@@ -377,7 +461,7 @@ func validBlock(t *testing.T) (*block.Block, crypto.KeyPair, crypto.KeyPair) {
 			*validTx,
 			*validTx2,
 		},
-		Number: 12,
+		Number: 1,
 	}
 
 	return &b, kp, kp2
@@ -404,7 +488,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 		From:            addr,
 		To:              addr,
 		Chain:           mainChain,
-		Value:           "0x9",
+		Value:           "0x22b1c8c1227a00000",
 		TransactionFees: "0x0",
 	}
 	assert.NoError(t, err)

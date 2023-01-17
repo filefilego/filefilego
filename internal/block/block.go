@@ -8,6 +8,7 @@ import (
 	"math/big"
 
 	"github.com/cbergoon/merkletree"
+	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -32,7 +33,8 @@ type Block struct {
 // GetCoinbaseTransaction gets the coinbase transaction.
 // A coinbase transaction is the first transaction and the public key
 // of the transaction should match the block signer.
-func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
+// coinbase should have zero fees in transaction fees.
+func (b Block) GetAndValidateCoinbaseTransaction() (transaction.Transaction, error) {
 	if len(b.Transactions) == 0 {
 		return transaction.Transaction{}, errors.New("no transactions in block")
 	}
@@ -48,8 +50,28 @@ func (b Block) GetCoinbaseTransaction() (transaction.Transaction, error) {
 		return transaction.Transaction{}, fmt.Errorf("coinbase transaction signer doesn't match the block signer: %w", err)
 	}
 
-	// TODO: calculate the reward allowed to put
-	// TODO: don't allow reward in the transactions fees
+	coinbaseValue, err := hexutil.DecodeBig(coinbaseTx.Value)
+	if err != nil {
+		return transaction.Transaction{}, fmt.Errorf("failed to decode transaction value %w", err)
+	}
+
+	coinbaseFees, err := hexutil.DecodeBig(coinbaseTx.TransactionFees)
+	if err != nil {
+		return transaction.Transaction{}, fmt.Errorf("failed to decode transaction fees %w", err)
+	}
+
+	if coinbaseFees.Cmp(big.NewInt(0)) != 0 {
+		return transaction.Transaction{}, errors.New("coinbase transactions fee should be zero")
+	}
+
+	reward, err := GetReward(b.Number)
+	if err != nil {
+		return transaction.Transaction{}, fmt.Errorf("failed to get block reward: %w", err)
+	}
+
+	if coinbaseValue.Cmp(reward) != 0 {
+		return transaction.Transaction{}, fmt.Errorf("invalid block reward in the coinbase transaction, should be: %s given: %s", reward.Text(16), coinbaseValue.Text(16))
+	}
 
 	return coinbaseTx, nil
 }
@@ -129,6 +151,8 @@ func (b *Block) Sign(key crypto.PrivKey) error {
 }
 
 // VerifyWithPublicKey verifies a block with a public key.
+// The coinbase transaction always includes the public Key of the verifier.
+// This public key is used to verify the block.
 func (b Block) VerifyWithPublicKey(key crypto.PubKey) error {
 	ok, err := key.Verify(b.Hash, b.Signature)
 	if err != nil {
@@ -166,7 +190,7 @@ func (b Block) Validate() (bool, error) {
 		return false, fmt.Errorf("data with size %d is greater than %d bytes", len(b.Data), maxBlockDataSizeBytes)
 	}
 
-	coinbase, err := b.GetCoinbaseTransaction()
+	coinbase, err := b.GetAndValidateCoinbaseTransaction()
 	if err != nil {
 		return false, fmt.Errorf("failed to get coinbase transaction: %w", err)
 	}

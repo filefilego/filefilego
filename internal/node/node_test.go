@@ -438,6 +438,10 @@ func newHost(t *testing.T, port string) host.Host {
 
 func createNode(t *testing.T, port string, searchDB string, blockchainDBPath string) *Node {
 	bgCtx := context.Background()
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	assert.NoError(t, err)
+	genesisHash := make([]byte, len(genesisblockValid.Hash))
+	copy(genesisHash, genesisblockValid.Hash)
 
 	host := newHost(t, port)
 	kademliaDHT, err := dht.New(bgCtx, host, dht.Mode(dht.ModeServer))
@@ -463,7 +467,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockchainDB, err := database.New(db)
 	assert.NoError(t, err)
 
-	bchain, err := blockchain.New(blockchainDB)
+	bchain, err := blockchain.New(blockchainDB, genesisHash)
 	assert.NoError(t, err)
 
 	dataQueryProtocol := dataquery.New()
@@ -495,8 +499,8 @@ func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair
 		From:            addr,
 		To:              addr,
 		Chain:           mainChain,
-		Value:           "0x64",
-		TransactionFees: "0x64",
+		Value:           "0x22b1c8c1227a00000",
+		TransactionFees: "0x0",
 	}
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
@@ -514,7 +518,7 @@ func validBlock(t *testing.T) (*block.Block, ffgcrypto.KeyPair) {
 			// its a coinbase tx
 			*validTx,
 		},
-		Number: 12,
+		Number: 1,
 	}
 
 	return &b, kp

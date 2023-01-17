@@ -48,6 +48,12 @@ func PublicKeyToHex(k crypto.PubKey) (string, error) {
 	return hexutil.Encode(bts), err
 }
 
+// PrivateKeyToHex returns the hex value of a PrivKey.
+func PrivateKeyToHex(k crypto.PrivKey) (string, error) {
+	bts, err := k.Raw()
+	return hexutil.Encode(bts), err
+}
+
 // PublicKeyFromHex returns a public key from hex.
 func PublicKeyFromHex(str string) (crypto.PubKey, error) {
 	bts, err := hexutil.Decode(str)
@@ -91,4 +97,13 @@ func RawPublicToAddress(data []byte) (string, error) {
 		return "", err
 	}
 	return hexutil.Encode(keccacBytes[12:]), nil
+}
+
+// RawPublicToAddressBytes returns the address of the public key in byte array.
+func RawPublicToAddressBytes(data []byte) ([]byte, error) {
+	keccacBytes, err := Keccak256(data)
+	if err != nil {
+		return nil, err
+	}
+	return keccacBytes[12:], nil
 }

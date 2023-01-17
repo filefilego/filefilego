@@ -90,6 +90,10 @@ func TestDecodeEncodeBig(t *testing.T) {
 	num = num.SetInt64(0)
 	str = EncodeBig(num)
 	assert.Equal(t, "0x0", str)
+
+	biggestUnit, ok := big.NewInt(0).SetString("1000000000000000000000", 10)
+	assert.True(t, ok)
+	assert.Equal(t, "1000000000000000000000", biggestUnit.String())
 }
 
 func TestDecodeBigFromBytesToUint64(t *testing.T) {

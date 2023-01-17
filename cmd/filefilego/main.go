@@ -12,6 +12,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/config"
+	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
 	ffgcli "github.com/filefilego/filefilego/internal/cli"
 	"github.com/filefilego/filefilego/internal/common"
@@ -139,7 +140,12 @@ func run(ctx *cli.Context) error {
 		return err
 	}
 
-	bchain, err := blockchain.New(blockchainDB)
+	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	if err != nil {
+		return err
+	}
+
+	bchain, err := blockchain.New(blockchainDB, genesisblockValid.Hash)
 	if err != nil {
 		return err
 	}
