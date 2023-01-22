@@ -24,14 +24,13 @@ func (a *AddressState) GetBalance() (*big.Int, error) {
 }
 
 // SetBalance sets the balance to byte array.
-func (a *AddressState) SetBalance(amount *big.Int) error {
+func (a *AddressState) SetBalance(amount *big.Int) {
 	zeroBig := big.NewInt(0)
 	if zeroBig.Cmp(amount) == 0 {
 		a.Balance = []byte{0}
 	} else {
 		a.Balance = amount.Bytes()
 	}
-	return nil
 }
 
 // GetNounce returns the nounce as uint64.
@@ -43,9 +42,12 @@ func (a *AddressState) GetNounce() (uint64, error) {
 }
 
 // SetNounce sets the balance to byte array.
-func (a *AddressState) SetNounce(number uint64) error {
-	a.Nounce = big.NewInt(0).SetUint64(number).Bytes()
-	return nil
+func (a *AddressState) SetNounce(number uint64) {
+	if number == 0 {
+		a.Nounce = []byte{0}
+	} else {
+		a.Nounce = big.NewInt(0).SetUint64(number).Bytes()
+	}
 }
 
 // ToAddressStateProto returns the proto representation of a state.

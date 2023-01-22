@@ -438,7 +438,7 @@ func newHost(t *testing.T, port string) host.Host {
 
 func createNode(t *testing.T, port string, searchDB string, blockchainDBPath string) *Node {
 	bgCtx := context.Background()
-	genesisblockValid, err := block.GetGenesisBlock("../block/genesis.protoblock")
+	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 	genesisHash := make([]byte, len(genesisblockValid.Hash))
 	copy(genesisHash, genesisblockValid.Hash)
@@ -449,7 +449,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	err = kademliaDHT.Bootstrap(bgCtx)
 	assert.NoError(t, err)
 	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
-	blv, err := search.NewBleeveSearch(searchDB)
+	blv, err := search.NewBleveSearch(searchDB)
 	assert.NoError(t, err)
 	searchEngine, err := search.New(blv)
 	assert.NoError(t, err)
@@ -494,7 +494,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair
 
 	tx := transaction.Transaction{
 		PublicKey:       pkyData,
-		Nounce:          []byte{1},
+		Nounce:          []byte{0},
 		Data:            []byte{1},
 		From:            addr,
 		To:              addr,

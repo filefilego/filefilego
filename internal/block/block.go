@@ -73,6 +73,10 @@ func (b Block) GetAndValidateCoinbaseTransaction() (transaction.Transaction, err
 		return transaction.Transaction{}, fmt.Errorf("invalid block reward in the coinbase transaction, should be: %s given: %s", reward.Text(16), coinbaseValue.Text(16))
 	}
 
+	if hexutil.DecodeBigFromBytesToUint64(coinbaseTx.Nounce) != 0 {
+		return transaction.Transaction{}, errors.New("coinbase transactions should have a zero nounce")
+	}
+
 	return coinbaseTx, nil
 }
 

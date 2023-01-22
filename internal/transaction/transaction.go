@@ -14,7 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const chainID = "0x01"
+// ChainID represents the main-net chain id.
+const ChainID = "0x01"
 
 const maxTransactionDataSizeBytes = 300000
 
@@ -37,7 +38,7 @@ type Transaction struct {
 
 // Serialize the transaction to bytes.
 func (tx Transaction) Serialize() ([]byte, error) {
-	mainChain, err := hexutil.Decode(chainID)
+	mainChain, err := hexutil.Decode(ChainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
 	}
@@ -146,7 +147,7 @@ func (tx Transaction) VerifyWithPublicKey(key crypto.PubKey) error {
 
 // Validate a transaction.
 func (tx Transaction) Validate() (bool, error) {
-	zero, _ := new(big.Int).SetString("0", 10)
+	zero := big.NewInt(0)
 	if len(tx.Hash) == 0 || tx.Hash == nil {
 		return false, errors.New("hash is empty")
 	}
@@ -155,7 +156,7 @@ func (tx Transaction) Validate() (bool, error) {
 		return false, fmt.Errorf("data with size %d is greater than %d bytes", len(tx.Data), maxTransactionDataSizeBytes)
 	}
 
-	mainChain, err := hexutil.Decode(chainID)
+	mainChain, err := hexutil.Decode(ChainID)
 	if err != nil {
 		return false, fmt.Errorf("failed to decode chainID: %w", err)
 	}

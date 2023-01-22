@@ -93,7 +93,7 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	assert.NoError(t, err)
 	tx := Transaction{
 		PublicKey:       publicKeyData,
-		Nounce:          []byte{1},
+		Nounce:          []byte{0},
 		From:            "0x0123",
 		To:              "0x0123",
 		Value:           "0x123",
@@ -321,7 +321,7 @@ func validTransaction(t *testing.T) *Transaction {
 	pkyData, err := keypair.PublicKey.Raw()
 	assert.NoError(t, err)
 
-	mainChain, err := hexutil.Decode(chainID)
+	mainChain, err := hexutil.Decode(ChainID)
 	assert.NoError(t, err)
 
 	addr, err := crypto.RawPublicToAddress(pkyData)
@@ -329,7 +329,7 @@ func validTransaction(t *testing.T) *Transaction {
 
 	tx := Transaction{
 		PublicKey:       pkyData,
-		Nounce:          []byte{1},
+		Nounce:          []byte{0},
 		Data:            []byte{1},
 		From:            addr,
 		To:              addr,

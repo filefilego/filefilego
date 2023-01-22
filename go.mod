@@ -10,7 +10,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/rpc v1.2.0
 	github.com/libp2p/go-libp2p v0.23.3
-	github.com/libp2p/go-libp2p-core v0.20.1
 	github.com/libp2p/go-libp2p-kad-dht v0.18.0
 	github.com/libp2p/go-libp2p-pubsub v0.8.2
 	github.com/microcosm-cc/bluemonday v1.0.21
@@ -20,6 +19,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/urfave/cli/v2 v2.23.5
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	google.golang.org/protobuf v1.28.1
 )
 
@@ -88,6 +88,7 @@ require (
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.2.0 // indirect
+	github.com/libp2p/go-libp2p-core v0.20.1 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.4.7 // indirect
 	github.com/libp2p/go-libp2p-record v0.2.0 // indirect
 	github.com/libp2p/go-msgio v0.2.0 // indirect

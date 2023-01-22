@@ -18,12 +18,15 @@ import (
 )
 
 const (
-	tokenAccessHours = 2160
 
 	// AdminAccess represents full access.
 	AdminAccess = "admin"
 	// UserAccess represents priviledge access.
 	UserAccess = "user"
+
+	tokenAccessHours = 2160
+	tokenPrefix      = "token"
+	metadataPrefix   = "metadata"
 )
 
 // FileMetadata holds the metadata for a file.
@@ -124,7 +127,8 @@ func (s *Storage) SaveToken(token AccessToken) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal access token: %w", err)
 	}
-	return s.db.Put([]byte(token.Token), data)
+
+	return s.db.Put(append([]byte(tokenPrefix), []byte(token.Token)...), data)
 }
 
 // SaveFileMetadata saves a file's metadata in the database.
@@ -138,12 +142,12 @@ func (s *Storage) SaveFileMetadata(nodeHash string, metadata FileMetadata) error
 		return fmt.Errorf("failed to marshal file metadata: %w", err)
 	}
 
-	err = s.db.Put([]byte(nodeHash), data)
+	err = s.db.Put(append([]byte(metadataPrefix), []byte(nodeHash)...), data)
 	if err != nil {
 		return fmt.Errorf("failed to insert nodeHash %s", nodeHash)
 	}
 
-	err = s.db.Put([]byte(metadata.Hash), []byte(nodeHash))
+	err = s.db.Put(append([]byte(metadataPrefix), []byte(metadata.Hash)...), []byte(nodeHash))
 	if err != nil {
 		return fmt.Errorf("failed to insert fileHash %s", metadata.Hash)
 	}
@@ -155,7 +159,7 @@ func (s *Storage) GetFileMetadata(nodeHash string) (FileMetadata, error) {
 	if nodeHash == "" {
 		return FileMetadata{}, errors.New("nodeHash is empty")
 	}
-	data, err := s.db.Get([]byte(nodeHash))
+	data, err := s.db.Get(append([]byte(metadataPrefix), []byte(nodeHash)...))
 	if err != nil {
 		return FileMetadata{}, fmt.Errorf("failed to get file metadata: %w", err)
 	}
@@ -172,7 +176,8 @@ func (s *Storage) GetNodeHashFromFileHash(fileHash string) (string, bool) {
 	if fileHash == "" {
 		return "", false
 	}
-	nodeData, err := s.db.Get([]byte(fileHash))
+
+	nodeData, err := s.db.Get(append([]byte(metadataPrefix), []byte(fileHash)...))
 	if err != nil {
 		return "", false
 	}
@@ -185,7 +190,7 @@ func (s *Storage) CanAccess(token string) (bool, AccessToken, error) {
 		return false, AccessToken{}, errors.New("token is empty")
 	}
 
-	data, err := s.db.Get([]byte(token))
+	data, err := s.db.Get(append([]byte(tokenPrefix), []byte(token)...))
 	if err != nil {
 		return false, AccessToken{}, err
 	}

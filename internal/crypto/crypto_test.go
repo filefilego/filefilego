@@ -95,3 +95,25 @@ func TestRandomEntropy(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, data, 10)
 }
+
+func TestRawPublicToAddress(t *testing.T) {
+	pubAddr := "0x03fab2023a5b2acb8855085004dc173f67d66df5591afdc3fbc3435880b9c6338b"
+	addr := "0xdd9a374e8dce9d656073ec153580301b7d2c3850"
+	data, err := hexutil.Decode(pubAddr)
+	assert.NoError(t, err)
+	str, err := RawPublicToAddress(data)
+	assert.NoError(t, err)
+	assert.Equal(t, addr, str)
+}
+
+func TestRawPublicToAddressBytes(t *testing.T) {
+	pubAddr := "0x03fab2023a5b2acb8855085004dc173f67d66df5591afdc3fbc3435880b9c6338b"
+	addr := "0xdd9a374e8dce9d656073ec153580301b7d2c3850"
+	addrBytes, err := hexutil.Decode(addr)
+	assert.NoError(t, err)
+	data, err := hexutil.Decode(pubAddr)
+	assert.NoError(t, err)
+	str, err := RawPublicToAddressBytes(data)
+	assert.NoError(t, err)
+	assert.EqualValues(t, addrBytes, str)
+}

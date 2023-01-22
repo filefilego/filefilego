@@ -44,16 +44,13 @@ func TestAddressStateFunctions(t *testing.T) {
 	assert.Equal(t, uint64(0), nounce)
 
 	tmpState := AddressState{}
-	err = tmpState.SetBalance(big.NewInt(12))
-	assert.NoError(t, err)
-	err = tmpState.SetNounce(11)
-	assert.NoError(t, err)
+	tmpState.SetBalance(big.NewInt(12))
+	tmpState.SetNounce(11)
 	assert.Equal(t, AddressState{Balance: []byte{12}, Nounce: []byte{11}}, tmpState)
 
 	// set balance with zero
 	tmpState = AddressState{}
-	err = tmpState.SetBalance(big.NewInt(0))
-	assert.NoError(t, err)
+	tmpState.SetBalance(big.NewInt(0))
 	assert.NotEmpty(t, tmpState.Balance)
 }
 

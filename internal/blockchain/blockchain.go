@@ -15,61 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Blockchain represents a blockchain.
-// type Blockchain interface {
-// 	AddHeight(h uint64)
-// 	GetHeight() uint64
-
-// 	// we need boltdb bucket for hash->tx
-// 	GetTransactionByHash(hash string) (tx transaction.Transaction, block block.Block, index uint64, err error)
-// 	// we need a boltdb bucket for addr->txhash
-// 	GetTransactionsByAddress(address string) (txs []transaction.Transaction, err error)
-// 	// we need a bucket for height->block
-// 	GetBlockByHeight(number uint64) (block block.Block, err error)
-// 	// this will be fixed if we implement the above
-// 	GetBlocksByRange(from uint64, to uint64) ([]block.Block, error)
-// 	// we need a bucket for hash->blockchain
-// 	GetBlockByHash(hash string) (block block.Block, err error)
-
-// 	AddBalanceTo(address string, amount *big.Int) error
-// 	SubBalanceOf(address string, amount *big.Int, nounce string) error
-
-// 	MutateChannel(t transaction.Transaction, vbalances map[string]*big.Int, isMiningMode bool) error
-// 	MutateAddressStateFromTransaction(transaction transaction.Transaction, isCoinbase bool) (err error)
-// 	HasThisBalance(address string, amount *big.Int) (bool, *big.Int, *big.Int, error)
-
-// 	// already hanled by transaction package
-// 	SignTransaction(transaction transaction.Transaction, keystroe string) (transaction.Transaction, error)
-// 	IsValidTransaction(transaction transaction.Transaction) (bool, error)
-
-// 	GetNounceFromMemPool(address string) (string, error)
-
-// 	AddBlockPool(block block.Block) (bool, error)
-// 	removeBlockPool(block block.Block) error
-// 	ClearBlockPool(lock bool)
-
-// 	AddMemPool(transaction transaction.Transaction) error
-// 	RemoveMemPool(transaction transaction.Transaction) error
-
-// 	// below one calls the other
-// 	PersistMemPoolToDB() error
-// 	SerializeMemPool() ([]byte, error)
-
-// 	LoadToMemPoolFromDB()
-
-// 	MineBlock(transactions []transaction.Transaction) (block.Block, error)
-// 	// GetAddressData(address string) (ads AddressState, merr AddressDataResult)
-// 	// TraverseChanNodes(hash []byte, fn transformNode)
-// 	TraverseChain(fn transform)
-// 	PreparePoolBlocksForMining() ([]transaction.Transaction, map[string]*big.Int)
-// 	CalculateReward() string
-// 	MineScheduler()
-// }
-
-// type transform func(block.Block)
-// type transformNode func(ChanNode)
-// type AddressDataResult int
-
 const addressPrefix = "address"
 
 const blockPrefix = "blocks"
@@ -86,6 +31,7 @@ type Interface interface {
 	GetTransactionsFromPool() []transaction.Transaction
 	SaveBlockInDB(blck block.Block) error
 	GetBlockByHash(blockHash []byte) (block.Block, error)
+	GetNounceFromMemPool(address []byte) uint64
 	GetAddressState(address []byte) (AddressState, error)
 	UpdateAddressState(address []byte, state AddressState) error
 	CloseDB() error
@@ -138,7 +84,7 @@ func (b *Blockchain) InitOrLoad() error {
 	lastBlockHash := b.GetLastBlockHash()
 	if len(lastBlockHash) == 0 {
 		// init blockchain
-		genesisBlock, err := block.GetGenesisBlock("../block/genesis.protoblock")
+		genesisBlock, err := block.GetGenesisBlock()
 		if err != nil {
 			return fmt.Errorf("failed to get genesis block: %w", err)
 		}
@@ -259,14 +205,8 @@ func (b *Blockchain) addBalanceTo(address []byte, amount *big.Int) error {
 	state, err := b.GetAddressState(address)
 	// address has no balance
 	if err != nil {
-		err := state.SetBalance(big.NewInt(0))
-		if err != nil {
-			return fmt.Errorf("failed to set balance: %w", err)
-		}
-		err = state.SetNounce(0)
-		if err != nil {
-			return fmt.Errorf("failed to set nounce: %w", err)
-		}
+		state.SetBalance(big.NewInt(0))
+		state.SetNounce(0)
 	}
 
 	balance, err := state.GetBalance()
@@ -274,10 +214,7 @@ func (b *Blockchain) addBalanceTo(address []byte, amount *big.Int) error {
 		return fmt.Errorf("failed to get balance: %w", err)
 	}
 
-	err = state.SetBalance(balance.Add(balance, amount))
-	if err != nil {
-		return fmt.Errorf("failed to set balance: %w", err)
-	}
+	state.SetBalance(balance.Add(balance, amount))
 
 	err = b.UpdateAddressState(address, state)
 	if err != nil {
@@ -308,15 +245,8 @@ func (b *Blockchain) subBalanceFrom(address []byte, amount *big.Int, nounce uint
 		return errors.New("failed to subtract: amount is greater than balance")
 	}
 
-	err = state.SetBalance(balance.Sub(balance, amount))
-	if err != nil {
-		return fmt.Errorf("failed to set balance: %w", err)
-	}
-
-	err = state.SetNounce(nounce)
-	if err != nil {
-		return fmt.Errorf("failed to set nounce: %w", err)
-	}
+	state.SetBalance(balance.Sub(balance, amount))
+	state.SetNounce(nounce)
 
 	err = b.UpdateAddressState(address, state)
 	if err != nil {
@@ -339,19 +269,41 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 		return fmt.Errorf("failed to decode transaction fees: %w", err)
 	}
 
+	fromAddrBytes, err := hexutil.Decode(transaction.From)
+	if err != nil {
+		return fmt.Errorf("failed to decode from address: %w", err)
+	}
+
+	fromState, err := b.GetAddressState(fromAddrBytes)
+	if err != nil {
+		// if from is not available, create a zero state
+		fromState.SetNounce(0)
+		fromState.SetBalance(big.NewInt(0))
+		err := b.UpdateAddressState(fromAddrBytes, fromState)
+		if err != nil {
+			return fmt.Errorf("failed to initialize zero state for `from` address: %w", err)
+		}
+	}
+
+	fromAddressNounceDB, err := fromState.GetNounce()
+	if err != nil {
+		return fmt.Errorf("failed to get nounce of address state: %w", err)
+	}
+
 	// if not coinbase tx, then subtract the amount from the account
 	if !isCoinbase {
+		fromAddressNounceTX := hexutil.DecodeBigFromBytesToUint64(transaction.Nounce)
+		if fromAddressNounceTX != fromAddressNounceDB+1 {
+			return fmt.Errorf("the nounce %d in transaction is not the next nounce of database value: %d", fromAddressNounceTX, fromAddressNounceDB)
+		}
+
 		txValue, err := hexutil.DecodeBig(transaction.Value)
 		if err != nil {
 			return fmt.Errorf("failed to decode transaction value: %w", err)
 		}
 		totalFees := txValue.Add(txValue, txFees)
-		addrBytes, err := hexutil.Decode(transaction.From)
-		if err != nil {
-			return fmt.Errorf("failed to decode from address: %w", err)
-		}
 
-		err = b.subBalanceFrom(addrBytes, totalFees, hexutil.DecodeBigFromBytesToUint64(transaction.Nounce))
+		err = b.subBalanceFrom(fromAddrBytes, totalFees, fromAddressNounceTX)
 		if err != nil {
 			return fmt.Errorf("failed to subtract total value from address: %w", err)
 		}
@@ -386,7 +338,9 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 }
 
 // performStateUpdateFromDataPayload performs updates from the transaction data.
+// operations allowed are related to updating blockchain settings and channel operations.
 func (b *Blockchain) performStateUpdateFromDataPayload(dataPayload []byte) error {
+	// TODO
 	return nil
 }
 
@@ -399,11 +353,19 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 
 	// if the block is not genesis block then validate the previous block
 	isGenesisBlock := bytes.Equal(b.genesisBlockHash, validBlock.Hash)
-
 	if !isGenesisBlock {
-		_, err := b.GetBlockByHash(validBlock.PreviousBlockHash)
+		blockchainHeight := b.GetHeight()
+		if validBlock.Number <= blockchainHeight {
+			return fmt.Errorf("block: %d can't be smaller or equal to the blockchain height: %d", validBlock.Number, blockchainHeight)
+		}
+
+		previousBlock, err := b.GetBlockByHash(validBlock.PreviousBlockHash)
 		if err != nil {
 			return fmt.Errorf("previous block not found in database: %w", err)
+		}
+
+		if previousBlock.Number+1 != validBlock.Number {
+			return fmt.Errorf("block number doesn't match the continuation of previous block: current: %d,  previous: %d", validBlock.Number, previousBlock.Number)
 		}
 	}
 
@@ -425,7 +387,7 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 
 		err = b.PerformAddressStateUpdate(tx, verifierAddr, isCoinbase)
 		if err != nil {
-			log.Errorf("failed to update the state of genesis block: %s", err.Error())
+			log.Errorf("failed to update the state of blockchain: %s", err.Error())
 			_ = b.DeleteFromMemPool(tx)
 			continue
 		}
@@ -460,7 +422,7 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 	return nil
 }
 
-// GetNounceFromMemPool get the nounce from mempool for an address.
+// GetNounceFromMemPool get the nounce of an address from mempool.
 func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
 	b.tmu.RLock()
 	defer b.tmu.RUnlock()
@@ -474,11 +436,11 @@ func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
 			}
 		}
 	}
-
 	return tmp
 }
 
 // PutMemPool adds a transaction to mempool.
+// validation of transaction should be done outside this function.
 func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 	b.tmu.Lock()
 	defer b.tmu.Unlock()

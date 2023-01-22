@@ -12,11 +12,11 @@ func TestNewBleeveSearch(t *testing.T) {
 	t.Cleanup(func() {
 		os.RemoveAll("db.bin")
 	})
-	bleveEngine, err := NewBleeveSearch("")
+	bleveEngine, err := NewBleveSearch("")
 	assert.EqualError(t, err, "engine is nil")
 	assert.Nil(t, bleveEngine)
 
-	bleveEngine, err = NewBleeveSearch("db.bin")
+	bleveEngine, err = NewBleveSearch("db.bin")
 	assert.Nil(t, err)
 	assert.NotNil(t, bleveEngine)
 
@@ -24,7 +24,7 @@ func TestNewBleeveSearch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// check case when database file already exists
-	bleveEngine, err = NewBleeveSearch("db.bin")
+	bleveEngine, err = NewBleveSearch("db.bin")
 	assert.Nil(t, err)
 	assert.NotNil(t, bleveEngine)
 	err = bleveEngine.Close()
@@ -32,7 +32,7 @@ func TestNewBleeveSearch(t *testing.T) {
 }
 
 func TestNewBleeveIndex(t *testing.T) {
-	bleveEngine, err := NewBleeveSearch("indexable.bin")
+	bleveEngine, err := NewBleveSearch("indexable.bin")
 	assert.Nil(t, err)
 	assert.NotNil(t, bleveEngine)
 	t.Cleanup(func() {
@@ -43,7 +43,7 @@ func TestNewBleeveIndex(t *testing.T) {
 }
 
 func TestBleeveSearch(t *testing.T) {
-	bleveEngine, err := NewBleeveSearch("search.bin")
+	bleveEngine, err := NewBleveSearch("search.bin")
 	assert.Nil(t, err)
 	t.Cleanup(func() {
 		bleveEngine.Close()

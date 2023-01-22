@@ -8,6 +8,11 @@ import (
 )
 
 var (
+	NodeIdentityKeyPassphrase = cli.BoolFlag{
+		Name:  "node_identity_passphrase",
+		Usage: "Passphrase to unlock the node identity file",
+	}
+
 	LogPathLine = cli.BoolFlag{
 		Name:  "log_path_line",
 		Usage: "Logs include file path and line number",
@@ -30,18 +35,18 @@ var (
 		Usage: "Keystore directory",
 	}
 
-	MineFlag = cli.BoolFlag{
-		Name:  "mine",
-		Usage: "Enable Mining",
+	ValidatorFlag = cli.BoolFlag{
+		Name:  "validator",
+		Usage: "Enable Validator",
 	}
 
-	MineKeypath = cli.StringFlag{
-		Name:  "mine_keypath",
+	ValidatorKeypath = cli.StringFlag{
+		Name:  "validator_keypath",
 		Usage: "Path to the key for sealing blocks",
 	}
 
-	MinePass = cli.StringFlag{
-		Name:  "mine_key_pass",
+	ValidatorPass = cli.StringFlag{
+		Name:  "validator_key_pass",
 		Usage: "Passphrase of keyfile",
 	}
 
@@ -67,7 +72,7 @@ var (
 
 	StorageToken = cli.StringFlag{
 		Name:  "storage_token",
-		Usage: "Access token for binlayer",
+		Usage: "Access token for storage engine",
 	}
 
 	StorageFeesGB = cli.StringFlag{
@@ -196,14 +201,15 @@ var AppFlags = []cli.Flag{
 		Name:  "config, c",
 		Usage: "Load configuration from `FILE`",
 	},
+	&NodeIdentityKeyPassphrase,
 	&LogPathLine,
 	&LogLevelFlag,
 	&DataDirFlag,
 	&KeystoreDirFlag,
 
-	&MineFlag,
-	&MineKeypath,
-	&MinePass,
+	&ValidatorFlag,
+	&ValidatorKeypath,
+	&ValidatorPass,
 	&SearchEngine,
 	&SearchEngineResultCount,
 	&Storage,

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/internal/crypto"
@@ -60,7 +61,7 @@ var (
 			{
 				Name:   "create_node_key",
 				Usage:  "create_node_key <passphrase>",
-				Action: CreateNodeKeys,
+				Action: CreateNodeKey,
 				Flags:  []cli.Flag{},
 				Description: `
 				Creates a a node key`,
@@ -129,6 +130,21 @@ func GetAccountInfo(ctx *cli.Context) error {
 }
 
 // CreateNodeKeys
-func CreateNodeKeys(ctx *cli.Context) error {
+func CreateNodeKey(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	store, err := keystore.New(conf.Global.KeystoreDir, []byte{1})
+	if err != nil {
+		return fmt.Errorf("failed to create keystore: %w", err)
+	}
+	keyPath, err := store.CreateKey(ctx.Args().First())
+	if err != nil {
+		return fmt.Errorf("failed to create key: %w", err)
+	}
+
+	err = os.Rename(keyPath, filepath.Join(conf.Global.KeystoreDir, "node_identity.json"))
+	if err != nil {
+		return fmt.Errorf("failed to rename node identity key file: %w", err)
+	}
+
 	return nil
 }

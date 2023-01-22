@@ -361,9 +361,9 @@ The concept of a sub-channel is to be able to categorize data even further. For 
 
 In filefilego an `Entry` represents a post or a piece of data that contains more information about the entry itself rather than categorization/ordering. `File` and `Directory` can be placed into an `Entry`.
 
-### Data Storage Layer ("BINLAYER")
+### Data Storage Layer
 
-`Binlayer` is the storage layer that tracks binary data, which are used by hash pointers within the blockchain to refer to a piece of data. The `ChanNode` structure has a field called `BinlayerHash` which refers to the binary hash and is in the form of `"{HASH_ALGORITHM}:>{DATA_HASH}"`. We would like to keep the metadata of the hashing algorithm used as it might be useful in the future.
+`Storage Engine` is the storage layer that tracks binary data, which are used by hash pointers within the blockchain to refer to a piece of data. The `ChanNode` structure has a field called `FileHash` which refers to the binary hash and is in the form of `"{HASH_ALGORITHM}:>{DATA_HASH}"`. We would like to keep the metadata of the hashing algorithm used as it might be useful in the future.
 
 ### Full-text Index/Search
 
@@ -375,15 +375,15 @@ The development of a query language that allows complex queries is a powerful to
 
 There is the option to disable the full-text indexing functionality of a node by using the `--fulltex` cli flag.
 
-### Binlayer Storage Engine
+### Storage Engine
 
-Binlayer is the storage layer that keeps track of binary files and uses hashes to represent a piece of information within the blockchain. This feature can be turned on by using the following flags:
+The storage layer keeps track of binary files and uses hashes to represent a piece of information within the blockchain. This feature can be turned on by using the following flags:
 
 ```
-... --binlayer --binlayerdir="/somewhere/to/store/data" --binlayer_token="somelongtokenhere" ...
+... --storage --storage_dir="/somewhere/to/store/data" --storage_token="somelongtokenhere" ...
 ```
 
-`--binlayerdir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `binlayer_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users.
+`--storage_dir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `storage_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users.
 
 # Coin Distribution
 

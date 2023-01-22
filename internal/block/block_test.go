@@ -333,7 +333,7 @@ func validBlock(t *testing.T) (*Block, crypto.KeyPair) {
 			// its a coinbase tx
 			*validTx,
 		},
-		Number: 1,
+		Number: 0,
 	}
 
 	return &b, kp
@@ -355,7 +355,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 
 	tx := transaction.Transaction{
 		PublicKey:       pkyData,
-		Nounce:          []byte{1},
+		Nounce:          []byte{0},
 		Data:            []byte{1},
 		From:            addr,
 		To:              addr,

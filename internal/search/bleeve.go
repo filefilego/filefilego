@@ -18,7 +18,7 @@ type BleveSearch struct {
 }
 
 // NewBleeveSearch constructs a new bleeve search engine.
-func NewBleeveSearch(dbPath string) (*BleveSearch, error) {
+func NewBleveSearch(dbPath string) (*BleveSearch, error) {
 	var index bleve.Index
 	var err error
 

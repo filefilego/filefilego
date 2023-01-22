@@ -14,20 +14,21 @@ type Config struct {
 }
 
 type global struct {
-	LogPathLine             bool
-	LogLevel                string
-	DataDir                 string
-	KeystoreDir             string
-	Mine                    bool
-	MineKeypath             string
-	MinePass                string
-	SearchEngine            bool
-	SearchEngineResultCount int
-	Storage                 bool
-	StorageDir              string
-	StorageToken            string
-	StorageFeesGB           string
-	DataVerifier            bool
+	NodeIdentityKeyPassphrase string
+	LogPathLine               bool
+	LogLevel                  string
+	DataDir                   string
+	KeystoreDir               string
+	Validator                 bool
+	ValidatorKeypath          string
+	ValidatorPass             string
+	SearchEngine              bool
+	SearchEngineResultCount   int
+	Storage                   bool
+	StorageDir                string
+	StorageToken              string
+	StorageFeesGB             string
+	DataVerifier              bool
 }
 
 type p2p struct {
@@ -75,6 +76,14 @@ func New(ctx *cli.Context) *Config {
 }
 
 func (conf *Config) applyFlags(ctx *cli.Context) {
+	// there is default value for data directory
+	conf.Global.DataDir = ctx.String(DataDirFlag.Name)
+	conf.Global.KeystoreDir = ctx.String(KeystoreDirFlag.Name)
+
+	if ctx.IsSet(NodeIdentityKeyPassphrase.Name) {
+		conf.Global.NodeIdentityKeyPassphrase = ctx.String(NodeIdentityKeyPassphrase.Name)
+	}
+
 	if ctx.IsSet(LogPathLine.Name) {
 		conf.Global.LogPathLine = ctx.Bool(LogPathLine.Name)
 	}
@@ -83,24 +92,16 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 		conf.Global.LogLevel = ctx.String(LogLevelFlag.Name)
 	}
 
-	if ctx.IsSet(DataDirFlag.Name) {
-		conf.Global.DataDir = ctx.String(DataDirFlag.Name)
+	if ctx.IsSet(ValidatorFlag.Name) {
+		conf.Global.Validator = ctx.Bool(ValidatorFlag.Name)
 	}
 
-	if ctx.IsSet(KeystoreDirFlag.Name) {
-		conf.Global.KeystoreDir = ctx.String(KeystoreDirFlag.Name)
+	if ctx.IsSet(ValidatorKeypath.Name) {
+		conf.Global.ValidatorKeypath = ctx.String(ValidatorKeypath.Name)
 	}
 
-	if ctx.IsSet(MineFlag.Name) {
-		conf.Global.Mine = ctx.Bool(MineFlag.Name)
-	}
-
-	if ctx.IsSet(MineKeypath.Name) {
-		conf.Global.MineKeypath = ctx.String(MineKeypath.Name)
-	}
-
-	if ctx.IsSet(MinePass.Name) {
-		conf.Global.MinePass = ctx.String(MinePass.Name)
+	if ctx.IsSet(ValidatorPass.Name) {
+		conf.Global.ValidatorPass = ctx.String(ValidatorPass.Name)
 	}
 
 	if ctx.IsSet(SearchEngine.Name) {
