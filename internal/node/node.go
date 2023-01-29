@@ -12,6 +12,7 @@ import (
 	ffgconfig "github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
+	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
@@ -27,6 +28,7 @@ import (
 
 const findPeerTimeoutSeconds = 5
 
+// PublishSubscriber is a pub sub interface.
 type PublishSubscriber interface {
 	// Publish to a topic.
 	Publish(topic string, data []byte, opts ...pubsub.PubOpt) error
@@ -44,20 +46,23 @@ type PeerFinderBootstrapper interface {
 
 // Node represents all the node functionalities
 type Node struct {
-	host              host.Host
-	dht               PeerFinderBootstrapper
-	discovery         libp2pdiscovery.Discovery
-	pubSub            PublishSubscriber
-	searchEngine      search.IndexSearcher
-	blockchain        blockchain.Interface
-	dataQueryProtocol dataquery.Interface
+	host                    host.Host
+	dht                     PeerFinderBootstrapper
+	discovery               libp2pdiscovery.Discovery
+	pubSub                  PublishSubscriber
+	searchEngine            search.IndexSearcher
+	blockchain              blockchain.Interface
+	dataQueryProtocol       dataquery.Interface
+	blockDownloaderProtocol blockdownloader.Interface
 
+	syncing     bool
+	syncingMu   sync.RWMutex
 	config      *ffgconfig.Config
 	gossipTopic *pubsub.Topic
 }
 
 // New creates a new node.
-func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface) (*Node, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -90,16 +95,122 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		return nil, errors.New("dataQuery is nil")
 	}
 
+	if blockDownloaderProtocol == nil {
+		return nil, errors.New("blockDownloader is nil")
+	}
+
 	return &Node{
-		host:              host,
-		dht:               dht,
-		discovery:         discovery,
-		pubSub:            pubSub,
-		searchEngine:      search,
-		blockchain:        blockchain,
-		dataQueryProtocol: dataQuery,
-		config:            cfg,
+		host:                    host,
+		dht:                     dht,
+		discovery:               discovery,
+		pubSub:                  pubSub,
+		searchEngine:            search,
+		blockchain:              blockchain,
+		dataQueryProtocol:       dataQuery,
+		blockDownloaderProtocol: blockDownloaderProtocol,
+		config:                  cfg,
 	}, nil
+}
+
+func (n *Node) setSyncing(val bool) {
+	n.syncingMu.Lock()
+	defer n.syncingMu.Unlock()
+	n.syncing = val
+}
+
+func (n *Node) getSyncing() bool {
+	n.syncingMu.Lock()
+	defer n.syncingMu.Unlock()
+	return n.syncing
+}
+
+// Sync the node with other peers in the network.
+func (n *Node) Sync(ctx context.Context) error {
+	if n.getSyncing() {
+		return nil
+	}
+
+	n.setSyncing(true)
+	defer n.setSyncing(false)
+
+	n.blockDownloaderProtocol.Reset()
+	var wg sync.WaitGroup
+	for _, p := range n.Peers() {
+		if p.String() == n.host.ID().String() {
+			continue
+		}
+
+		wg.Add(1)
+		go func(p peer.ID, wg *sync.WaitGroup) {
+			remotePeer, err := blockdownloader.NewRemotePeer(n.host, p)
+			if err != nil {
+				log.Warnf("failed to create remote peer: %s", err.Error())
+				wg.Done()
+				return
+			}
+
+			_, err = remotePeer.GetHeight(ctx)
+			if err != nil {
+				log.Warnf("failed to get height of remote peer: %s", err.Error())
+				wg.Done()
+				return
+			}
+
+			n.blockDownloaderProtocol.AddRemotePeer(remotePeer)
+			wg.Done()
+		}(p, &wg)
+	}
+	wg.Wait()
+	// we have a list of valid remote peers
+	remotePeersList := n.blockDownloaderProtocol.GetRemotePeers()
+	log.Infof("syncing with nodes: %d", len(remotePeersList))
+	if len(remotePeersList) > 0 {
+		// while this node is behind the network
+		// try to download blocks
+		for n.blockchain.GetHeight() <= n.blockDownloaderProtocol.GetHeighestBlockNumberFromPeers() {
+			localHeight := n.blockchain.GetHeight()
+			request := messages.BlockDownloadRequest{
+				From: localHeight + 1,
+				To:   localHeight + 100,
+			}
+
+			remotePeer, err := n.blockDownloaderProtocol.GetNextPeer()
+			if err != nil {
+				log.Warn("no remote peers to download blocks from")
+				break
+			}
+
+			if n.blockchain.GetHeight() > remotePeer.CurrentHeight() {
+				n.blockDownloaderProtocol.RemoveRemotePeer(remotePeer)
+				continue
+			}
+
+			if request.To > remotePeer.CurrentHeight() {
+				request.To = remotePeer.CurrentHeight()
+			}
+
+			blockResponse, err := remotePeer.DownloadBlocksRange(ctx, &request)
+			if err != nil || blockResponse.Error {
+				n.blockDownloaderProtocol.RemoveRemotePeer(remotePeer)
+			}
+
+			if len(blockResponse.Blocks) > 0 {
+				log.Infof("downloaded %d blocks from peer %s", len(blockResponse.Blocks), remotePeer.GetPeerID().String())
+			}
+
+			for _, blck := range blockResponse.Blocks {
+				if err := n.blockchain.PutBlockPool(block.ProtoBlockToBlock(blck)); err != nil {
+					return fmt.Errorf("failed to insert the downloaded block to blockPool: %w", err)
+				}
+			}
+
+			if blockResponse.NodeHeight <= n.blockchain.GetHeight() {
+				n.blockDownloaderProtocol.RemoveRemotePeer(remotePeer)
+			}
+		}
+	}
+
+	return nil
 }
 
 // ConnectToPeerWithMultiaddr connects to a node given its full address.
@@ -130,8 +241,7 @@ func (n *Node) DiscoverPeers(ctx context.Context, ns string) error {
 		if peer.ID == n.host.ID() {
 			continue
 		}
-		err := n.host.Connect(ctx, peer)
-		if err != nil {
+		if err := n.host.Connect(ctx, peer); err != nil {
 			log.Warnf("failed connecting to %s with error: %v", peer.ID.Pretty(), err)
 		} else {
 			log.Info("Connected to: ", peer.ID.Pretty())
@@ -146,8 +256,7 @@ func (n *Node) PublishMessageToNetwork(ctx context.Context, data []byte) error {
 		return errors.New("pubsub topic is not available")
 	}
 
-	err := n.gossipTopic.Publish(ctx, data)
-	if err != nil {
+	if err := n.gossipTopic.Publish(ctx, data); err != nil {
 		return fmt.Errorf("failed to publish message to network: %w", err)
 	}
 	return nil
@@ -204,13 +313,13 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 		protoBlocks := payload.GetBlocks().GetBlocks()
 		for _, b := range protoBlocks {
 			retrivedBlock := block.ProtoBlockToBlock(b)
+			log.Infof("block %d received from peer %s | local blockchain height: %d", retrivedBlock.Number, message.ReceivedFrom.String(), n.blockchain.GetHeight())
 			ok, err := retrivedBlock.Validate()
 			if err != nil {
 				return fmt.Errorf("failed to validate incoming block: %w", err)
 			}
 			if ok {
-				err := n.blockchain.PutBlockPool(retrivedBlock)
-				if err != nil {
+				if err := n.blockchain.PutBlockPool(retrivedBlock); err != nil {
 					return fmt.Errorf("failed to insert block to blockPool: %w", err)
 				}
 			}
@@ -228,8 +337,7 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 			return fmt.Errorf("failed to validate incoming transaction: %w", err)
 		}
 		if ok {
-			err := n.blockchain.PutMemPool(tx)
-			if err != nil {
+			if err := n.blockchain.PutMemPool(tx); err != nil {
 				return fmt.Errorf("failed to insert transaction to mempool: %w", err)
 			}
 		}

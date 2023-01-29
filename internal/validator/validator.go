@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"math/big"
 	"sort"
+
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
+	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
@@ -74,35 +76,82 @@ func New(node NetworkMessagePublisher, bchain blockchain.Interface, privateKey c
 	}, nil
 }
 
-// SealBroadcastBlock seals and broadcast the block to the network.
-func (m *Validator) SealBroadcastBlock() error {
+func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
+	balances := NewUncommitedBalance()
+	mempoolTransactions := m.blockchain.GetTransactionsFromPool()
+	mempoolTransactions = sortTransactionsByNounce(mempoolTransactions)
+
+	// set the uncommited balances of addresses
+	for _, tx := range mempoolTransactions {
+		fromBytes, err := hexutil.Decode(tx.From)
+		if err != nil {
+			log.Errorf("failed to decode from field from transaction: %s", err.Error())
+			continue
+		}
+
+		// prevent getting state for addresses which we already retrieved
+		if balances.IsInitialized(tx.From) {
+			continue
+		}
+
+		state, err := m.blockchain.GetAddressState(fromBytes)
+		if err != nil {
+			// TODO: remove them from mempool, also handle for the below cases
+			log.Errorf("failed to get address state of %s : %s", tx.From, err.Error())
+			continue
+		}
+
+		balanceFrom, err := state.GetBalance()
+		if err != nil {
+			log.Errorf("failed to get address balance of %s : %s", tx.From, err.Error())
+			continue
+		}
+
+		nounceFrom, err := state.GetNounce()
+		if err != nil {
+			log.Errorf("failed to get address nounce of %s : %s", tx.From, err.Error())
+			continue
+		}
+
+		balances.InitializeBalanceAndNounceFor(tx.From, balanceFrom, nounceFrom)
+	}
+
+	// we have the balances, go through the transactions again and see which are allowed
+	validatedTransaction := make([]transaction.Transaction, 0)
+	for _, tx := range mempoolTransactions {
+		amount, err := hexutil.DecodeBig(tx.Value)
+		if err != nil {
+			continue
+		}
+		ok := balances.Subtract(tx.From, amount, hexutil.DecodeBigFromBytesToUint64(tx.Nounce))
+		if ok {
+			validatedTransaction = append(validatedTransaction, tx)
+		}
+	}
+
+	return validatedTransaction
+}
+
+func (m *Validator) getCoinbaseTX() (*transaction.Transaction, error) {
 	mainChain, err := hexutil.Decode(transaction.ChainID)
 	if err != nil {
-		return fmt.Errorf("failed to decode chainID: %w", err)
+		return nil, fmt.Errorf("failed to decode chainID: %w", err)
 	}
 
 	publicKeyBytes, err := m.privateKey.GetPublic().Raw()
 	if err != nil {
-		return fmt.Errorf("failed to get public key bytes: %w", err)
+		return nil, fmt.Errorf("failed to get public key bytes: %w", err)
 	}
 
 	currentBlockHeight := m.blockchain.GetHeight()
 	blockReward, err := block.GetReward(currentBlockHeight + 1)
 	if err != nil {
-		return fmt.Errorf("failed to get block reward: %w", err)
+		return nil, fmt.Errorf("failed to get block reward: %w", err)
 	}
-
-	addrBytes, err := ffgcrypto.RawPublicToAddressBytes(publicKeyBytes)
-	if err != nil {
-		return fmt.Errorf("failed to get byte address from public key: %w", err)
-	}
-
-	nounce := m.blockchain.GetNounceFromMemPool(addrBytes)
-	nounceBytes := big.NewInt(0).SetUint64(nounce + 1).Bytes()
 
 	coinbaseTx := transaction.Transaction{
 		PublicKey:       make([]byte, len(publicKeyBytes)),
-		Nounce:          make([]byte, len(nounceBytes)),
+		Nounce:          []byte{0},
 		From:            m.address,
 		To:              m.address,
 		Value:           hexutil.EncodeBig(blockReward),
@@ -110,18 +159,62 @@ func (m *Validator) SealBroadcastBlock() error {
 		Chain:           mainChain,
 	}
 	copy(coinbaseTx.PublicKey, publicKeyBytes)
-	copy(coinbaseTx.Nounce, nounceBytes)
 
 	err = coinbaseTx.Sign(m.privateKey)
 	if err != nil {
-		return fmt.Errorf("failed to sign coinbase transaction: %w", err)
+		return nil, fmt.Errorf("failed to sign coinbase transaction: %w", err)
 	}
-	mempoolTransactions := m.blockchain.GetTransactionsFromPool()
-	mempoolTransactions = prependTransaction(mempoolTransactions, coinbaseTx)
+	return &coinbaseTx, nil
+}
 
-	log.Println(mempoolTransactions)
-
+// BroadcastBlock broadcasts a block to the network.
+func (m *Validator) BroadcastBlock(ctx context.Context, validBlock *block.Block) error {
+	payload := messages.GossipPayload{
+		Message: &messages.GossipPayload_Blocks{Blocks: &messages.ProtoBlocks{Blocks: []*block.ProtoBlock{block.ToProtoBlock(*validBlock)}}},
+	}
+	blockData, err := proto.Marshal(&payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal proto block: %w", err)
+	}
+	err = m.node.PublishMessageToNetwork(ctx, blockData)
+	if err != nil {
+		return fmt.Errorf("failed to publish block to the network: %w", err)
+	}
 	return nil
+}
+
+// SealBlock seals a block.
+func (m *Validator) SealBlock(timestamp int64) (*block.Block, error) {
+	coinbaseTX, err := m.getCoinbaseTX()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get coinbase transaction: %w", err)
+	}
+	mempoolTransactions := m.prepareMempoolTransactions()
+	mempoolTransactions = prependTransaction(mempoolTransactions, *coinbaseTX)
+
+	lastBlockHash := m.blockchain.GetLastBlockHash()
+	if lastBlockHash == nil {
+		return nil, errors.New("failed to get last block hash from db")
+	}
+
+	block := block.Block{
+		Timestamp:         timestamp,
+		PreviousBlockHash: lastBlockHash,
+		Transactions:      mempoolTransactions,
+		Number:            m.blockchain.GetHeight() + 1,
+	}
+
+	err = block.Sign(m.privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign block: %w", err)
+	}
+
+	err = m.blockchain.PerformStateUpdateFromBlock(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update blockchain: %w", err)
+	}
+
+	return &block, nil
 }
 
 func prependTransaction(x []transaction.Transaction, y transaction.Transaction) []transaction.Transaction {

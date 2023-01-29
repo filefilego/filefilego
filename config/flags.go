@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	NodeIdentityKeyPassphrase = cli.BoolFlag{
+	NodeIdentityKeyPassphrase = cli.StringFlag{
 		Name:  "node_identity_passphrase",
 		Usage: "Passphrase to unlock the node identity file",
 	}
@@ -83,12 +83,6 @@ var (
 	DataVerifier = cli.BoolFlag{
 		Name:  "verify",
 		Usage: "Enable data verification(if verifier in genesis)",
-	}
-
-	// rpc
-	RPCFlag = cli.BoolFlag{
-		Name:  "rpc",
-		Usage: "Enable JSON-RPC protocol",
 	}
 
 	RPCWhitelistFlag = cli.StringFlag{
@@ -175,12 +169,7 @@ var (
 		Usage: "P2P listening interface",
 	}
 
-	P2PConnectionTimeoutFlag = cli.IntFlag{
-		Name:  "connection_timeout",
-		Usage: "P2P connection timeout between peers",
-	}
-
-	P2PMinPeerThreasholdFlag = cli.IntFlag{
+	P2PMinPeersFlag = cli.IntFlag{
 		Name:  "min_peers",
 		Usage: "Minimum number of peers to start periodic bootstraper",
 	}
@@ -218,7 +207,6 @@ var AppFlags = []cli.Flag{
 	&StorageFeesGB,
 	&DataVerifier,
 
-	&RPCFlag,
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,
 	&RPCSocketEnabledFlag,
@@ -235,8 +223,7 @@ var AppFlags = []cli.Flag{
 	&MaxPeersFlag,
 	&P2PListenPortFlag,
 	&P2PListenAddrFlag,
-	&P2PConnectionTimeoutFlag,
-	&P2PMinPeerThreasholdFlag,
+	&P2PMinPeersFlag,
 	&P2PBootstraperFlag,
 	&P2PFrequencyFlag,
 }

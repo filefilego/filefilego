@@ -39,6 +39,18 @@ func TestPublicKeyToAndFromHex(t *testing.T) {
 	assert.EqualError(t, err, "malformed public key: invalid length: 2")
 }
 
+func TestPrivateKeyToHex(t *testing.T) {
+	keyPair, _ := GenerateKeyPair()
+	privateKeyString, err := PrivateKeyToHex(keyPair.PrivateKey)
+	assert.NoError(t, err)
+	assert.NotEqual(t, "", privateKeyString)
+	privKeyBytes, err := hexutil.Decode(privateKeyString)
+	assert.NoError(t, err)
+	priv, err := RestorePrivateKey(privKeyBytes)
+	assert.NoError(t, err)
+	assert.Equal(t, keyPair.PrivateKey, priv)
+}
+
 func TestPublicKeyFromBytes(t *testing.T) {
 	keyPair, err := GenerateKeyPair()
 	assert.NoError(t, err)

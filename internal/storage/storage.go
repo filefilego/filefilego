@@ -65,8 +65,7 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 	}
 
 	if !common.DirExists(storagePath) {
-		err := common.CreateDirectory(storagePath)
-		if err != nil {
+		if err := common.CreateDirectory(storagePath); err != nil {
 			return nil, fmt.Errorf("failed to create storage directory: %w", err)
 		}
 	}
@@ -83,8 +82,7 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		ExpiresAt:  time.Now().Add(time.Hour * tokenAccessHours).Unix(),
 	}
 
-	err := storage.SaveToken(token)
-	if err != nil {
+	if err := storage.SaveToken(token); err != nil {
 		return nil, fmt.Errorf("failed to save admin token: %w", err)
 	}
 
@@ -111,8 +109,7 @@ func (s *Storage) CreateSubfolders() (string, error) {
 	currentTime := time.Now()
 	folder := fmt.Sprintf("%d-%02d-%02d", currentTime.Year(), currentTime.Month(), currentTime.Day())
 	destinationPath := path.Join(s.storagePath, folder)
-	err := common.CreateDirectory(destinationPath)
-	if err != nil {
+	if err := common.CreateDirectory(destinationPath); err != nil {
 		return "", err
 	}
 	return destinationPath, nil

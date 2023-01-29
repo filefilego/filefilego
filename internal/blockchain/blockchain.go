@@ -2,10 +2,12 @@ package blockchain
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
 	sync "sync"
+	"time"
 
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
@@ -13,13 +15,19 @@ import (
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/transaction"
 	log "github.com/sirupsen/logrus"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-const addressPrefix = "address"
+const addressPrefix = "addr"
 
-const blockPrefix = "blocks"
+const blockPrefix = "bl"
 
 const lastBlockPrefix = "last_block"
+
+const blockNumberPrefix = "bn"
+
+const addressTransactionPrefix = "atx"
 
 // Interface wraps the functionality of a blockchain.
 type Interface interface {
@@ -37,6 +45,10 @@ type Interface interface {
 	CloseDB() error
 	IncrementHeightBy(h uint64)
 	GetHeight() uint64
+	GetLastBlockHash() []byte
+	PerformStateUpdateFromBlock(validBlock block.Block) error
+	GetBlockByNumber(blockNumber uint64) (*block.Block, error)
+	GetLastBlockUpdatedAt() int64
 }
 
 // Blockchain represents a blockchain structure.
@@ -51,7 +63,12 @@ type Blockchain struct {
 	height uint64
 	hmu    sync.RWMutex
 
-	genesisBlockHash []byte
+	genesisBlockHash           []byte
+	updatingBlockchainStateMux sync.RWMutex
+	updatingBlockchainState    bool
+	// lastBlockUpdateAt used to trigger syncing
+	lastBlockUpdateAt int64
+	lastBlockUpdateMu sync.RWMutex
 }
 
 // New creates a new blockchain instance.
@@ -121,6 +138,14 @@ func (b *Blockchain) InitOrLoad() error {
 	return nil
 }
 
+// GetLastBlockUpdatedAt returns the timestamp of the last blockchain update from a block.
+func (b *Blockchain) GetLastBlockUpdatedAt() int64 {
+	b.lastBlockUpdateMu.RLock()
+	defer b.lastBlockUpdateMu.RUnlock()
+
+	return b.lastBlockUpdateAt
+}
+
 // SetHeight sets the height of the blockchain.
 func (b *Blockchain) SetHeight(h uint64) {
 	b.hmu.Lock()
@@ -131,8 +156,7 @@ func (b *Blockchain) SetHeight(h uint64) {
 
 // SetLastBlockHash sets the last block hash.
 func (b *Blockchain) SetLastBlockHash(data []byte) error {
-	err := b.db.Put([]byte(lastBlockPrefix), data)
-	if err != nil {
+	if err := b.db.Put([]byte(lastBlockPrefix), data); err != nil {
 		return fmt.Errorf("failed to update last block hash in db: %w", err)
 	}
 	return nil
@@ -176,13 +200,147 @@ func (b *Blockchain) GetBlocksFromPool() []block.Block {
 	return blocks
 }
 
+// indexBlockHashByBlockNumber indexes the blockHash by the block number so we can query db by block numbers.
+func (b *Blockchain) indexBlockHashByBlockNumber(blockHash []byte, blockNumber uint64) error {
+	blockNumberBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNumberBytes, blockNumber)
+
+	if err := b.db.Put(append([]byte(blockNumberPrefix), blockNumberBytes...), blockHash); err != nil {
+		return fmt.Errorf("failed to save block number and hash into db: %w", err)
+	}
+	return nil
+}
+
+// indexTransactionsByAddress indexes the transaction by the addresses "from" and "to".
+// indexing is based on the following key: prefix_address_blocknumber_transactionIndex
+func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error {
+	blockNumberBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNumberBytes, validBlock.Number)
+
+	batch := new(leveldb.Batch)
+	for i, v := range validBlock.Transactions {
+		indexBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(indexBytes, uint64(i))
+
+		fromAddr, _ := hexutil.Decode(v.From)
+		toAddr, _ := hexutil.Decode(v.To)
+
+		prefixWithFromAddress := append([]byte(addressTransactionPrefix), fromAddr...)
+		prefixWithToAddress := append([]byte(addressTransactionPrefix), toAddr...)
+
+		// nolint:gocritic
+		prefixWithFromAddressBlocknumber := append(prefixWithFromAddress, blockNumberBytes...)
+		// nolint:gocritic
+		prefixWithToAddressBlocknumber := append(prefixWithToAddress, blockNumberBytes...)
+
+		batch.Put(append(prefixWithFromAddressBlocknumber, indexBytes...), v.Hash)
+		batch.Put(append(prefixWithToAddressBlocknumber, indexBytes...), v.Hash)
+	}
+	err := b.db.Write(batch, nil)
+	if err != nil {
+		return fmt.Errorf("failed to write batch of address and transactions: %w", err)
+	}
+
+	return nil
+}
+
+// GetAddressTransactions returns a list of transaction given the address.
+func (b *Blockchain) GetAddressTransactions(address []byte) ([]uint64, []int64, [][]byte, error) {
+	prefixWithAddress := append([]byte(addressTransactionPrefix), address...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithAddress), nil)
+
+	blockNumbers := make([]uint64, 0)
+	txIndexes := make([]int64, 0)
+	txHashes := make([][]byte, 0)
+
+	for iter.Next() {
+		key := iter.Key()
+
+		blockNumAndTxIndex := key[len(prefixWithAddress):]
+
+		blockNumbers = append(blockNumbers, binary.BigEndian.Uint64(blockNumAndTxIndex[:8]))
+		txIndexes = append(txIndexes, int64(binary.BigEndian.Uint64(blockNumAndTxIndex[8:])))
+		tmpVal := make([]byte, len(iter.Value()))
+		copy(tmpVal, iter.Value())
+		txHashes = append(txHashes, tmpVal)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("iterator error while getting transactions: %w", err)
+	}
+	return blockNumbers, txIndexes, txHashes, nil
+}
+
+// GetBlockByNumber returns a block by number.
+func (b *Blockchain) GetBlockByNumber(blockNumber uint64) (*block.Block, error) {
+	blockNumberBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNumberBytes, blockNumber)
+	blockHash, err := b.db.Get(append([]byte(blockNumberPrefix), blockNumberBytes...))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block hash by block number: %w", err)
+	}
+	foundBlock, err := b.GetBlockByHash(blockHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block by hash: %w", err)
+	}
+	return &foundBlock, nil
+}
+
+func (b *Blockchain) setUpdatingBlockchainState(updating bool) {
+	b.updatingBlockchainStateMux.Lock()
+	defer b.updatingBlockchainStateMux.Unlock()
+
+	b.updatingBlockchainState = updating
+}
+
+func (b *Blockchain) getUpdatingBlockchainState() bool {
+	b.updatingBlockchainStateMux.Lock()
+	defer b.updatingBlockchainStateMux.Unlock()
+
+	return b.updatingBlockchainState
+}
+
 // PutBlockPool adds a block to blockPool.
 func (b *Blockchain) PutBlockPool(block block.Block) error {
 	b.bmu.Lock()
-	defer b.bmu.Unlock()
-
 	blockHash := hexutil.Encode(block.Hash)
 	b.blockPool[blockHash] = block
+	b.bmu.Unlock()
+
+	// make other goroutines to return while update operation is being performed.
+	if b.getUpdatingBlockchainState() {
+		return nil
+	}
+
+	b.setUpdatingBlockchainState(true)
+	defer b.setUpdatingBlockchainState(false)
+	for {
+		nextBlockFound := false
+		lastBlockHash := b.GetLastBlockHash()
+		if lastBlockHash == nil {
+			return errors.New("last block hash is nil")
+		}
+
+		blocskPool := b.GetBlocksFromPool()
+		for _, blck := range blocskPool {
+			if bytes.Equal(blck.PreviousBlockHash, lastBlockHash) {
+				nextBlockFound = true
+				if err := b.PerformStateUpdateFromBlock(blck); err != nil {
+					log.Errorf("failed to perform blockchain update from block %s : %s", hexutil.Encode(blck.Hash), err.Error())
+				}
+
+				if err := b.DeleteFromBlockPool(blck); err != nil {
+					log.Errorf("failed to delete block %s from blockpool: %s", hexutil.Encode(blck.Hash), err.Error())
+				}
+			}
+		}
+
+		if !nextBlockFound {
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -279,8 +437,7 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 		// if from is not available, create a zero state
 		fromState.SetNounce(0)
 		fromState.SetBalance(big.NewInt(0))
-		err := b.UpdateAddressState(fromAddrBytes, fromState)
-		if err != nil {
+		if err := b.UpdateAddressState(fromAddrBytes, fromState); err != nil {
 			return fmt.Errorf("failed to initialize zero state for `from` address: %w", err)
 		}
 	}
@@ -367,6 +524,10 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 		if previousBlock.Number+1 != validBlock.Number {
 			return fmt.Errorf("block number doesn't match the continuation of previous block: current: %d,  previous: %d", validBlock.Number, previousBlock.Number)
 		}
+
+		if validBlock.Timestamp < previousBlock.Timestamp {
+			return fmt.Errorf("previous block timestamp %d is bigger than the current block %d", previousBlock.Timestamp, validBlock.Timestamp)
+		}
 	}
 
 	coinbaseTx, err := validBlock.GetAndValidateCoinbaseTransaction()
@@ -414,10 +575,19 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 		return fmt.Errorf("failed to save genesis block in DB: %w", err)
 	}
 
-	err = b.DeleteFromBlockPool(validBlock)
+	err = b.indexBlockHashByBlockNumber(validBlock.Hash, validBlock.Number)
 	if err != nil {
-		log.Warnf("failed to delete block %s from blockpool: %s", hexutil.Encode(validBlock.Hash), err.Error())
+		return fmt.Errorf("failed to index block hash by block number: %w", err)
 	}
+
+	err = b.indexTransactionsByAddresses(validBlock)
+	if err != nil {
+		return fmt.Errorf("failed to index transactions by address: %w", err)
+	}
+
+	b.lastBlockUpdateMu.Lock()
+	b.lastBlockUpdateAt = time.Now().Unix()
+	b.lastBlockUpdateMu.Unlock()
 
 	return nil
 }
@@ -444,8 +614,6 @@ func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
 func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 	b.tmu.Lock()
 	defer b.tmu.Unlock()
-
-	// TODO: handle the case when there is a tx with lower nounce than the one in db
 
 	for idx, transaction := range b.memPool {
 		// transaction is already in mempool with this nounce

@@ -342,6 +342,190 @@ func (x *DataQueryResponseProto) GetTimestamp() int64 {
 	return 0
 }
 
+// BlockchainHeightResponse represents the height of a node's blockchain.
+type BlockchainHeightResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Height uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
+}
+
+func (x *BlockchainHeightResponse) Reset() {
+	*x = BlockchainHeightResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_node_protocols_messages_messages_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BlockchainHeightResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockchainHeightResponse) ProtoMessage() {}
+
+func (x *BlockchainHeightResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_node_protocols_messages_messages_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockchainHeightResponse.ProtoReflect.Descriptor instead.
+func (*BlockchainHeightResponse) Descriptor() ([]byte, []int) {
+	return file_node_protocols_messages_messages_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BlockchainHeightResponse) GetHeight() uint64 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+// BlockDownloadRequest represents a block download request range.
+type BlockDownloadRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	From uint64 `protobuf:"varint,1,opt,name=from,proto3" json:"from,omitempty"`
+	To   uint64 `protobuf:"varint,2,opt,name=to,proto3" json:"to,omitempty"`
+}
+
+func (x *BlockDownloadRequest) Reset() {
+	*x = BlockDownloadRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_node_protocols_messages_messages_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BlockDownloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockDownloadRequest) ProtoMessage() {}
+
+func (x *BlockDownloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_node_protocols_messages_messages_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockDownloadRequest.ProtoReflect.Descriptor instead.
+func (*BlockDownloadRequest) Descriptor() ([]byte, []int) {
+	return file_node_protocols_messages_messages_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BlockDownloadRequest) GetFrom() uint64 {
+	if x != nil {
+		return x.From
+	}
+	return 0
+}
+
+func (x *BlockDownloadRequest) GetTo() uint64 {
+	if x != nil {
+		return x.To
+	}
+	return 0
+}
+
+// BlockDownloadResponse represents a block download response.
+type BlockDownloadResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	From       uint64              `protobuf:"varint,1,opt,name=from,proto3" json:"from,omitempty"`
+	To         uint64              `protobuf:"varint,2,opt,name=to,proto3" json:"to,omitempty"`
+	Error      bool                `protobuf:"varint,3,opt,name=error,proto3" json:"error,omitempty"`
+	NodeHeight uint64              `protobuf:"varint,4,opt,name=node_height,json=nodeHeight,proto3" json:"node_height,omitempty"`
+	Blocks     []*block.ProtoBlock `protobuf:"bytes,5,rep,name=blocks,proto3" json:"blocks,omitempty"`
+}
+
+func (x *BlockDownloadResponse) Reset() {
+	*x = BlockDownloadResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_node_protocols_messages_messages_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BlockDownloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockDownloadResponse) ProtoMessage() {}
+
+func (x *BlockDownloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_node_protocols_messages_messages_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockDownloadResponse.ProtoReflect.Descriptor instead.
+func (*BlockDownloadResponse) Descriptor() ([]byte, []int) {
+	return file_node_protocols_messages_messages_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BlockDownloadResponse) GetFrom() uint64 {
+	if x != nil {
+		return x.From
+	}
+	return 0
+}
+
+func (x *BlockDownloadResponse) GetTo() uint64 {
+	if x != nil {
+		return x.To
+	}
+	return 0
+}
+
+func (x *BlockDownloadResponse) GetError() bool {
+	if x != nil {
+		return x.Error
+	}
+	return false
+}
+
+func (x *BlockDownloadResponse) GetNodeHeight() uint64 {
+	if x != nil {
+		return x.NodeHeight
+	}
+	return 0
+}
+
+func (x *BlockDownloadResponse) GetBlocks() []*block.ProtoBlock {
+	if x != nil {
+		return x.Blocks
+	}
+	return nil
+}
+
 var File_node_protocols_messages_messages_proto protoreflect.FileDescriptor
 
 var file_node_protocols_messages_messages_proto_rawDesc = []byte{
@@ -392,7 +576,24 @@ var file_node_protocols_messages_messages_proto_rawDesc = []byte{
 	0x61, 0x62, 0x6c, 0x65, 0x4e, 0x6f, 0x64, 0x65, 0x73, 0x18, 0x07, 0x20, 0x03, 0x28, 0x0c, 0x52,
 	0x10, 0x75, 0x6e, 0x61, 0x76, 0x61, 0x69, 0x6c, 0x61, 0x62, 0x6c, 0x65, 0x4e, 0x6f, 0x64, 0x65,
 	0x73, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x08,
-	0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x42,
+	0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22,
+	0x32, 0x0a, 0x18, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x48, 0x65, 0x69,
+	0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x68,
+	0x65, 0x69, 0x67, 0x68, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x68, 0x65, 0x69,
+	0x67, 0x68, 0x74, 0x22, 0x3a, 0x0a, 0x14, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x44, 0x6f, 0x77, 0x6e,
+	0x6c, 0x6f, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x66,
+	0x72, 0x6f, 0x6d, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x12,
+	0x0e, 0x0a, 0x02, 0x74, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x74, 0x6f, 0x22,
+	0x9d, 0x01, 0x0a, 0x15, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f, 0x61,
+	0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x66, 0x72, 0x6f,
+	0x6d, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x12, 0x0e, 0x0a,
+	0x02, 0x74, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x74, 0x6f, 0x12, 0x14, 0x0a,
+	0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x65, 0x72,
+	0x72, 0x6f, 0x72, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x6f, 0x64, 0x65, 0x5f, 0x68, 0x65, 0x69, 0x67,
+	0x68, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x6e, 0x6f, 0x64, 0x65, 0x48, 0x65,
+	0x69, 0x67, 0x68, 0x74, 0x12, 0x29, 0x0a, 0x06, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0x18, 0x05,
+	0x20, 0x03, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x50, 0x72, 0x6f,
+	0x74, 0x6f, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x52, 0x06, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0x42,
 	0x43, 0x5a, 0x41, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x66, 0x69,
 	0x6c, 0x65, 0x66, 0x69, 0x6c, 0x65, 0x67, 0x6f, 0x2f, 0x66, 0x69, 0x6c, 0x65, 0x66, 0x69, 0x6c,
 	0x65, 0x67, 0x6f, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x6e, 0x6f, 0x64,
@@ -412,25 +613,29 @@ func file_node_protocols_messages_messages_proto_rawDescGZIP() []byte {
 	return file_node_protocols_messages_messages_proto_rawDescData
 }
 
-var file_node_protocols_messages_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_node_protocols_messages_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_node_protocols_messages_messages_proto_goTypes = []interface{}{
 	(*GossipPayload)(nil),                // 0: messages.GossipPayload
 	(*ProtoBlocks)(nil),                  // 1: messages.ProtoBlocks
 	(*DataQueryRequestProto)(nil),        // 2: messages.DataQueryRequestProto
 	(*DataQueryResponseProto)(nil),       // 3: messages.DataQueryResponseProto
-	(*transaction.ProtoTransaction)(nil), // 4: transaction.ProtoTransaction
-	(*block.ProtoBlock)(nil),             // 5: block.ProtoBlock
+	(*BlockchainHeightResponse)(nil),     // 4: messages.BlockchainHeightResponse
+	(*BlockDownloadRequest)(nil),         // 5: messages.BlockDownloadRequest
+	(*BlockDownloadResponse)(nil),        // 6: messages.BlockDownloadResponse
+	(*transaction.ProtoTransaction)(nil), // 7: transaction.ProtoTransaction
+	(*block.ProtoBlock)(nil),             // 8: block.ProtoBlock
 }
 var file_node_protocols_messages_messages_proto_depIdxs = []int32{
 	1, // 0: messages.GossipPayload.blocks:type_name -> messages.ProtoBlocks
-	4, // 1: messages.GossipPayload.transaction:type_name -> transaction.ProtoTransaction
+	7, // 1: messages.GossipPayload.transaction:type_name -> transaction.ProtoTransaction
 	2, // 2: messages.GossipPayload.query:type_name -> messages.DataQueryRequestProto
-	5, // 3: messages.ProtoBlocks.blocks:type_name -> block.ProtoBlock
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8, // 3: messages.ProtoBlocks.blocks:type_name -> block.ProtoBlock
+	8, // 4: messages.BlockDownloadResponse.blocks:type_name -> block.ProtoBlock
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_node_protocols_messages_messages_proto_init() }
@@ -487,6 +692,42 @@ func file_node_protocols_messages_messages_proto_init() {
 				return nil
 			}
 		}
+		file_node_protocols_messages_messages_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BlockchainHeightResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_node_protocols_messages_messages_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BlockDownloadRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_node_protocols_messages_messages_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BlockDownloadResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_node_protocols_messages_messages_proto_msgTypes[0].OneofWrappers = []interface{}{
 		(*GossipPayload_Blocks)(nil),
@@ -499,7 +740,7 @@ func file_node_protocols_messages_messages_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_node_protocols_messages_messages_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

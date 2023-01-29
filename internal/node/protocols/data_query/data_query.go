@@ -11,13 +11,14 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 )
 
 // ProtocolID represents the response protocol version
-const ProtocolID = "/ffg/dqresponse/1.0.0"
+const ProtocolID = "/ffg/dataquery_response/1.0.0"
 
 // Interface represents a data quertier.
 type Interface interface {
@@ -31,6 +32,7 @@ type Interface interface {
 
 // Protocol wraps the data query protocols and handlers
 type Protocol struct {
+	host             host.Host
 	queryHistory     map[string]messages.DataQueryRequest
 	queryResponse    map[string][]messages.DataQueryResponse
 	queryHistoryMux  sync.RWMutex
@@ -38,11 +40,18 @@ type Protocol struct {
 }
 
 // New creates a data query protocol.
-func New() *Protocol {
-	return &Protocol{
+func New(h host.Host) (*Protocol, error) {
+	if h == nil {
+		return nil, errors.New("host is nil")
+	}
+	p := &Protocol{
+		host:          h,
 		queryHistory:  make(map[string]messages.DataQueryRequest),
 		queryResponse: make(map[string][]messages.DataQueryResponse),
 	}
+
+	p.host.SetStreamHandler(ProtocolID, p.HandleIncomingDataQueryResponse)
+	return p, nil
 }
 
 // PutQueryHistory puts the query history.

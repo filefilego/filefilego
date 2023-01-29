@@ -13,6 +13,7 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
@@ -41,16 +42,20 @@ func TestNew(t *testing.T) {
 	kademliaDHT, err := dht.New(context.Background(), h, dht.Mode(dht.ModeServer))
 	assert.NoError(t, err)
 
+	dataQueryProtocol, err := dataquery.New(h)
+	assert.NoError(t, err)
+
 	cases := map[string]struct {
-		host              host.Host
-		dht               PeerFinderBootstrapper
-		discovery         libp2pdiscovery.Discovery
-		pubSub            PublishSubscriber
-		searchEngine      search.IndexSearcher
-		blockchain        blockchain.Interface
-		dataQueryProtocol dataquery.Interface
-		config            *ffgconfig.Config
-		expErr            string
+		host                    host.Host
+		dht                     PeerFinderBootstrapper
+		discovery               libp2pdiscovery.Discovery
+		pubSub                  PublishSubscriber
+		searchEngine            search.IndexSearcher
+		blockchain              blockchain.Interface
+		dataQueryProtocol       dataquery.Interface
+		blockDownloaderProtocol blockdownloader.Interface
+		config                  *ffgconfig.Config
+		expErr                  string
 	}{
 		"no config": {
 			expErr: "config is nil",
@@ -104,7 +109,7 @@ func TestNew(t *testing.T) {
 			blockchain:   &blockchain.Blockchain{},
 			expErr:       "dataQuery is nil",
 		},
-		"success": {
+		"no blockDownloader": {
 			config:            &ffgconfig.Config{},
 			host:              h,
 			dht:               kademliaDHT,
@@ -112,7 +117,19 @@ func TestNew(t *testing.T) {
 			searchEngine:      &search.BleveSearch{},
 			pubSub:            &pubsub.PubSub{},
 			blockchain:        &blockchain.Blockchain{},
-			dataQueryProtocol: dataquery.New(),
+			dataQueryProtocol: dataQueryProtocol,
+			expErr:            "blockDownloader is nil",
+		},
+		"success": {
+			config:                  &ffgconfig.Config{},
+			host:                    h,
+			dht:                     kademliaDHT,
+			discovery:               &drouting.RoutingDiscovery{},
+			searchEngine:            &search.BleveSearch{},
+			pubSub:                  &pubsub.PubSub{},
+			blockchain:              &blockchain.Blockchain{},
+			dataQueryProtocol:       dataQueryProtocol,
+			blockDownloaderProtocol: &blockdownloader.Protocol{},
 		},
 	}
 
@@ -120,7 +137,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain, tt.dataQueryProtocol)
+			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.blockchain, tt.dataQueryProtocol, tt.blockDownloaderProtocol)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -230,10 +247,13 @@ func TestBootstrap(t *testing.T) {
 
 func TestNodeMethods(t *testing.T) {
 	ctx := context.Background()
-
 	n1 := createNode(t, "65512", "node1search.bin", "mainchaindb1.bin")
 	n2 := createNode(t, "65513", "node2search.bin", "mainchaindb2.bin")
 	n3 := createNode(t, "65514", "node3search.bin", "mainchaindb3.bin")
+
+	assert.Equal(t, uint64(0), n1.blockchain.GetHeight())
+	assert.Equal(t, uint64(0), n2.blockchain.GetHeight())
+	assert.Equal(t, uint64(0), n3.blockchain.GetHeight())
 
 	t.Cleanup(func() {
 		n1.searchEngine.Close()
@@ -353,10 +373,10 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// mempool should be empty
-	transactions := n2.blockchain.GetTransactionsFromPool()
+	transactions := n1.blockchain.GetTransactionsFromPool()
 	assert.Empty(t, transactions)
 
 	// create a valid transaction and propagate to network
@@ -366,13 +386,12 @@ func TestNodeMethods(t *testing.T) {
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
+
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// mempool should not be empty
-	transactions = n2.blockchain.GetTransactionsFromPool()
-	assert.NotEmpty(t, transactions)
 	transactions = n1.blockchain.GetTransactionsFromPool()
 	assert.NotEmpty(t, transactions)
 
@@ -387,14 +406,17 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// blockpool should be empty
-	blockPoolData := n2.blockchain.GetBlocksFromPool()
+	blockPoolData := n1.blockchain.GetBlocksFromPool()
 	assert.Empty(t, blockPoolData)
 
-	// valid block
+	// valid block is broadcasted and the other nodes blockchain has been updated
+	genesisblockValid, err := block.GetGenesisBlock()
+	assert.NoError(t, err)
 	validBlock, kp := validBlock(t)
+	validBlock.PreviousBlockHash = genesisblockValid.Hash
 	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
 		Address: kp.Address,
 	})
@@ -407,9 +429,8 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 	err = n3.PublishMessageToNetwork(ctx, blockData)
 	assert.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
-	blockPoolData = n2.blockchain.GetBlocksFromPool()
-	assert.NotEmpty(t, blockPoolData)
+	time.Sleep(200 * time.Millisecond)
+	assert.Equal(t, uint64(1), n1.blockchain.GetHeight())
 }
 
 func newHost(t *testing.T, port string) host.Host {
@@ -423,7 +444,7 @@ func newHost(t *testing.T, port string) host.Host {
 	assert.NoError(t, err)
 
 	host, err := libp2p.New(libp2p.Identity(priv),
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%s", port)),
 		libp2p.Ping(false),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
@@ -470,9 +491,16 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	bchain, err := blockchain.New(blockchainDB, genesisHash)
 	assert.NoError(t, err)
 
-	dataQueryProtocol := dataquery.New()
+	err = bchain.InitOrLoad()
+	assert.NoError(t, err)
 
-	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
+	dataQueryProtocol, err := dataquery.New(host)
+	assert.NoError(t, err)
+
+	blockDownloader, err := blockdownloader.New(bchain, host)
+	assert.NoError(t, err)
+
+	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol, blockDownloader)
 	assert.NoError(t, err)
 	return node
 }

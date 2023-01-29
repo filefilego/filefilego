@@ -295,7 +295,7 @@ func TestMarshalUnmarshalProtoBlock(t *testing.T) {
 	}
 }
 
-func TestProtoBlockFunctions(t *testing.T) {
+func TestProtoBlockMethods(t *testing.T) {
 	block, kp := validBlock(t)
 	err := block.Sign(kp.PrivateKey)
 	assert.NoError(t, err)

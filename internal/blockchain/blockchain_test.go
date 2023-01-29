@@ -94,9 +94,14 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	assert.Equal(t, *genBlock, derviedGenesis)
 	assert.EqualValues(t, derviedGenesis.Hash, blockchain.GetLastBlockHash())
 
+	genesisByHeight, err := blockchain.GetBlockByNumber(0)
+	assert.NoError(t, err)
+	assert.Equal(t, *genBlock, *genesisByHeight)
+
 	// blockchain already has the genesis block
 	// add another block to the blockchain with a different verifier
 	validBlock2, kp, _ := validBlock(t, 1)
+	addrOfBlock2Verifier := kp.Address
 	validBlock2.PreviousBlockHash = make([]byte, len(genBlock.Hash))
 	copy(validBlock2.PreviousBlockHash, genBlock.Hash)
 
@@ -110,6 +115,11 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	})
 	err = blockchain.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)
+
+	block2ByHeight, err := blockchain.GetBlockByNumber(1)
+	assert.NoError(t, err)
+	assert.EqualValues(t, validBlock2.Hash, block2ByHeight.Hash)
+
 	// from has 39999999999999999999
 	from2, err := hexutil.Decode(validBlock2.Transactions[0].From)
 	assert.NoError(t, err)
@@ -147,6 +157,24 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	// perform another update with the same block should throw an error
 	err = blockchain.PerformStateUpdateFromBlock(*validBlock3)
 	assert.EqualError(t, err, "block is already within the blockchain")
+
+	block3ByHeight, err := blockchain.GetBlockByNumber(2)
+	assert.NoError(t, err)
+	assert.EqualValues(t, validBlock3.Hash, block3ByHeight.Hash)
+
+	// GetAddressTransactions
+	addressOfBlock2Verifier, _ := hexutil.Decode(addrOfBlock2Verifier)
+	blockNumbers, txIndexes, txHashes, err := blockchain.GetAddressTransactions(addressOfBlock2Verifier)
+	assert.NoError(t, err)
+	assert.Len(t, blockNumbers, 2)
+	// both transactions are in the same block
+	assert.Equal(t, uint64(1), blockNumbers[0])
+	assert.Equal(t, uint64(1), blockNumbers[1])
+
+	assert.Len(t, txIndexes, 2)
+	assert.Len(t, txHashes, 2)
+	assert.EqualValues(t, validBlock2.Transactions[0].Hash, txHashes[0])
+	assert.EqualValues(t, validBlock2.Transactions[1].Hash, txHashes[1])
 
 	// load and verify blockchain
 	// height should be 2
@@ -273,7 +301,7 @@ func TestGetUpdateAddressState(t *testing.T) {
 	assert.Equal(t, state, retrivedState)
 }
 
-func TestMemPoolBlockPoolFunctions(t *testing.T) {
+func TestMemPoolBlockPoolMethods(t *testing.T) {
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 	db, err := leveldb.OpenFile("pool.db", nil)
@@ -289,6 +317,9 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 	blockchain, err := New(driver, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
+	err = blockchain.InitOrLoad()
+	assert.NoError(t, err)
+
 	transactions := blockchain.GetTransactionsFromPool()
 	assert.Len(t, transactions, 0)
 
@@ -296,12 +327,12 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 		Hash:            []byte{10},
 		Signature:       []byte{53},
 		PublicKey:       []byte{40},
-		Nounce:          []byte{50},
+		Nounce:          []byte{1},
 		Data:            []byte{20},
 		From:            "0x01",
 		To:              "0x02",
 		Value:           "0x03",
-		TransactionFees: "0x1",
+		TransactionFees: "0x0",
 		Chain:           []byte{1},
 	}
 	err = blockchain.PutMemPool(tx)
@@ -325,7 +356,7 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 	assert.Equal(t, "0x2", transactions[0].TransactionFees)
 
 	nounce := blockchain.GetNounceFromMemPool([]byte{1})
-	assert.Equal(t, uint64(50), nounce)
+	assert.Equal(t, uint64(1), nounce)
 
 	err = blockchain.DeleteFromMemPool(tx)
 	assert.NoError(t, err)
@@ -333,24 +364,47 @@ func TestMemPoolBlockPoolFunctions(t *testing.T) {
 	transactions = blockchain.GetTransactionsFromPool()
 	assert.Len(t, transactions, 0)
 
-	block := block.Block{
-		Hash:              []byte{1},
-		MerkleHash:        []byte{2},
-		Signature:         []byte{12},
-		Timestamp:         int64(123),
-		Data:              []byte{3},
-		PreviousBlockHash: []byte{3},
-		Number:            1,
-	}
+	validBlock, kp, _ := validBlock(t, 1)
+	validBlock.PreviousBlockHash = make([]byte, len(genesisblockValid.Hash))
+	copy(validBlock.PreviousBlockHash, genesisblockValid.Hash)
+
+	err = validBlock.Sign(kp.PrivateKey)
+	assert.NoError(t, err)
+	pubKeyBytes, err := kp.PublicKey.Raw()
+	assert.NoError(t, err)
+	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+		Address:   kp.Address,
+		PublicKey: hexutil.Encode(pubKeyBytes),
+	})
 
 	blocks := blockchain.GetBlocksFromPool()
 	assert.Len(t, blocks, 0)
+	err = blockchain.PutBlockPool(*validBlock)
+	assert.NoError(t, err)
+
+	// at this stage blockchain was updated
+	assert.Equal(t, uint64(1), blockchain.GetHeight())
+
+	blocks = blockchain.GetBlocksFromPool()
+	assert.Len(t, blocks, 0)
+
+	// future block
+	block := block.Block{
+		Hash:              []byte{2, 3, 4},
+		MerkleHash:        []byte{4, 3},
+		Signature:         []byte{22},
+		Timestamp:         time.Now().Unix(),
+		Data:              []byte{3},
+		PreviousBlockHash: genesisblockValid.Hash,
+		Transactions:      []transaction.Transaction{tx},
+		Number:            10,
+	}
+
 	err = blockchain.PutBlockPool(block)
 	assert.NoError(t, err)
 
 	blocks = blockchain.GetBlocksFromPool()
 	assert.Len(t, blocks, 1)
-	assert.Equal(t, blocks[0], block)
 
 	err = blockchain.DeleteFromBlockPool(block)
 	assert.NoError(t, err)

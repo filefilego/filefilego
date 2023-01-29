@@ -39,3 +39,23 @@ message DataQueryResponseProto {
     repeated bytes unavailableNodes = 7;
     int64 timestamp = 8;
 }
+
+// BlockchainHeightResponse represents the height of a node's blockchain.
+message BlockchainHeightResponse {
+    uint64 height = 1;
+}
+
+// BlockDownloadRequest represents a block download request range.
+message BlockDownloadRequest {
+    uint64 from = 1;
+    uint64 to = 2;
+}
+
+// BlockDownloadResponse represents a block download response.
+message BlockDownloadResponse {
+    uint64 from = 1;
+    uint64 to = 2;
+    bool error = 3;
+    uint64 node_height = 4;
+    repeated block.ProtoBlock blocks = 5;
+}

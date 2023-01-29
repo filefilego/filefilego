@@ -6,7 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 func TestNew(t *testing.T) {
@@ -92,4 +94,8 @@ func (e dbEngineStub) Close() error {
 
 func (e dbEngineStub) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
 	return e.err
+}
+
+func (e dbEngineStub) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
+	return nil
 }

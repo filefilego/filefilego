@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // DBPutGetter represents a database engine.
@@ -14,6 +16,7 @@ type DBPutGetter interface {
 	Put(key, value []byte, wo *opt.WriteOptions) error
 	Close() error
 	Write(batch *leveldb.Batch, wo *opt.WriteOptions) error
+	NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator
 }
 
 // Database represents the database functionalities.
@@ -22,6 +25,7 @@ type Database interface {
 	Get(key []byte) ([]byte, error)
 	Close() error
 	Write(batch *leveldb.Batch, wo *opt.WriteOptions) error
+	NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator
 }
 
 type DB struct {
@@ -64,4 +68,9 @@ func (d *DB) Close() error {
 // Write batch write.
 func (d *DB) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
 	return d.engine.Write(batch, wo)
+}
+
+// NewIterator creates a new database iterator.
+func (d *DB) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
+	return d.engine.NewIterator(slice, ro)
 }

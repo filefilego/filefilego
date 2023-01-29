@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAddressStateFunctions(t *testing.T) {
+func TestAddressStateMethods(t *testing.T) {
 	addrState := AddressState{
 		Balance: []byte{3},
 		Nounce:  []byte{4},

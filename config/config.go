@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/urfave/cli/v2"
 )
 
@@ -33,11 +34,10 @@ type global struct {
 
 type p2p struct {
 	GossipMaxMessageSize int
+	MinPeers             int
 	MaxPeers             int
 	ListenPort           int
 	ListenAddress        string
-	ConnectionTimeout    int
-	MinPeersThreashold   int
 	Bootstraper          bootstraper
 }
 
@@ -47,7 +47,6 @@ type bootstraper struct {
 }
 
 type rpc struct {
-	Enabled         bool
 	Whitelist       []string
 	EnabledServices []string
 
@@ -70,7 +69,38 @@ type unixDomainSocket struct {
 
 // New creates a new configuration.
 func New(ctx *cli.Context) *Config {
-	conf := &Config{}
+	conf := &Config{
+		Global: global{
+			SearchEngineResultCount: 100,
+		},
+		RPC: rpc{
+			Whitelist:       []string{},
+			EnabledServices: []string{},
+			HTTP: httpWSConfig{
+				Enabled:          false,
+				ListenPort:       8090,
+				ListenAddress:    "127.0.0.1",
+				CrossOriginValue: "*",
+			},
+			Websocket: httpWSConfig{
+				Enabled:          false,
+				ListenPort:       8091,
+				ListenAddress:    "127.0.0.1",
+				CrossOriginValue: "*",
+			},
+			Socket: unixDomainSocket{
+				Enabled: false,
+				Path:    "",
+			},
+		},
+		P2P: p2p{
+			GossipMaxMessageSize: 10 * pubsub.DefaultMaxMessageSize,
+			MinPeers:             100,
+			MaxPeers:             400,
+			ListenPort:           10209,
+			ListenAddress:        "127.0.0.1",
+		},
+	}
 	conf.applyFlags(ctx)
 	return conf
 }
@@ -130,11 +160,6 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(DataVerifier.Name) {
 		conf.Global.DataVerifier = ctx.Bool(DataVerifier.Name)
-	}
-
-	// RPC
-	if ctx.IsSet(RPCFlag.Name) {
-		conf.RPC.Enabled = ctx.Bool(RPCFlag.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {
@@ -205,12 +230,8 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 		conf.P2P.ListenAddress = ctx.String(P2PListenAddrFlag.Name)
 	}
 
-	if ctx.IsSet(P2PConnectionTimeoutFlag.Name) {
-		conf.P2P.ConnectionTimeout = ctx.Int(P2PConnectionTimeoutFlag.Name)
-	}
-
-	if ctx.IsSet(P2PMinPeerThreasholdFlag.Name) {
-		conf.P2P.MinPeersThreashold = ctx.Int(P2PMinPeerThreasholdFlag.Name)
+	if ctx.IsSet(P2PMinPeersFlag.Name) {
+		conf.P2P.MinPeers = ctx.Int(P2PMinPeersFlag.Name)
 	}
 
 	if ctx.IsSet(P2PBootstraperFlag.Name) {

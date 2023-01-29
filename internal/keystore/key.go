@@ -124,8 +124,7 @@ func UnmarshalKey(data []byte, passphrase string) (*Key, error) {
 		return nil, errors.New("passphrase is empty")
 	}
 	encjson := encryptedKeyJSON{}
-	err := json.Unmarshal(data, &encjson)
-	if err != nil {
+	if err := json.Unmarshal(data, &encjson); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
 	}
 	if encjson.Version != ksVersion {

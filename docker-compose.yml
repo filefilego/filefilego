@@ -1,0 +1,50 @@
+version: "3"
+services:
+  nameresolver:
+    image: dvdarias/docker-hoster
+    volumes: 
+      - /var/run/docker.sock:/tmp/docker.sock
+      - /etc/hosts:/tmp/hosts
+  node1:
+    hostname: node1.local
+    depends_on: 
+      - nameresolver
+    image: ffg
+    extra_hosts:
+        - "host.docker.internal:host-gateway"
+    command:
+        - /bin/bash
+        - -c
+        - |
+          rm /root/.filefilego_data/keystore/node_identity.json
+          ./filefilego account create_node_key admin
+          ./filefilego --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+  node2:
+    hostname: node2.local
+    image: ffg
+    extra_hosts:
+        - "host.docker.internal:host-gateway"
+    command:
+        - /bin/bash
+        - -c
+        - |
+          rm /root/.filefilego_data/keystore/node_identity.json
+          ./filefilego account create_node_key admin
+          ./filefilego --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+    depends_on:
+      - node1
+      
+  # verifier:
+  #   hostname: verifier.local
+  #   image: ffg
+  #   extra_hosts:
+  #       - "host.docker.internal:host-gateway"
+  #   volumes:
+  #       - $FFG_VERIFIER_PATH/1.json:/root/.filefilego_data/keystore/node_identity.json
+  #   command:
+  #       - /bin/bash
+  #       - -c
+  #       - |
+  #         ./filefilego --http --http_port=8090 --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX" --rpcservices="channel,transaction,account,block,ffg" --binlayer --binlayerdir="/home" --binlayer_token="1234" --logpathline --downloadpath="/root/" --nodepass="admin"
+  #   depends_on:
+  #     - node2

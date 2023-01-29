@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/keystore"
 	"github.com/filefilego/filefilego/internal/node"
+	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	internalrpc "github.com/filefilego/filefilego/internal/rpc"
 	"github.com/filefilego/filefilego/internal/search"
@@ -40,6 +42,10 @@ import (
 )
 
 const blockValidatorIntervalSeconds = 10
+
+const syncIntervalSeconds = 18
+
+const triggerSyncSinceLastUpdateSeconds = 15
 
 func main() {
 	app := &cli.App{}
@@ -85,8 +91,8 @@ func run(ctx *cli.Context) error {
 	}
 
 	connManager, err := connmgr.NewConnManager(
-		100, // Lowwater
-		400, // HighWater,
+		conf.P2P.MinPeers, // Lowwater
+		conf.P2P.MaxPeers, // HighWater,
 		connmgr.WithGracePeriod(time.Minute),
 	)
 	if err != nil {
@@ -94,7 +100,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	host, err := libp2p.New(libp2p.Identity(key.PrivateKey),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/8090"),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/%s/tcp/%d", conf.P2P.ListenAddress, conf.P2P.ListenPort)),
 		libp2p.Ping(false),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
@@ -144,7 +150,7 @@ func run(ctx *cli.Context) error {
 
 	optsPS := []pubsub.Option{
 		pubsub.WithMessageSigning(true),
-		pubsub.WithMaxMessageSize(10 * pubsub.DefaultMaxMessageSize), // 10 MB
+		pubsub.WithMaxMessageSize(conf.P2P.GossipMaxMessageSize), // 10 MB
 	}
 
 	gossip, err := pubsub.NewGossipSub(ctx.Context, host, optsPS...)
@@ -162,16 +168,43 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup blockchain: %w", err)
 	}
 
+	log.Info("verifying local blockchain")
+	start := time.Now()
 	err = bchain.InitOrLoad()
+	elapsed := time.Since(start)
+	log.Infof("finished verifying local blockchain in %s", elapsed)
 	if err != nil {
 		return fmt.Errorf("failed to start up blockchain: %w", err)
 	}
 
-	dataQueryProtocol := dataquery.New()
+	dataQueryProtocol, err := dataquery.New(host)
+	if err != nil {
+		return fmt.Errorf("failed to setup data query protocol: %w", err)
+	}
 
-	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol)
+	blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
+	if err != nil {
+		return fmt.Errorf("failed to setup block downloader protocol: %w", err)
+	}
+
+	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
 	if err != nil {
 		return fmt.Errorf("failed to setup node: %w", err)
+	}
+
+	// advertise
+	node.Advertise(ctx.Context, "ffgnet")
+
+	// listen for pubsub messages
+	err = node.HandleIncomingMessages(ctx.Context, "ffgnet_pubsub")
+	if err != nil {
+		return fmt.Errorf("failed to start handling incoming pub sub messages: %w", err)
+	}
+
+	// bootstrap
+	err = node.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
 
 	// validator node
@@ -194,18 +227,39 @@ func run(ctx *cli.Context) error {
 		go func(validator *validator.Validator) {
 			for {
 				<-time.After(blockValidatorIntervalSeconds * time.Second)
-				err := validator.SealBroadcastBlock()
+				sealedBlock, err := validator.SealBlock(time.Now().Unix())
 				if err != nil {
 					log.Errorf("sealing block failed: %s", err.Error())
+					continue
 				}
+				log.Infof("block %d sealed from verifier %s", sealedBlock.Number, key.Address)
+				// broadcast
+				go func() {
+					log.Infof("broadcasting block %d to %d peers", sealedBlock.Number, node.Peers().Len()-1)
+					if err := validator.BroadcastBlock(ctx.Context, sealedBlock); err != nil {
+						log.Errorf("failed to publish block to the network: %s", err.Error())
+					}
+				}()
 			}
 		}(blockValidator)
 	}
 
+	go func() {
+		for {
+			<-time.After(syncIntervalSeconds * time.Second)
+			if time.Now().Unix()-bchain.GetLastBlockUpdatedAt() >= triggerSyncSinceLastUpdateSeconds {
+				err := node.Sync(ctx.Context)
+				if err != nil {
+					log.Errorf("failed to sync: %s", err.Error())
+					return
+				}
+				log.Infof("blockchain syncing finished with current blockchain height at %d", bchain.GetHeight())
+			}
+		}
+	}()
+
 	peers := node.Peers()
 	log.Println(peers)
-
-	port := ":8081"
 
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
 	if err != nil {
@@ -235,10 +289,33 @@ func run(ctx *cli.Context) error {
 	r.Handle("/uploads", storageEngine)
 	r.HandleFunc("/auth", storageEngine.Authenticate)
 
-	server := &http.Server{
-		Addr:              port,
-		ReadHeaderTimeout: 3 * time.Second,
+	// unix socket
+	unixserver := &http.Server{
+		ReadHeaderTimeout: 2 * time.Second,
 		Handler:           r,
+	}
+
+	if conf.RPC.Socket.Enabled {
+		unixListener, err := net.Listen("unix", conf.RPC.Socket.Path)
+		if err != nil {
+			return fmt.Errorf("failed to listen to unix socket: %w", err)
+		}
+
+		go func() {
+			if err := unixserver.Serve(unixListener); err != nil {
+				log.Fatalf("failed to start unix socket: %s", err.Error())
+			}
+		}()
+	}
+
+	// http
+	server := &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", conf.RPC.HTTP.ListenAddress, conf.RPC.HTTP.ListenPort),
+		ReadHeaderTimeout: 2 * time.Second,
+	}
+
+	if conf.RPC.HTTP.Enabled {
+		server.Handler = r
 	}
 
 	return server.ListenAndServe()

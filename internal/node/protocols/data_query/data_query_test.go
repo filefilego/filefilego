@@ -20,21 +20,24 @@ import (
 )
 
 func TestDataQueryProtocol(t *testing.T) {
-	protocol1 := New()
-	protocol2 := New()
-
 	h1, privKey1, pubkey1 := newHost(t, "7965")
 	h2, _, _ := newHost(t, "7966")
 
-	h1.SetStreamHandler(ProtocolID, protocol1.HandleIncomingDataQueryResponse)
-	h2.SetStreamHandler(ProtocolID, protocol2.HandleIncomingDataQueryResponse)
+	protocol1, err := New(nil)
+	assert.EqualError(t, err, "host is nil")
+	assert.Nil(t, protocol1)
+
+	protocol1, err = New(h1)
+	assert.NoError(t, err)
+	protocol2, err := New(h2)
+	assert.NoError(t, err)
 
 	peer2Info := peer.AddrInfo{
 		ID:    h2.ID(),
 		Addrs: h2.Addrs(),
 	}
 
-	err := h1.Connect(context.Background(), peer2Info)
+	err = h1.Connect(context.Background(), peer2Info)
 	assert.NoError(t, err)
 
 	stream, err := h1.NewStream(context.Background(), h2.ID(), ProtocolID)
@@ -62,6 +65,10 @@ func TestDataQueryProtocol(t *testing.T) {
 	err = protocol1.SendDataQueryResponse(stream, &pmsg)
 	assert.NoError(t, err)
 
+	err = stream.Close()
+	assert.NoError(t, err)
+
+	// one more close to verify behaviour
 	err = stream.Close()
 	assert.NoError(t, err)
 
@@ -109,7 +116,7 @@ func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKe
 	assert.NoError(t, err)
 
 	host, err := libp2p.New(libp2p.Identity(priv),
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%s", port)),
 		libp2p.Ping(false),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
