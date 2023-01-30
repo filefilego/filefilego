@@ -109,7 +109,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
@@ -147,7 +147,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err = kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
@@ -372,7 +372,7 @@ func TestMemPoolBlockPoolMethods(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
@@ -487,7 +487,7 @@ func TestPerformAddressStateUpdate(t *testing.T) {
 	// update the list of verifiers
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})

@@ -7,6 +7,6 @@ import (
 )
 
 func TestIsValidVerifier(t *testing.T) {
-	assert.True(t, IsValidVerifier(BlockVerifiers[0].Address))
+	assert.True(t, IsValidVerifier(GetBlockVerifiers()[0].Address))
 	assert.False(t, IsValidVerifier(""))
 }

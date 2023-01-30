@@ -57,7 +57,8 @@ func New(node NetworkMessagePublisher, bchain blockchain.Interface, privateKey c
 	}
 
 	isVerifier := false
-	for _, verifier := range block.BlockVerifiers {
+	allVerifiers := block.GetBlockVerifiers()
+	for _, verifier := range allVerifiers {
 		if verifier.Address == verifierAddr {
 			isVerifier = true
 			break

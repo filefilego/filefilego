@@ -417,9 +417,7 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 	validBlock, kp := validBlock(t)
 	validBlock.PreviousBlockHash = genesisblockValid.Hash
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
-		Address: kp.Address,
-	})
+	block.SetBlockVerifiers(block.Verifier{Address: kp.Address})
 	err = validBlock.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
 	payload = messages.GossipPayload{

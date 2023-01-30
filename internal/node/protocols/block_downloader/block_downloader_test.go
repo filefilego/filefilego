@@ -119,7 +119,7 @@ func TestProtocolMethods(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})

@@ -272,7 +272,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
 
-	accountAPI, err := internalrpc.NewAccountAPI(keystore)
+	accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
 	if err != nil {
 		return fmt.Errorf("failed to setup account rpc api: %w", err)
 	}
@@ -282,6 +282,15 @@ func run(ctx *cli.Context) error {
 	err = s.RegisterService(accountAPI, "account")
 	if err != nil {
 		return fmt.Errorf("failed to register account rpc api service: %w", err)
+	}
+
+	blockAPI, err := internalrpc.NewBlockAPI(bchain)
+	if err != nil {
+		return fmt.Errorf("failed to setup block rpc api: %w", err)
+	}
+	err = s.RegisterService(blockAPI, "block")
+	if err != nil {
+		return fmt.Errorf("failed to register block rpc api service: %w", err)
 	}
 
 	r := mux.NewRouter()

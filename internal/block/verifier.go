@@ -1,9 +1,14 @@
 package block
 
-import "github.com/libp2p/go-libp2p/core/crypto"
+import (
+	sync "sync"
 
-// BlockVerifiers is the list of verifiers/validators.
-var BlockVerifiers = []Verifier{
+	"github.com/libp2p/go-libp2p/core/crypto"
+)
+
+var mu sync.RWMutex
+
+var blockVerifiers = []Verifier{
 	{
 		Address:      "0xdd9a374e8dce9d656073ec153580301b7d2c3850",
 		PublicKey:    "0x03fab2023a5b2acb8855085004dc173f67d66df5591afdc3fbc3435880b9c6338b",
@@ -86,6 +91,22 @@ var BlockVerifiers = []Verifier{
 	},
 }
 
+// GetBlockVerifiers returns a list of verifiers.
+func GetBlockVerifiers() []Verifier {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return blockVerifiers
+}
+
+// SetBlockVerifiers adds a verifier to the block verifiers.
+func SetBlockVerifiers(v Verifier) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	blockVerifiers = append(blockVerifiers, v)
+}
+
 // Verifier represents a block verifier/sealer
 type Verifier struct {
 	Address         string `json:"address"`
@@ -96,7 +117,9 @@ type Verifier struct {
 
 // IsValidVerifier verifies if an address is a validator
 func IsValidVerifier(address string) bool {
-	for _, v := range BlockVerifiers {
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, v := range blockVerifiers {
 		if v.Address == address {
 			return true
 		}

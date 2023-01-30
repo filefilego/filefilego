@@ -238,9 +238,7 @@ func TestValidate(t *testing.T) {
 			when: func() (*Block, crypto.KeyPair) {
 				block, kp := validBlock(t)
 				// add the current kp to verifiers list
-				BlockVerifiers = append(BlockVerifiers, Verifier{
-					Address: kp.Address,
-				})
+				SetBlockVerifiers(Verifier{Address: kp.Address})
 				err := block.Sign(kp.PrivateKey)
 				if err != nil {
 					return nil, kp

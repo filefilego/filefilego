@@ -23,11 +23,10 @@ func TestNew(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
-
 	cases := map[string]struct {
 		node       NetworkMessagePublisher
 		blockchain blockchain.Interface
@@ -92,7 +91,7 @@ func TestValidatorMethods(t *testing.T) {
 	assert.NoError(t, err)
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	block.BlockVerifiers = append(block.BlockVerifiers, block.Verifier{
+	block.SetBlockVerifiers(block.Verifier{
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})

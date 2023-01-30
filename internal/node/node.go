@@ -44,6 +44,23 @@ type PeerFinderBootstrapper interface {
 	Bootstrap(ctx context.Context) error
 }
 
+// Interface defines a node's functionalities.
+type Interface interface {
+	GetSyncing() bool
+	Sync(ctx context.Context) error
+	ConnectToPeerWithMultiaddr(ctx context.Context, addr multiaddr.Multiaddr) (*peer.AddrInfo, error)
+	Advertise(ctx context.Context, ns string)
+	DiscoverPeers(ctx context.Context, ns string) error
+	PublishMessageToNetwork(ctx context.Context, data []byte) error
+	HandleIncomingMessages(ctx context.Context, topicName string) error
+	GetMultiaddr() ([]multiaddr.Multiaddr, error)
+	Peers() peer.IDSlice
+	GetID() string
+	GetPeerID() peer.ID
+	Bootstrap(ctx context.Context, bootstrapPeers []string) error
+	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
+}
+
 // Node represents all the node functionalities
 type Node struct {
 	host                    host.Host
@@ -118,7 +135,8 @@ func (n *Node) setSyncing(val bool) {
 	n.syncing = val
 }
 
-func (n *Node) getSyncing() bool {
+// GetSyncing returns true if node is syncing.
+func (n *Node) GetSyncing() bool {
 	n.syncingMu.Lock()
 	defer n.syncingMu.Unlock()
 	return n.syncing
@@ -126,7 +144,7 @@ func (n *Node) getSyncing() bool {
 
 // Sync the node with other peers in the network.
 func (n *Node) Sync(ctx context.Context) error {
-	if n.getSyncing() {
+	if n.GetSyncing() {
 		return nil
 	}
 
@@ -142,22 +160,20 @@ func (n *Node) Sync(ctx context.Context) error {
 
 		wg.Add(1)
 		go func(p peer.ID, wg *sync.WaitGroup) {
+			defer wg.Done()
 			remotePeer, err := blockdownloader.NewRemotePeer(n.host, p)
 			if err != nil {
 				log.Warnf("failed to create remote peer: %s", err.Error())
-				wg.Done()
 				return
 			}
 
 			_, err = remotePeer.GetHeight(ctx)
 			if err != nil {
 				log.Warnf("failed to get height of remote peer: %s", err.Error())
-				wg.Done()
 				return
 			}
 
 			n.blockDownloaderProtocol.AddRemotePeer(remotePeer)
-			wg.Done()
 		}(p, &wg)
 	}
 	wg.Wait()
