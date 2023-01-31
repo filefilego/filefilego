@@ -22,6 +22,11 @@ type KeyLockUnlocker interface {
 	UnlockKey(address string, passphrase string) (string, error)
 }
 
+// KeyAuthorizer is an interface with auth mechanism of a key.
+type KeyAuthorizer interface {
+	Authorized(jwtToken string) (bool, UnlockedKey, error)
+}
+
 // UnlockedKey represents an unlocked key with a jwt token.
 type UnlockedKey struct {
 	Key *Key

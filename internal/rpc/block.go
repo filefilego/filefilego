@@ -41,21 +41,6 @@ type JSONBlock struct {
 	Transactions      []JSONTransaction `json:"transactions"`
 }
 
-// JSONTransaction represents a json transaction.
-type JSONTransaction struct {
-	Hash      string `json:"hash"`
-	Signature string `json:"signature"`
-
-	PublicKey       string `json:"public_key"`
-	Nounce          string `json:"nounce"`
-	Data            string `json:"data"`
-	From            string `json:"from"`
-	To              string `json:"to"`
-	Value           string `json:"value"`
-	TransactionFees string `json:"transaction_fees"`
-	Chain           string `json:"chain"`
-}
-
 // GetByNumber gets a block by number.
 func (api *BlockAPI) GetByNumber(r *http.Request, args *GetByNumberArgs, response *JSONBlock) error {
 	blockNumber, err := hexutil.DecodeUint64(args.Number)

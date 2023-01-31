@@ -29,6 +29,8 @@ const blockNumberPrefix = "bn"
 
 const addressTransactionPrefix = "atx"
 
+const transactionPrefix = "tx"
+
 // Interface wraps the functionality of a blockchain.
 type Interface interface {
 	GetBlocksFromPool() []block.Block
@@ -49,6 +51,8 @@ type Interface interface {
 	PerformStateUpdateFromBlock(validBlock block.Block) error
 	GetBlockByNumber(blockNumber uint64) (*block.Block, error)
 	GetLastBlockUpdatedAt() int64
+	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
+	GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -211,6 +215,65 @@ func (b *Blockchain) indexBlockHashByBlockNumber(blockHash []byte, blockNumber u
 	return nil
 }
 
+// indexBlockTransactions indexes the transactions of blocks so they can be retrieved by hash.
+// block number is included in the key and the value is an empty byte.
+// use an iterator to find the transaction hashes, in this way its possible to index coinbase txs.
+func (b *Blockchain) indexBlockTransactions(validBlock block.Block) error {
+	blockNumberBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(blockNumberBytes, validBlock.Number)
+	batch := new(leveldb.Batch)
+	for _, v := range validBlock.Transactions {
+		prefixWithTransactionHash := append([]byte(transactionPrefix), v.Hash...)
+		batch.Put(append(prefixWithTransactionHash, blockNumberBytes...), []byte{})
+	}
+	err := b.db.Write(batch, nil)
+	if err != nil {
+		return fmt.Errorf("failed to write batch of block transactions: %w", err)
+	}
+
+	return nil
+}
+
+// GetTransactionByHash returns a list of transactions found in db.
+func (b *Blockchain) GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error) {
+	prefixWithTransacton := append([]byte(transactionPrefix), hash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithTransacton), nil)
+
+	blockNumbers := make([]uint64, 0)
+
+	for iter.Next() {
+		key := iter.Key()
+		blockNumberBytes := key[len(prefixWithTransacton):]
+		blockNumbers = append(blockNumbers, binary.BigEndian.Uint64(blockNumberBytes))
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to release transaction by hash iterator: %w", err)
+	}
+
+	// get the blocks
+	transactions := make([]transaction.Transaction, 0)
+	for _, blckNum := range blockNumbers {
+		block, err := b.GetBlockByNumber(blckNum)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get block %d : %w", blckNum, err)
+		}
+
+		for _, tx := range block.Transactions {
+			if bytes.Equal(hash, tx.Hash) {
+				transactions = append(transactions, tx)
+			}
+		}
+	}
+
+	if len(transactions) != len(blockNumbers) {
+		return nil, nil, errors.New("transactions list length is not equal to block numbers length")
+	}
+
+	return transactions, blockNumbers, nil
+}
+
 // indexTransactionsByAddress indexes the transaction by the addresses "from" and "to".
 // indexing is based on the following key: prefix_address_blocknumber_transactionIndex
 func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error {
@@ -245,13 +308,13 @@ func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error 
 }
 
 // GetAddressTransactions returns a list of transaction given the address.
-func (b *Blockchain) GetAddressTransactions(address []byte) ([]uint64, []int64, [][]byte, error) {
+func (b *Blockchain) GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error) {
 	prefixWithAddress := append([]byte(addressTransactionPrefix), address...)
 	iter := b.db.NewIterator(util.BytesPrefix(prefixWithAddress), nil)
 
 	blockNumbers := make([]uint64, 0)
 	txIndexes := make([]int64, 0)
-	txHashes := make([][]byte, 0)
+	// txHashes := make([][]byte, 0)
 
 	for iter.Next() {
 		key := iter.Key()
@@ -262,14 +325,26 @@ func (b *Blockchain) GetAddressTransactions(address []byte) ([]uint64, []int64, 
 		txIndexes = append(txIndexes, int64(binary.BigEndian.Uint64(blockNumAndTxIndex[8:])))
 		tmpVal := make([]byte, len(iter.Value()))
 		copy(tmpVal, iter.Value())
-		txHashes = append(txHashes, tmpVal)
+		// txHashes = append(txHashes, tmpVal)
 	}
 	iter.Release()
 	err := iter.Error()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("iterator error while getting transactions: %w", err)
+		return nil, nil, fmt.Errorf("iterator error while getting transactions: %w", err)
 	}
-	return blockNumbers, txIndexes, txHashes, nil
+
+	transactions := make([]transaction.Transaction, len(txIndexes))
+
+	for i, blockNum := range blockNumbers {
+		validBlock, err := b.GetBlockByNumber(blockNum)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get block number %d in get transactions by address: %w", blockNum, err)
+		}
+
+		transactions[i] = validBlock.Transactions[txIndexes[i]]
+	}
+
+	return transactions, blockNumbers, nil
 }
 
 // GetBlockByNumber returns a block by number.
@@ -583,6 +658,11 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 	err = b.indexTransactionsByAddresses(validBlock)
 	if err != nil {
 		return fmt.Errorf("failed to index transactions by address: %w", err)
+	}
+
+	err = b.indexBlockTransactions(validBlock)
+	if err != nil {
+		return fmt.Errorf("failed to index block transactions: %w", err)
 	}
 
 	b.lastBlockUpdateMu.Lock()

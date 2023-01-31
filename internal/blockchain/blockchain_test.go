@@ -164,17 +164,24 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 
 	// GetAddressTransactions
 	addressOfBlock2Verifier, _ := hexutil.Decode(addrOfBlock2Verifier)
-	blockNumbers, txIndexes, txHashes, err := blockchain.GetAddressTransactions(addressOfBlock2Verifier)
+	addressTransactions, blockNumbers, err := blockchain.GetAddressTransactions(addressOfBlock2Verifier)
 	assert.NoError(t, err)
 	assert.Len(t, blockNumbers, 2)
 	// both transactions are in the same block
 	assert.Equal(t, uint64(1), blockNumbers[0])
 	assert.Equal(t, uint64(1), blockNumbers[1])
 
-	assert.Len(t, txIndexes, 2)
-	assert.Len(t, txHashes, 2)
-	assert.EqualValues(t, validBlock2.Transactions[0].Hash, txHashes[0])
-	assert.EqualValues(t, validBlock2.Transactions[1].Hash, txHashes[1])
+	assert.Len(t, addressTransactions, 2)
+	assert.EqualValues(t, validBlock2.Transactions[0].Hash, addressTransactions[0].Hash)
+	assert.EqualValues(t, validBlock2.Transactions[1].Hash, addressTransactions[1].Hash)
+
+	// GetTransactionByHash
+	transactionsByHash, whichBlocksTheyBelongTo, err := blockchain.GetTransactionByHash(validBlock2.Transactions[1].Hash)
+	assert.NoError(t, err)
+	assert.Len(t, transactionsByHash, 1)
+	assert.Len(t, whichBlocksTheyBelongTo, 1)
+	assert.Equal(t, uint64(1), whichBlocksTheyBelongTo[0])
+	assert.Equal(t, validBlock2.Transactions[1], transactionsByHash[0])
 
 	// load and verify blockchain
 	// height should be 2

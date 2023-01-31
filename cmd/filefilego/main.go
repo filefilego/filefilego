@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -91,8 +92,8 @@ func run(ctx *cli.Context) error {
 	}
 
 	connManager, err := connmgr.NewConnManager(
-		conf.P2P.MinPeers, // Lowwater
-		conf.P2P.MaxPeers, // HighWater,
+		conf.P2P.MinPeers,
+		conf.P2P.MaxPeers,
 		connmgr.WithGracePeriod(time.Minute),
 	)
 	if err != nil {
@@ -105,12 +106,8 @@ func run(ctx *cli.Context) error {
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DefaultTransports,
-		// Let's prevent our peer from having too many
 		libp2p.ConnectionManager(connManager),
-		// Attempt to open ports using uPNP for NATed hosts.
 		libp2p.NATPortMap(),
-		// libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
-		// libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
 		libp2p.EnableNATService(),
 	)
 	if err != nil {
@@ -244,6 +241,7 @@ func run(ctx *cli.Context) error {
 		}(blockValidator)
 	}
 
+	// periodically sync
 	go func() {
 		for {
 			<-time.After(syncIntervalSeconds * time.Second)
@@ -258,9 +256,6 @@ func run(ctx *cli.Context) error {
 		}
 	}()
 
-	peers := node.Peers()
-	log.Println(peers)
-
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
 	if err != nil {
 		return fmt.Errorf("failed to create keystore directory: %w", err)
@@ -272,26 +267,57 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
 
-	accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
-	if err != nil {
-		return fmt.Errorf("failed to setup account rpc api: %w", err)
-	}
-
+	// setup JSONRPC services
 	s := rpc.NewServer()
 	s.RegisterCodec(json.NewCodec(), "application/json")
-	err = s.RegisterService(accountAPI, "account")
-	if err != nil {
-		return fmt.Errorf("failed to register account rpc api service: %w", err)
+
+	if contains(conf.RPC.EnabledServices, internalrpc.AccountServiceNamespace) {
+		accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
+		if err != nil {
+			return fmt.Errorf("failed to setup account rpc api: %w", err)
+		}
+		err = s.RegisterService(accountAPI, internalrpc.AccountServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register account rpc api service: %w", err)
+		}
 	}
 
-	blockAPI, err := internalrpc.NewBlockAPI(bchain)
-	if err != nil {
-		return fmt.Errorf("failed to setup block rpc api: %w", err)
+	if contains(conf.RPC.EnabledServices, internalrpc.BlockServiceNamespace) {
+		blockAPI, err := internalrpc.NewBlockAPI(bchain)
+		if err != nil {
+			return fmt.Errorf("failed to setup block rpc api: %w", err)
+		}
+		err = s.RegisterService(blockAPI, internalrpc.BlockServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register block rpc api service: %w", err)
+		}
 	}
-	err = s.RegisterService(blockAPI, "block")
-	if err != nil {
-		return fmt.Errorf("failed to register block rpc api service: %w", err)
+
+	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(node, bchain)
+		if err != nil {
+			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
+		}
+		err = s.RegisterService(filefilegoAPI, internalrpc.FilefilegoServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register filefilego rpc api service: %w", err)
+		}
 	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
+		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, node, bchain)
+		if err != nil {
+			return fmt.Errorf("failed to setup transaction rpc api: %w", err)
+		}
+		err = s.RegisterService(transactionAPI, internalrpc.TransactionServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register transaction rpc api service: %w", err)
+		}
+	}
+
+	peers := node.Peers()
+	log.Infof("node id: %s", node.GetID())
+	log.Infof("peerstore content: %v ", peers)
 
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
@@ -328,4 +354,15 @@ func run(ctx *cli.Context) error {
 	}
 
 	return server.ListenAndServe()
+}
+
+// if * it means all services are allowed, otherwise a list of services will be scanned
+func contains(allowedServices []string, service string) bool {
+	for _, s := range allowedServices {
+		s = strings.TrimSpace(s)
+		if s == service || s == "*" {
+			return true
+		}
+	}
+	return false
 }
