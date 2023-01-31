@@ -15,7 +15,7 @@ import (
 var (
 	AppHelpTemplate = `NAME:
 	{{.Name}} - {{.Usage}}
-	Copyright 2022 The FileFileGo team
+	Copyright 2023 The FileFileGo team
 	USAGE:
 	{{.HelpName}} {{if .VisibleFlags}}[global options]{{end}}{{if .Commands}} command [command options]{{end}} {{if .ArgsUsage}}{{.ArgsUsage}}{{else}}[arguments...]{{end}}
 	{{if len .Authors}}

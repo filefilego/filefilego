@@ -54,7 +54,7 @@ func main() {
 	app.CustomAppHelpTemplate = ffgcli.AppHelpTemplate
 	app.Name = "filefilego"
 	app.Usage = "Decentralized Data Sharing Network"
-	app.Copyright = "Copyright 2022 The FileFileGo Authors"
+	app.Copyright = "Copyright 2023 The FileFileGo Authors"
 	app.Flags = config.AppFlags
 	app.Commands = []*cli.Command{
 		ffgcli.AccountCommand,

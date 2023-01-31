@@ -378,6 +378,10 @@ func (b *Blockchain) getUpdatingBlockchainState() bool {
 
 // PutBlockPool adds a block to blockPool.
 func (b *Blockchain) PutBlockPool(block block.Block) error {
+	currentHeight := b.GetHeight()
+	if block.Number < currentHeight {
+		return nil
+	}
 	b.bmu.Lock()
 	blockHash := hexutil.Encode(block.Hash)
 	b.blockPool[blockHash] = block
@@ -399,6 +403,14 @@ func (b *Blockchain) PutBlockPool(block block.Block) error {
 
 		blocskPool := b.GetBlocksFromPool()
 		for _, blck := range blocskPool {
+			// remove old blocks from pool
+			if blck.Number < currentHeight {
+				if err := b.DeleteFromBlockPool(blck); err != nil {
+					log.Errorf("failed to delete block %s from blockpool: %s", hexutil.Encode(blck.Hash), err.Error())
+				}
+				continue
+			}
+
 			if bytes.Equal(blck.PreviousBlockHash, lastBlockHash) {
 				nextBlockFound = true
 				if err := b.PerformStateUpdateFromBlock(blck); err != nil {

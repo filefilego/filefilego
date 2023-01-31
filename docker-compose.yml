@@ -18,7 +18,7 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego account create_node_key admin
-          ./filefilego --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+          ./filefilego --rpc_services="*" --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
   node2:
     hostname: node2.local
     image: ffg
@@ -30,7 +30,7 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego account create_node_key admin
-          ./filefilego --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+          ./filefilego --rpc_services="*" --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
     depends_on:
       - node1
       
