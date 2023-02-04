@@ -160,7 +160,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
-	bchain, err := blockchain.New(blockchainDB, genesisblockValid.Hash)
+	bchain, err := blockchain.New(blockchainDB, searchEngine, genesisblockValid.Hash)
 	if err != nil {
 		return fmt.Errorf("failed to setup blockchain: %w", err)
 	}

@@ -1,8 +1,10 @@
 package crypto
 
 import (
+	"os"
 	"testing"
 
+	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -128,4 +130,16 @@ func TestRawPublicToAddressBytes(t *testing.T) {
 	str, err := RawPublicToAddressBytes(data)
 	assert.NoError(t, err)
 	assert.EqualValues(t, addrBytes, str)
+}
+
+func TestSha1File(t *testing.T) {
+	fileToBeCreated := "231283918239182931823.txt"
+	t.Cleanup(func() {
+		os.RemoveAll(fileToBeCreated)
+	})
+	filePath, err := common.WriteToFile([]byte("hello"), fileToBeCreated)
+	assert.NoError(t, err)
+	hash, err := Sha1File(filePath)
+	assert.NoError(t, err)
+	assert.Equal(t, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", hash)
 }

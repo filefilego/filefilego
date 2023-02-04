@@ -307,7 +307,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fHash, err := common.Sha1File(newPath)
+	fHash, err := crypto.Sha1File(newPath)
 	if err != nil {
 		os.Remove(newPath)
 		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to hash contents of file"}`)

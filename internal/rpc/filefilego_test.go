@@ -214,7 +214,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockchainDB, err := database.New(db)
 	assert.NoError(t, err)
 
-	bchain, err := blockchain.New(blockchainDB, genesisHash)
+	bchain, err := blockchain.New(blockchainDB, &search.Search{}, genesisHash)
 	assert.NoError(t, err)
 
 	err = bchain.InitOrLoad()

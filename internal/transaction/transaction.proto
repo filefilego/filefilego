@@ -28,3 +28,20 @@ message ProtoTransaction {
     // chain represents the network chain.
     bytes chain = 10;
 }
+
+// DataType is the transaction data type.
+enum DataType {
+    UNKNOWN = 0;
+    UPDATE_BLOCKCHAIN_SETTINGS = 1;
+    CREATE_NODE = 2;
+    UPDATE_NODE = 3;
+    DATA_CONTRACT = 4;
+}
+
+// DataPayload is the transaction data payload.
+message DataPayload {
+    // type defines the payload type inside a transaction.
+    DataType type = 1;
+    // payload contains the byte array of the transaction data.
+    bytes payload = 2;
+}

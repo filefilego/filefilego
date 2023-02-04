@@ -39,11 +39,6 @@ func TestFileFunctions(t *testing.T) {
 	size, err := FileSize(filePath)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(5), size)
-
-	// Sha1File
-	hash, err := Sha1File(filePath)
-	assert.NoError(t, err)
-	assert.Equal(t, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", hash)
 }
 
 func TestHomeDir(t *testing.T) {

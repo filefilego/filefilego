@@ -2,17 +2,14 @@ package common
 
 import (
 	// nolint:gosec
-	"crypto/sha1"
+
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/filefilego/filefilego/internal/common/hexutil"
 )
 
 // DirExists checks if destination dir exists
@@ -75,23 +72,6 @@ func FileSize(fullPath string) (int64, error) {
 		return 0, fmt.Errorf("failed to get file stat: %w", err)
 	}
 	return fi.Size(), nil
-}
-
-// Sha1File performs a sha1 hash on a file
-func Sha1File(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
-	}
-	defer f.Close()
-
-	// nolint:gosec
-	h := sha1.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", fmt.Errorf("failed to copy file content to sha1 handler: %w", err)
-	}
-
-	return hexutil.EncodeNoPrefix(h.Sum(nil)), nil
 }
 
 // DefaultDataDir returns the default datadir.

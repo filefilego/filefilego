@@ -13,6 +13,7 @@ import (
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -91,21 +92,21 @@ func TestProtocolMethods(t *testing.T) {
 	})
 
 	// blockchain 1
-	bchain1, err := blockchain.New(driver, genesisblockValid.Hash)
+	bchain1, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain1)
 	err = bchain1.InitOrLoad()
 	assert.NoError(t, err)
 
 	// blockchain 2
-	bchain2, err := blockchain.New(driver2, genesisblockValid.Hash)
+	bchain2, err := blockchain.New(driver2, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain2)
 	err = bchain2.InitOrLoad()
 	assert.NoError(t, err)
 
 	// blockchain 3
-	bchain3, err := blockchain.New(driver3, genesisblockValid.Hash)
+	bchain3, err := blockchain.New(driver3, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain3)
 	err = bchain3.InitOrLoad()

@@ -1,18 +1,23 @@
 package blockchain
 
 import (
+	"bytes"
+	"context"
 	"math/big"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/common/currency"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestNew(t *testing.T) {
@@ -31,18 +36,25 @@ func TestNew(t *testing.T) {
 	})
 	cases := map[string]struct {
 		db               database.Database
+		search           search.IndexSearcher
 		genesisBlockHash []byte
 		expErr           string
 	}{
 		"no database": {
 			expErr: "db is nil",
 		},
+		"no search": {
+			db:     driver,
+			expErr: "search is nil",
+		},
 		"no genesis block hash": {
 			db:     driver,
+			search: &search.Search{},
 			expErr: "genesis block hash is empty",
 		},
 		"success": {
 			db:               driver,
+			search:           &search.Search{},
 			genesisBlockHash: genesisblockValid.Hash,
 		},
 	}
@@ -51,7 +63,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			blockchain, err := New(tt.db, tt.genesisBlockHash)
+			blockchain, err := New(tt.db, tt.search, tt.genesisBlockHash)
 			if tt.expErr != "" {
 				assert.Nil(t, blockchain)
 				assert.EqualError(t, err, tt.expErr)
@@ -74,7 +86,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 		db.Close()
 		os.RemoveAll("init.db")
 	})
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	// first run will be init
 	err = blockchain.InitOrLoad()
@@ -183,10 +195,13 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	assert.Equal(t, uint64(1), whichBlocksTheyBelongTo[0])
 	assert.Equal(t, validBlock2.Transactions[1], transactionsByHash[0])
 
+	lastUpdate := blockchain.GetLastBlockUpdatedAt()
+	assert.True(t, time.Now().Unix()-lastUpdate < 5)
+
 	// load and verify blockchain
 	// height should be 2
 	// last block hash should be validBlock3.Hash
-	blockchain2, err := New(driver, genesisblockValid.Hash)
+	blockchain2, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	err = blockchain2.InitOrLoad()
 	assert.NoError(t, err)
@@ -209,7 +224,7 @@ func TestGetHeightAndIncrement(t *testing.T) {
 		db.Close()
 		os.RemoveAll("height.db")
 	})
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), blockchain.GetHeight())
 	blockchain.IncrementHeightBy(1)
@@ -228,7 +243,7 @@ func TestSaveAndGetBlockInDB(t *testing.T) {
 		db.Close()
 		os.RemoveAll("savedhain.db")
 	})
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	// invalid block
@@ -280,7 +295,7 @@ func TestGetUpdateAddressState(t *testing.T) {
 		db.Close()
 		os.RemoveAll("addressState.db")
 	})
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	state := AddressState{
@@ -321,7 +336,7 @@ func TestMemPoolBlockPoolMethods(t *testing.T) {
 		os.RemoveAll("pool.db")
 	})
 
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
 	err = blockchain.InitOrLoad()
@@ -471,6 +486,304 @@ func TestMemPoolBlockPoolMethods(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestChannelFunctionality(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock()
+	assert.NoError(t, err)
+	db, err := leveldb.OpenFile("channels.db", nil)
+	assert.NoError(t, err)
+
+	driver, err := database.New(db)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		db.Close()
+		os.RemoveAll("channels.db")
+	})
+
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	fromAddrString := "0xdd9a374e8dce9d656073ec153580301b7d2c3850"
+	fromAddr, err := hexutil.Decode(fromAddrString)
+	assert.NoError(t, err)
+	fromAddrPosterString := "0xdd9a374e8dce9d656073ec153580301b7d2c1212"
+	fromAddrPoster, err := hexutil.Decode(fromAddrPosterString)
+	assert.NoError(t, err)
+	fromAddrAdminString := "0xdd9a374e8dce9d656073ec153580301b7d2c3000"
+	fromAddrAdmin, err := hexutil.Decode(fromAddrAdminString)
+	assert.NoError(t, err)
+	channelNode := NodeItem{
+		Name:     "channel 1",
+		NodeHash: []byte{23},
+		NodeType: NodeItemType_CHANNEL,
+		Owner:    fromAddr,
+		Posters:  [][]byte{fromAddrPoster},
+		Admins:   [][]byte{fromAddrAdmin},
+	}
+	// saveNode
+	err = blockchain.saveNode(&channelNode)
+	assert.NoError(t, err)
+
+	// saveAsChannel
+	err = blockchain.saveAsChannel(channelNode.NodeHash)
+	assert.NoError(t, err)
+
+	// GetNodeItem
+	retrivedNode, err := blockchain.GetNodeItem(channelNode.NodeHash)
+	assert.NoError(t, err)
+	assert.Equal(t, channelNode.Name, retrivedNode.Name)
+
+	// GetChannels
+	channels, err := blockchain.GetChannels()
+	assert.NoError(t, err)
+	assert.Equal(t, channelNode.Name, channels[0].Name)
+
+	// GetChildNodeItems
+	childNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash)
+	assert.NoError(t, err)
+	assert.Empty(t, childNodes)
+	childNode := NodeItem{
+		Name:       "sub channel",
+		NodeHash:   []byte{33},
+		ParentHash: channelNode.NodeHash,
+	}
+	err = blockchain.saveNode(&childNode)
+	assert.NoError(t, err)
+
+	// saveNodeAsChildNode
+	err = blockchain.saveNodeAsChildNode(channelNode.NodeHash, childNode.NodeHash)
+	assert.NoError(t, err)
+	newChildNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash)
+	assert.NoError(t, err)
+	assert.Len(t, newChildNodes, 1)
+	assert.Equal(t, childNode.Name, newChildNodes[0].Name)
+
+	// GetParentNodeItem
+	parentNode, err := blockchain.GetParentNodeItem(childNode.NodeHash)
+	assert.NoError(t, err)
+	assert.NotNil(t, parentNode)
+	assert.Equal(t, channelNode.Name, parentNode.Name)
+
+	childChildNode := NodeItem{
+		Name:       "inside sub channel",
+		NodeHash:   []byte{53},
+		ParentHash: childNode.NodeHash,
+		NodeType:   NodeItemType_ENTRY,
+	}
+	err = blockchain.saveNode(&childChildNode)
+	assert.NoError(t, err)
+
+	// saveNodeAsChildNode
+	err = blockchain.saveNodeAsChildNode(childNode.NodeHash, childChildNode.NodeHash)
+	assert.NoError(t, err)
+	newChildChildNodes, err := blockchain.GetChildNodeItems(childNode.NodeHash)
+	assert.NoError(t, err)
+	assert.NotNil(t, newChildChildNodes)
+	assert.Len(t, newChildChildNodes, 1)
+	assert.Equal(t, childChildNode.Name, newChildChildNodes[0].Name)
+
+	// GetRootNodeItem
+	rootNode, err := blockchain.GetRootNodeItem(childChildNode.NodeHash)
+	assert.NoError(t, err)
+	assert.NotNil(t, rootNode)
+	assert.Equal(t, channelNode.Name, rootNode.Name)
+
+	// GetPermissionFromRootNode for owner
+	owner, admin, poster := blockchain.GetPermissionFromRootNode(rootNode, fromAddr)
+	assert.Equal(t, true, owner)
+	assert.Equal(t, false, admin)
+	assert.Equal(t, false, poster)
+
+	// GetPermissionFromRootNode for poster
+	owner, admin, poster = blockchain.GetPermissionFromRootNode(rootNode, fromAddrPoster)
+	assert.Equal(t, false, owner)
+	assert.Equal(t, false, admin)
+	assert.Equal(t, true, poster)
+
+	// GetPermissionFromRootNode for admin
+	owner, admin, poster = blockchain.GetPermissionFromRootNode(rootNode, fromAddrAdmin)
+	assert.Equal(t, false, owner)
+	assert.Equal(t, true, admin)
+	assert.Equal(t, false, poster)
+}
+
+func TestPerformStateUpdateFromDataPayload(t *testing.T) {
+	genesisblockValid, err := block.GetGenesisBlock()
+	assert.NoError(t, err)
+	db, err := leveldb.OpenFile("txdatapayload.db", nil)
+	assert.NoError(t, err)
+	driver, err := database.New(db)
+	assert.NoError(t, err)
+	blv, err := search.NewBleveSearch("txdatapayloadSearch.db")
+	assert.NoError(t, err)
+	searchEngine, err := search.New(blv)
+	assert.NoError(t, err)
+	t.Cleanup(func() {
+		db.Close()
+		searchEngine.Close()
+		os.RemoveAll("txdatapayload.db")
+		os.RemoveAll("txdatapayloadSearch.db")
+	})
+
+	blockchain, err := New(driver, searchEngine, genesisblockValid.Hash)
+	assert.NoError(t, err)
+
+	fromAddrString := "0xdd9a374e8dce9d656073ec153580301b7d2c3850"
+	fromAddr, err := hexutil.Decode(fromAddrString)
+	assert.NoError(t, err)
+	mainChain, err := hexutil.Decode("0x01")
+	assert.NoError(t, err)
+	nodes := []*NodeItem{
+		{
+			Name:      "channel one",
+			Owner:     fromAddr,
+			Enabled:   true,
+			NodeType:  NodeItemType_CHANNEL,
+			Timestamp: time.Now().Unix(),
+		},
+	}
+	txPayloadBytes := transactionWithChannelPayload(t, nodes)
+	// create a payload with not enough balance for channel operations
+	txWithChannelPayload := &transaction.Transaction{
+		Nounce:          []byte{1},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            txPayloadBytes,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
+	assert.EqualError(t, err, "total cost of channel actions (20000000000000000000000) are higher than the supplied transaction fee (0)")
+	fees := currency.FFG().Mul(currency.FFG(), big.NewInt(channelCreationFeesFFG))
+	txWithChannelPayload.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
+	assert.NoError(t, err)
+	channels, err := blockchain.GetChannels()
+	assert.NoError(t, err)
+	assert.Len(t, channels, 1)
+	assert.Equal(t, "channel one", channels[0].Name)
+	// creating the same channel again should be an error
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
+	assert.EqualError(t, err, "failed to create channel node: node with this hash already exists in db 0x20148fb96726ef3ff2e0c6ee73458dda99f6c9b7914ee1aec918f8ac35e949d0")
+
+	// create another node with subchannel and assert the error with the required fees
+	nodes2 := []*NodeItem{
+		{
+			Name:       "sub channel under main channel",
+			Owner:      fromAddr,
+			Enabled:    true,
+			NodeType:   NodeItemType_SUBCHANNEL,
+			Timestamp:  time.Now().Unix(),
+			ParentHash: channels[0].NodeHash,
+		},
+	}
+	txPayloadBytes2 := transactionWithChannelPayload(t, nodes2)
+	txWithChannelPayload2 := &transaction.Transaction{
+		Nounce:          []byte{1},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            txPayloadBytes2,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
+	assert.EqualError(t, err, "total cost of channel actions (50000000000000000) are higher than the supplied transaction fee (0)")
+	txWithChannelPayload2.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
+	assert.NoError(t, err)
+	subchan, err := blockchain.GetChildNodeItems(channels[0].NodeHash)
+	assert.NoError(t, err)
+	assert.Len(t, subchan, 1)
+	assert.Equal(t, "sub channel under main channel", subchan[0].Name)
+
+	// create a channel and a subchannel and an entry in the subchannel all together in the same transaction
+	channelHash := crypto.Sha256(bytes.Join(
+		[][]byte{
+			fromAddr,
+			[]byte("channel FFG"),
+		},
+		[]byte{},
+	))
+
+	subchannelHash := crypto.Sha256(bytes.Join(
+		[][]byte{
+			channelHash,
+			[]byte("subchannel of ffg"),
+		},
+		[]byte{},
+	))
+	nodes3 := []*NodeItem{
+		{
+			Name:        "channel FFG",
+			Owner:       fromAddr,
+			Enabled:     true,
+			NodeType:    NodeItemType_CHANNEL,
+			Timestamp:   time.Now().Unix(),
+			Description: proto.String("hello world this is ffg"),
+		},
+		{
+			Name:        "subchannel of ffg",
+			ParentHash:  channelHash,
+			Owner:       fromAddr,
+			Enabled:     true,
+			NodeType:    NodeItemType_SUBCHANNEL,
+			Timestamp:   time.Now().Unix(),
+			Description: proto.String("this is ffgs sub channel"),
+		},
+		{
+			Name:        "subchannel of ffg 2",
+			ParentHash:  channelHash,
+			Owner:       fromAddr,
+			Enabled:     true,
+			NodeType:    NodeItemType_SUBCHANNEL,
+			Timestamp:   time.Now().Unix(),
+			Description: proto.String("another subchan"),
+		},
+		{
+			Name:        "this is an entry under subchannel",
+			ParentHash:  subchannelHash,
+			Owner:       fromAddr,
+			Enabled:     true,
+			NodeType:    NodeItemType_ENTRY,
+			Timestamp:   time.Now().Unix(),
+			Description: proto.String("welcome to ffg"),
+		},
+	}
+
+	txPayloadBytes3 := transactionWithChannelPayload(t, nodes3)
+	txWithChannelPayload3 := &transaction.Transaction{
+		Nounce:          []byte{1},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            txPayloadBytes3,
+		Value:           "0x0",
+		TransactionFees: "0x" + fees.Mul(fees, big.NewInt(4)).Text(16),
+		Chain:           mainChain,
+	}
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload3)
+	assert.NoError(t, err)
+
+	allChannels, err := blockchain.GetChannels()
+	assert.NoError(t, err)
+	assert.Len(t, allChannels, 2)
+
+	secondSubChannelChilds, err := blockchain.GetChildNodeItems(allChannels[0].NodeHash)
+	assert.NoError(t, err)
+	assert.Len(t, secondSubChannelChilds, 2)
+	assert.Equal(t, "subchannel of ffg", secondSubChannelChilds[1].Name)
+	assert.Equal(t, "subchannel of ffg 2", secondSubChannelChilds[0].Name)
+
+	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[1].NodeHash)
+	assert.NoError(t, err)
+	assert.Len(t, childsOfSubchannelffg, 1)
+	assert.Equal(t, "this is an entry under subchannel", childsOfSubchannelffg[0].Name)
+
+	// check the search engine
+	searchResults, err := searchEngine.Search(context.TODO(), "entry", 100, 0, search.AnyTermRequired)
+	assert.NoError(t, err)
+	assert.Len(t, searchResults, 1)
+}
+
 func TestPerformAddressStateUpdate(t *testing.T) {
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
@@ -482,7 +795,7 @@ func TestPerformAddressStateUpdate(t *testing.T) {
 		db.Close()
 		os.RemoveAll("internalmutation.db")
 	})
-	blockchain, err := New(driver, genesisblockValid.Hash)
+	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	validBlock, kp, kp2 := validBlock(t, 0)
 	err = validBlock.Sign(kp.PrivateKey)
@@ -565,6 +878,22 @@ func validBlock(t *testing.T, blockNumber uint64) (*block.Block, crypto.KeyPair,
 	}
 
 	return &b, kp, kp2
+}
+
+func transactionWithChannelPayload(t *testing.T, nodes []*NodeItem) []byte {
+	items := NodeItems{
+		Nodes: nodes,
+	}
+	itemsBytes, err := proto.Marshal(&items)
+	assert.NoError(t, err)
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_CREATE_NODE,
+		Payload: itemsBytes,
+	}
+
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	assert.NoError(t, err)
+	return txPayloadBytes
 }
 
 // generate a keypair and use it to sign tx

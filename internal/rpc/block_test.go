@@ -10,6 +10,7 @@ import (
 	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -32,7 +33,7 @@ func TestBlockAPIMethods(t *testing.T) {
 		db.Close()
 		os.RemoveAll("blockapi.db")
 	})
-	blockchain, err := blockchain.New(driver, genesisblockValid.Hash)
+	blockchain, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	err = blockchain.InitOrLoad()
 	assert.NoError(t, err)

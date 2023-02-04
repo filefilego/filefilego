@@ -94,6 +94,7 @@ func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPag
 func (b *BleveSearch) Index(item IndexItem) error {
 	item.Name = strings.ToLower(prepareIndexingText(item.Name))
 	p := bluemonday.NewPolicy()
+	p.AllowElements("h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "p", "a", "ul", "ol", "nl", "li", "b", "i", "strong", "em", "strike", "code", "hr", "br", "div", "table", "thead", "caption", "tbody", "tr", "th", "td", "pre", "style")
 	item.Description = strings.ToLower(p.Sanitize(item.Description))
 	return b.index.Index(item.Hash, item)
 }

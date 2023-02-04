@@ -11,6 +11,7 @@ import (
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/keystore"
 	"github.com/filefilego/filefilego/internal/node"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
@@ -83,7 +84,7 @@ func TestValidatorMethods(t *testing.T) {
 
 	blockchainDB, err := database.New(db)
 	assert.NoError(t, err)
-	bchain, err := blockchain.New(blockchainDB, genesisHash)
+	bchain, err := blockchain.New(blockchainDB, &search.Search{}, genesisHash)
 	assert.NoError(t, err)
 	err = bchain.InitOrLoad()
 	assert.NoError(t, err)

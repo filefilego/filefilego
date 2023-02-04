@@ -10,26 +10,32 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/common/currency"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"google.golang.org/protobuf/proto"
 )
 
-const addressPrefix = "addr"
+const (
+	addressPrefix            = "ad"
+	blockPrefix              = "bl"
+	lastBlockPrefix          = "last_block"
+	blockNumberPrefix        = "bn"
+	addressTransactionPrefix = "atx"
+	transactionPrefix        = "tx"
+	nodePrefix               = "nd"
+	nodeNodesPrefix          = "nn"
+	channelPrefix            = "ch"
 
-const blockPrefix = "bl"
-
-const lastBlockPrefix = "last_block"
-
-const blockNumberPrefix = "bn"
-
-const addressTransactionPrefix = "atx"
-
-const transactionPrefix = "tx"
+	channelCreationFeesFFG               = 20000
+	remainingChannelOperationFeesMiliFFG = 50
+)
 
 // Interface wraps the functionality of a blockchain.
 type Interface interface {
@@ -58,6 +64,7 @@ type Interface interface {
 // Blockchain represents a blockchain structure.
 type Blockchain struct {
 	db        database.Database
+	search    search.IndexSearcher
 	blockPool map[string]block.Block
 	bmu       sync.RWMutex
 
@@ -76,9 +83,13 @@ type Blockchain struct {
 }
 
 // New creates a new blockchain instance.
-func New(db database.Database, genesisBlockHash []byte) (*Blockchain, error) {
+func New(db database.Database, search search.IndexSearcher, genesisBlockHash []byte) (*Blockchain, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
+	}
+
+	if search == nil {
+		return nil, errors.New("search is nil")
 	}
 
 	if len(genesisBlockHash) == 0 {
@@ -87,6 +98,7 @@ func New(db database.Database, genesisBlockHash []byte) (*Blockchain, error) {
 
 	b := &Blockchain{
 		db:               db,
+		search:           search,
 		blockPool:        make(map[string]block.Block),
 		memPool:          make(map[string]transaction.Transaction),
 		genesisBlockHash: make([]byte, len(genesisBlockHash)),
@@ -573,9 +585,9 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 		return fmt.Errorf("failed to add amount to verifier's balance: %w", err)
 	}
 
-	err = b.performStateUpdateFromDataPayload(transaction.Data)
+	err = b.performStateUpdateFromDataPayload(&transaction)
 	if err != nil {
-		return fmt.Errorf("failed perform state update from transaction data: %w", err)
+		log.Errorf("failed to perform state update from tx data payload: %s", err.Error())
 	}
 
 	return nil
@@ -583,8 +595,149 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 
 // performStateUpdateFromDataPayload performs updates from the transaction data.
 // operations allowed are related to updating blockchain settings and channel operations.
-func (b *Blockchain) performStateUpdateFromDataPayload(dataPayload []byte) error {
-	// TODO
+// there could be arbitrary data in the transaction data field so trying to unmarshal first and
+// if failed then just return without any error.
+func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transaction) error {
+	dataPayload := transaction.DataPayload{}
+	err := proto.Unmarshal(tx.Data, &dataPayload)
+	if err != nil {
+		return nil
+	}
+
+	// support creating multiple nodes
+	if dataPayload.Type == transaction.DataType_CREATE_NODE {
+		nodesEnvelope := NodeItems{}
+		err := proto.Unmarshal(dataPayload.Payload, &nodesEnvelope)
+		if err != nil {
+			return nil
+		}
+
+		txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+		if err != nil {
+			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
+		}
+
+		totalActionsFees := calculateChannelActionsFees(nodesEnvelope.Nodes)
+		if txFees.Cmp(totalActionsFees) == -1 {
+			return fmt.Errorf("total cost of channel actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
+		}
+
+		for _, node := range nodesEnvelope.Nodes {
+			node.Enabled = true
+			fromBytes, _ := hexutil.Decode(tx.From)
+			node.Owner = fromBytes
+
+			if node.Timestamp <= 0 {
+				return fmt.Errorf("timestamp is empty")
+			}
+
+			if node.NodeType == NodeItemType_CHANNEL {
+				if node.Name == "" {
+					return errors.New("channel node name is empty")
+				}
+
+				data := bytes.Join(
+					[][]byte{
+						fromBytes,
+						[]byte(node.Name),
+					},
+					[]byte{},
+				)
+				node.ParentHash = []byte{}
+				node.NodeHash = crypto.Sha256(data)
+
+				err = b.saveNode(node)
+				if err != nil {
+					return fmt.Errorf("failed to create channel node: %w", err)
+				}
+				err = b.saveAsChannel(node.NodeHash)
+				if err != nil {
+					return fmt.Errorf("failed add to channel list: %w", err)
+				}
+			} else {
+				if len(node.ParentHash) == 0 {
+					return fmt.Errorf("parent hash of node is empty")
+				}
+
+				data := bytes.Join(
+					[][]byte{
+						node.ParentHash,
+						[]byte(node.Name),
+					},
+					[]byte{},
+				)
+
+				node.NodeHash = crypto.Sha256(data)
+
+				// get parent
+				parentNode, err := b.GetNodeItem(node.ParentHash)
+				if err != nil {
+					return fmt.Errorf("failed to get parent of node %s : %w", hexutil.Encode(node.ParentHash), err)
+				}
+
+				// check if allowed to insert node to parent
+				ok, err := applyChannelStructureConstraints(parentNode, node)
+				if err != nil || !ok {
+					return fmt.Errorf("failed to satisfy node structure constraints: %w", err)
+				}
+
+				var rootNodeItem *NodeItem
+				// if parent is root
+				if parentNode.NodeType == NodeItemType_CHANNEL {
+					rootNodeItem = parentNode
+				} else {
+					// traverse back to find root
+					rootItem, err := b.GetRootNodeItem(parentNode.NodeHash)
+					if err != nil {
+						return fmt.Errorf("failed to get root node item: %w", err)
+					}
+					rootNodeItem = rootItem
+				}
+
+				// get permissions to see if allowed
+				owner, admin, poster := b.GetPermissionFromRootNode(rootNodeItem, fromBytes)
+				if err != nil {
+					return fmt.Errorf("failed to retreive root node to get permissions: %w", err)
+				}
+
+				if !owner && !admin && !poster && node.NodeType != NodeItemType_OTHER {
+					return errors.New("only `other` nodes can be added by guest")
+				}
+
+				// if poster allow only to add entry, dir, file and other
+				if poster && node.NodeType == NodeItemType_SUBCHANNEL {
+					return errors.New("poster can't create channel and subchannel")
+				}
+
+				err = b.saveNode(node)
+				if err != nil {
+					return fmt.Errorf("failed to create node: %w", err)
+				}
+				err = b.saveNodeAsChildNode(parentNode.NodeHash, node.NodeHash)
+				if err != nil {
+					return fmt.Errorf("failed to save node child: %w", err)
+				}
+			}
+
+			nodeDescription := ""
+			if node.Description != nil {
+				nodeDescription = *node.Description
+			}
+
+			indexItem := search.IndexItem{
+				Hash:        hexutil.Encode(node.NodeHash),
+				Type:        int32(node.NodeType),
+				Name:        node.Name,
+				Description: nodeDescription,
+			}
+
+			err = b.search.Index(indexItem)
+			if err != nil {
+				return fmt.Errorf("failed to index item into search engine: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -827,4 +980,207 @@ func (b *Blockchain) UpdateAddressState(address []byte, state AddressState) erro
 // CloseDB closes the db.
 func (b *Blockchain) CloseDB() error {
 	return b.db.Close()
+}
+
+func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
+	err := b.db.Put(append([]byte(channelPrefix), nodeHash...), []byte{})
+	if err != nil {
+		return fmt.Errorf("failed to insert node to channels: %w", err)
+	}
+
+	return nil
+}
+
+func (b *Blockchain) saveNode(node *NodeItem) error {
+	nodeData, err := proto.Marshal(node)
+	if err != nil {
+		return fmt.Errorf("failed to marshal node item: %w", err)
+	}
+	_, err = b.GetNodeItem(node.NodeHash)
+	if err == nil {
+		return fmt.Errorf("node with this hash already exists in db %s", hexutil.Encode(node.NodeHash))
+	}
+	err = b.db.Put(append([]byte(nodePrefix), node.NodeHash...), nodeData)
+	if err != nil {
+		return fmt.Errorf("failed to insert node item into db: %w", err)
+	}
+
+	return nil
+}
+
+func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
+	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), parentHash...)
+	err := b.db.Put(append(prefixWithNodeNodes, childHash...), []byte{})
+	if err != nil {
+		return fmt.Errorf("failed to insert child node item under parent node: %w", err)
+	}
+
+	return nil
+}
+
+// GetChildNodeItems returns a list of child nodes of a node.
+func (b *Blockchain) GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error) {
+	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), nodeHash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithNodeNodes), nil)
+	childNodes := make([]*NodeItem, 0)
+	for iter.Next() {
+		key := iter.Key()
+		item, err := b.GetNodeItem(key[len(prefixWithNodeNodes):])
+		if err != nil {
+			continue
+		}
+		childNodes = append(childNodes, item)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release get child nodes iterator: %w", err)
+	}
+
+	return childNodes, nil
+}
+
+// GetChannels gets a list of channels.
+func (b *Blockchain) GetChannels() ([]*NodeItem, error) {
+	iter := b.db.NewIterator(util.BytesPrefix([]byte(channelPrefix)), nil)
+	channelNodes := make([]*NodeItem, 0)
+	for iter.Next() {
+		key := iter.Key()
+		item, err := b.GetNodeItem(key[len([]byte(channelPrefix)):])
+		if err != nil {
+			continue
+		}
+		channelNodes = append(channelNodes, item)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release get channels iterator: %w", err)
+	}
+
+	return channelNodes, nil
+}
+
+// GetNodeItem get a node.
+func (b *Blockchain) GetNodeItem(nodeHash []byte) (*NodeItem, error) {
+	nodeData, err := b.db.Get(append([]byte(nodePrefix), nodeHash...))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node item from database: %w", err)
+	}
+	cNode := NodeItem{}
+	err = proto.Unmarshal(nodeData, &cNode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal protobuf node item: %w", err)
+	}
+	return &cNode, nil
+}
+
+// GetParentNodeItem get a node.
+func (b *Blockchain) GetParentNodeItem(nodeHash []byte) (*NodeItem, error) {
+	nodeItem, err := b.GetNodeItem(nodeHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find node: %w", err)
+	}
+
+	parentItem, err := b.GetNodeItem(nodeItem.ParentHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find parent node: %w", err)
+	}
+	return parentItem, nil
+}
+
+// GetRootNodeItem traverse back until root node is reached and its a channel node.
+func (b *Blockchain) GetRootNodeItem(nodeHash []byte) (*NodeItem, error) {
+	var lastFoundNodeItem *NodeItem
+	nodeHashToFind := make([]byte, len(nodeHash))
+	copy(nodeHashToFind, nodeHash)
+	for {
+		nodeItem, err := b.GetParentNodeItem(nodeHashToFind)
+		if err != nil {
+			break
+		}
+		lastFoundNodeItem = nodeItem
+		copy(nodeHashToFind, nodeItem.NodeHash)
+	}
+
+	if lastFoundNodeItem == nil || lastFoundNodeItem.NodeType != NodeItemType_CHANNEL {
+		return nil, errors.New("failed to find root node")
+	}
+	return lastFoundNodeItem, nil
+}
+
+// GetPermissionFromRootNode get the permissions from channel node.
+func (b *Blockchain) GetPermissionFromRootNode(rootNode *NodeItem, fromAddr []byte) (owner, admin, poster bool) {
+	if bytes.Equal(rootNode.Owner, fromAddr) {
+		owner = true
+	}
+
+	for _, v := range rootNode.Admins {
+		if bytes.Equal(fromAddr, v) {
+			admin = true
+		}
+	}
+
+	for _, v := range rootNode.Posters {
+		if bytes.Equal(fromAddr, v) {
+			poster = true
+		}
+	}
+
+	return owner, admin, poster
+}
+
+func applyChannelStructureConstraints(parentNode, node *NodeItem) (bool, error) {
+	switch node.NodeType {
+	case NodeItemType_SUBCHANNEL:
+		{
+			if !(parentNode.NodeType == NodeItemType_CHANNEL || parentNode.NodeType == NodeItemType_SUBCHANNEL) {
+				return false, errors.New("subchannel is only allowed in a channel or a subchannel")
+			}
+		}
+
+	case NodeItemType_ENTRY:
+		{
+			if !(parentNode.NodeType == NodeItemType_CHANNEL || parentNode.NodeType == NodeItemType_SUBCHANNEL) {
+				return false, errors.New("entry is only allowed in a channel or a subchannel")
+			}
+		}
+	case NodeItemType_DIR:
+		fallthrough
+	case NodeItemType_FILE:
+		{
+			if !(parentNode.NodeType == NodeItemType_CHANNEL || parentNode.NodeType == NodeItemType_SUBCHANNEL || parentNode.NodeType == NodeItemType_ENTRY || parentNode.NodeType == NodeItemType_DIR) {
+				return false, errors.New("dir/file is only allowed in a channel, subchannel, dirs and entries")
+			}
+		}
+	case NodeItemType_OTHER:
+		{
+			if parentNode.NodeType != NodeItemType_ENTRY {
+				return false, errors.New("`other` node type is only allowed in an entry")
+			}
+		}
+	default:
+		return false, errors.New("unknown node type")
+	}
+	return true, nil
+}
+
+func calculateChannelActionsFees(nodes []*NodeItem) *big.Int {
+	totalFees := big.NewInt(0)
+	for _, n := range nodes {
+		switch n.NodeType {
+		case NodeItemType_CHANNEL:
+			{
+				oneFFG := currency.FFG()
+				totalFees = totalFees.Add(totalFees, oneFFG.Mul(oneFFG, big.NewInt(channelCreationFeesFFG)))
+			}
+		default:
+			{
+				oneMiliFFG := currency.MiliFFG()
+				totalFees = totalFees.Add(totalFees, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(remainingChannelOperationFeesMiliFFG)))
+			}
+		}
+	}
+
+	return totalFees
 }

@@ -10,6 +10,7 @@ import (
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/keystore"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -72,7 +73,7 @@ func TestAccountAPIMethods(t *testing.T) {
 		os.RemoveAll("acountapi.db")
 		os.RemoveAll("testksdir")
 	})
-	blockchain, err := blockchain.New(driver, genesisblockValid.Hash)
+	blockchain, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	err = blockchain.InitOrLoad()
 	assert.NoError(t, err)

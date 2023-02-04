@@ -2,9 +2,14 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+
+	// nolint:gosec
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -106,4 +111,28 @@ func RawPublicToAddressBytes(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return keccacBytes[12:], nil
+}
+
+// Sha1File performs a sha1 hash on a file
+func Sha1File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	// nolint:gosec
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("failed to copy file content to sha1 handler: %w", err)
+	}
+
+	return hexutil.EncodeNoPrefix(h.Sum(nil)), nil
+}
+
+// Sha256 performs a sha256 hash of input.
+func Sha256(data []byte) []byte {
+	hash := sha256.Sum256(data)
+	bts := hash[:]
+	return bts
 }
