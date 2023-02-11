@@ -29,11 +29,25 @@ const (
 	metadataPrefix   = "metadata"
 )
 
+// Interface defines the functionalities of the storage engine.
+type Interface interface {
+	StoragePath() string
+	Enabled() bool
+	SetEnabled(val bool)
+	CreateSubfolders() (string, error)
+	SaveToken(token AccessToken) error
+	SaveFileMetadata(nodeHash string, metadata FileMetadata) error
+	GetFileMetadata(nodeHash string) (FileMetadata, error)
+	GetNodeHashFromFileHash(fileHash string) (string, bool)
+	CanAccess(token string) (bool, AccessToken, error)
+}
+
 // FileMetadata holds the metadata for a file.
 type FileMetadata struct {
-	Hash     string `json:"hash"`
-	FilePath string `json:"file_path"`
-	Size     int64  `json:"size"`
+	MerkleRootHash string `json:"merkle_root_hash"`
+	Hash           string `json:"hash"`
+	FilePath       string `json:"file_path"`
+	Size           int64  `json:"size"`
 }
 
 // AccessToken represents an access token.
@@ -315,6 +329,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileMetadata := FileMetadata{
+		// MerkleRootHash: , // TODO:
 		Hash:     fHash,
 		FilePath: folderPath,
 		Size:     fileSize,

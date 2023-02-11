@@ -1,10 +1,11 @@
 package crypto
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -137,9 +138,25 @@ func TestSha1File(t *testing.T) {
 	t.Cleanup(func() {
 		os.RemoveAll(fileToBeCreated)
 	})
-	filePath, err := common.WriteToFile([]byte("hello"), fileToBeCreated)
+	filePath, err := writeToFile([]byte("hello"), fileToBeCreated)
 	assert.NoError(t, err)
 	hash, err := Sha1File(filePath)
 	assert.NoError(t, err)
 	assert.Equal(t, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", hash)
+}
+
+func writeToFile(data []byte, filePath string) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to open path: %w", err)
+	}
+	file, err := os.Create(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create path: %w", err)
+	}
+	defer file.Close()
+	_, err = file.Write(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to write data to path: %w", err)
+	}
+	return filePath, nil
 }

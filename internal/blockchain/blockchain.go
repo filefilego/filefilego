@@ -32,6 +32,7 @@ const (
 	nodePrefix               = "nd"
 	nodeNodesPrefix          = "nn"
 	channelPrefix            = "ch"
+	channelsCountPrefix      = "channels_count"
 
 	channelCreationFeesFFG               = 20000
 	remainingChannelOperationFeesMiliFFG = 50
@@ -59,6 +60,11 @@ type Interface interface {
 	GetLastBlockUpdatedAt() int64
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 	GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error)
+	GetChannels(limit, offset int) ([]*NodeItem, error)
+	GetChannelsCount() uint64
+	GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error)
+	GetNodeItem(nodeHash []byte) (*NodeItem, error)
+	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -982,10 +988,39 @@ func (b *Blockchain) CloseDB() error {
 	return b.db.Close()
 }
 
+// GetChannelsCount returns the count of total channels.
+func (b *Blockchain) GetChannelsCount() uint64 {
+	channelsCountBytes, err := b.db.Get([]byte(channelsCountPrefix))
+	if err != nil {
+		return 0
+	}
+	return binary.BigEndian.Uint64(channelsCountBytes)
+}
+
 func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
 	err := b.db.Put(append([]byte(channelPrefix), nodeHash...), []byte{})
 	if err != nil {
 		return fmt.Errorf("failed to insert node to channels: %w", err)
+	}
+
+	channelsCountBytes, err := b.db.Get([]byte(channelsCountPrefix))
+	if err != nil || channelsCountBytes == nil {
+		channelsUint64 := make([]byte, 8)
+		binary.BigEndian.PutUint64(channelsUint64, 1)
+		err := b.db.Put([]byte(channelsCountPrefix), channelsUint64)
+		if err != nil {
+			return fmt.Errorf("failed to insert to channels count: %w", err)
+		}
+		return nil
+	}
+
+	num := binary.BigEndian.Uint64(channelsCountBytes)
+	num++
+	channelsUint64 := make([]byte, 8)
+	binary.BigEndian.PutUint64(channelsUint64, num)
+	err = b.db.Put([]byte(channelsCountPrefix), channelsUint64)
+	if err != nil {
+		return fmt.Errorf("failed to update channels count: %w", err)
 	}
 
 	return nil
@@ -1041,16 +1076,25 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error) {
 }
 
 // GetChannels gets a list of channels.
-func (b *Blockchain) GetChannels() ([]*NodeItem, error) {
+func (b *Blockchain) GetChannels(limit, offset int) ([]*NodeItem, error) {
 	iter := b.db.NewIterator(util.BytesPrefix([]byte(channelPrefix)), nil)
 	channelNodes := make([]*NodeItem, 0)
+	index := 0
 	for iter.Next() {
+		if limit == 0 {
+			break
+		}
+		index++
+		if index <= offset {
+			continue
+		}
 		key := iter.Key()
 		item, err := b.GetNodeItem(key[len([]byte(channelPrefix)):])
 		if err != nil {
 			continue
 		}
 		channelNodes = append(channelNodes, item)
+		limit--
 	}
 	iter.Release()
 	err := iter.Error()

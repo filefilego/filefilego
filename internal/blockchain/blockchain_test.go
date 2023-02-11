@@ -532,7 +532,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.Equal(t, channelNode.Name, retrivedNode.Name)
 
 	// GetChannels
-	channels, err := blockchain.GetChannels()
+	channels, err := blockchain.GetChannels(10, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, channelNode.Name, channels[0].Name)
 
@@ -603,6 +603,9 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.Equal(t, false, owner)
 	assert.Equal(t, true, admin)
 	assert.Equal(t, false, poster)
+
+	// GetChannelsCount
+	assert.Equal(t, uint64(1), blockchain.GetChannelsCount())
 }
 
 func TestPerformStateUpdateFromDataPayload(t *testing.T) {
@@ -657,7 +660,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	txWithChannelPayload.TransactionFees = "0x" + fees.Text(16)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
 	assert.NoError(t, err)
-	channels, err := blockchain.GetChannels()
+	channels, err := blockchain.GetChannels(10, 0)
 	assert.NoError(t, err)
 	assert.Len(t, channels, 1)
 	assert.Equal(t, "channel one", channels[0].Name)
@@ -763,7 +766,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload3)
 	assert.NoError(t, err)
 
-	allChannels, err := blockchain.GetChannels()
+	allChannels, err := blockchain.GetChannels(10, 0)
 	assert.NoError(t, err)
 	assert.Len(t, allChannels, 2)
 
@@ -778,10 +781,27 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Len(t, childsOfSubchannelffg, 1)
 	assert.Equal(t, "this is an entry under subchannel", childsOfSubchannelffg[0].Name)
 
+	// check limit and offset
+	allChannels, err = blockchain.GetChannels(1, 0)
+	assert.NoError(t, err)
+	assert.Len(t, allChannels, 1)
+	assert.Equal(t, "channel FFG", allChannels[0].Name)
+
+	allChannels, err = blockchain.GetChannels(1, 1)
+	assert.NoError(t, err)
+	assert.Len(t, allChannels, 1)
+	assert.Equal(t, "channel one", allChannels[0].Name)
+
+	// offset bigger than the
+	allChannels, err = blockchain.GetChannels(1, 2)
+	assert.NoError(t, err)
+	assert.Len(t, allChannels, 0)
+
 	// check the search engine
 	searchResults, err := searchEngine.Search(context.TODO(), "entry", 100, 0, search.AnyTermRequired)
 	assert.NoError(t, err)
 	assert.Len(t, searchResults, 1)
+	assert.Equal(t, uint64(2), blockchain.GetChannelsCount())
 }
 
 func TestPerformAddressStateUpdate(t *testing.T) {
