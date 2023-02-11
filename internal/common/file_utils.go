@@ -16,6 +16,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
 
 	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
@@ -280,7 +281,8 @@ func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData i
 	}
 
 	for i := 0; i < howManySegments; i++ {
-		if encryptEverySegment != 0 && i%encryptEverySegment == 0 {
+		if encryptEverySegment != 0 && i%encryptEverySegment == 0 && totalSegmentsToEncrypt > 0 {
+			totalSegmentsToEncrypt--
 			from := i * segmentSizeBytes
 			to := from + segmentSizeBytes - 1
 
@@ -323,7 +325,6 @@ func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData i
 					return fmt.Errorf("failed to read from input: %w", err)
 				}
 			}
-
 		}
 	}
 
@@ -421,12 +422,26 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		})
 	}
 
-	for i, v := range fileRanges {
+	fileRangesTmp := make([]FileBlockRange, len(fileRanges))
+	copy(fileRangesTmp, fileRanges)
+
+	sort.Slice(fileRangesTmp, func(i, j int) bool { return fileRangesTmp[i].from < fileRangesTmp[j].from })
+
+	for i, v := range fileRangesTmp {
 		div := v.from / segmentSizeBytes
 		if totalSegmentsToEncrypt != 0 && div%encryptEverySegment == 0 {
 			totalSegmentsToEncrypt--
+			fileRangesTmp[i].mustEncrypt = true
+		}
+	}
 
-			fileRanges[i].mustEncrypt = true
+	for _, v := range fileRangesTmp {
+		if v.mustEncrypt {
+			for idx, j := range fileRanges {
+				if v.from == j.from {
+					fileRanges[idx].mustEncrypt = true
+				}
+			}
 		}
 	}
 
@@ -462,12 +477,19 @@ func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomi
 		}
 	}
 
+	if len(merkleTreeOfRawSegments) > 0 {
+		return nil, errors.New("merkle tree of raw segements were not merged with the encrypted file's merkle tree")
+	}
+
 	return items, nil
 }
 
 // HashFileBlockSegments hashes all the file block segments and returns the merkle tree nodes.
 // default totalSegments is 4096
 func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []int) ([]merkletree.Content, error) {
+	if totalSegments == 0 {
+		return nil, errors.New("total segments is zero")
+	}
 	inputFile, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open destination file for hashing its segments: %w", err)
@@ -526,7 +548,10 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 		}
 
 		hash := sha256Sum.Sum(nil)
-		hashes = append(hashes, FileBlockHash{x: hash})
+		fbh := FileBlockHash{x: make([]byte, len(hash))}
+		copy(fbh.x, hash)
+
+		hashes = append(hashes, fbh)
 	}
 
 	return hashes, nil
@@ -555,7 +580,7 @@ func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int
 
 	howManySegments = int(newSegmentSize)
 
-	if fileSize < howManySegments {
+	if fileSize <= howManySegments {
 		segmentSizeBytes = howManySegments
 		howManySegments = 1
 	}
@@ -564,17 +589,30 @@ func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int
 	_, fracEncrypted := math.Modf(encryptionPercentage)
 	totalSegmentsToEncrypt := 0
 	if fracEncrypted > 0 {
-
 		totalSegmentsToEncrypt = int(math.Round((encryptionPercentage) + 0.5))
 	} else {
 		totalSegmentsToEncrypt = int(math.Round(encryptionPercentage))
 	}
 
 	encryptEverySegment := 0
-	if totalSegmentsToEncrypt == 0 {
-		encryptEverySegment = 0
-	} else {
-		encryptEverySegment = howManySegments / totalSegmentsToEncrypt
+	if totalSegmentsToEncrypt > 0 {
+		segmentsOverTotalSegmentsToEncrypt := float64(howManySegments) / float64(totalSegmentsToEncrypt)
+		_, fraction := math.Modf(segmentsOverTotalSegmentsToEncrypt)
+		if fraction > 0 {
+			encryptEverySegment = int(math.Round((segmentsOverTotalSegmentsToEncrypt) + 0.5))
+			// totalSegmentsToEncrypt--
+		} else {
+			encryptEverySegment = int(math.Round(segmentsOverTotalSegmentsToEncrypt))
+		}
+		// encryptEverySegment = howManySegments / totalSegmentsToEncrypt
+
+		for {
+			if encryptEverySegment*totalSegmentsToEncrypt > howManySegments {
+				totalSegmentsToEncrypt--
+			} else {
+				break
+			}
+		}
 	}
 
 	return howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment
