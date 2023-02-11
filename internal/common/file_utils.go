@@ -422,6 +422,9 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		})
 	}
 
+	// make a copy of the randomized ranges
+	// and sort them by "from" so we incrementally indicate which segments should be encrypted
+	// this way we can derive the correct order from the diff file which is sent for verification using merkle trees
 	fileRangesTmp := make([]FileBlockRange, len(fileRanges))
 	copy(fileRangesTmp, fileRanges)
 

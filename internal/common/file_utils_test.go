@@ -409,7 +409,7 @@ func TestMerkleHashAfterSegmentRandomizationNoEncryption(t *testing.T) {
 	assert.Equal(t, hashOfDecryptedRestoredFile, hashOfOriginalFile)
 }
 
-func TestEncryptAndVerifyMerkle(t *testing.T) {
+func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	fileContent := "this is ffg network a decentralized data sharing network+"
 	inputFile := "encryptverify.txt"
 	outputFile := "encryptverify.enc.txt"
@@ -417,7 +417,7 @@ func TestEncryptAndVerifyMerkle(t *testing.T) {
 	outputUnencryptedSegments := "encryptverify.unencrypted.txt"
 
 	percentageEcrypt := 37
-	totalSegmentsDesired := 32
+	totalSegmentsDesired := 4096
 
 	_, err := WriteToFile([]byte(fileContent), inputFile)
 	assert.NoError(t, err)
@@ -542,6 +542,4 @@ func TestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, hashOfDecryptedRestoredFile, hashOfOriginalFile)
 	output.Close()
-
-	// assert.Fail(t, "dd")
 }
