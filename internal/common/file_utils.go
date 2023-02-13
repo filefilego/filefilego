@@ -263,11 +263,6 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 	return nil
 }
 
-// func VerifyMerkleTreeOfEncryptedFile(fileSize, totalSegments, percentageToEncryptData int) {
-// 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
-
-// }
-
 // WriteUnencryptedSegments takes the file segments that need to be encrypted and copies them to output before encryption is performed.
 func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser) error {
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
@@ -329,6 +324,77 @@ func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData i
 	}
 
 	return nil
+}
+
+// EncryptAndHashSegments encrypts a file's raw segment given a key and hashes the segment.
+func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments []int, input io.ReadSeekCloser, encryptor DataEncryptor) ([]merkletree.Content, error) {
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 100)
+	if len(randomizedFileSegments) != howManySegments {
+		return nil, fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
+	}
+	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
+	if !ok || len(ranges) == 0 {
+		return nil, errors.New("failed to prepare file blocks")
+	}
+	sha256Sum := sha256.New()
+	hashes := make([]merkletree.Content, 0)
+
+	for _, v := range ranges {
+		sha256Sum.Reset()
+		stream, err := encryptor.StreamEncryptor()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create an encryptor: %w", err)
+		}
+
+		_, err = input.Seek(int64(v.from), 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to seek input file at offset %d filesize %d: %w", v.from, fileSize, err)
+		}
+
+		diff := (v.to - v.from) + 1
+
+		for diff > 0 {
+			totalBytesRead := 0
+			if diff > bufferSize {
+				diff -= bufferSize
+				totalBytesRead = bufferSize
+			} else {
+				totalBytesRead = diff
+				diff -= diff
+			}
+
+			buf := make([]byte, totalBytesRead)
+			n, err := input.Read(buf)
+			if n > 0 {
+				stream.XORKeyStream(buf, buf[:n])
+				okn, err := sha256Sum.Write(buf[:n])
+				if okn != n {
+					return nil, errors.New("number of bytes written from buffer to sha sum are not equal")
+				}
+
+				if err != nil {
+					return nil, fmt.Errorf("failed to write to sha sum: %w", err)
+				}
+			}
+
+			if err == io.EOF {
+				log.Warn("io.EOF when encrypting")
+				break
+			}
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to read from input: %w", err)
+			}
+		}
+
+		hash := sha256Sum.Sum(nil)
+		fbh := FileBlockHash{x: make([]byte, len(hash))}
+		copy(fbh.x, hash)
+
+		hashes = append(hashes, fbh)
+	}
+
+	return hashes, nil
 }
 
 // EncryptWriteOutput uses the stream cipher to encrypt the input reader and write to the output.
@@ -506,10 +572,6 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 	fileSize := int(fileStats.Size())
 
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 0)
-	// we use an ordered list for getting the list of segments
-	// original file should have segments from zero to end in ascending order
-	// because no encrption or bytes slicing is performed
-
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomSegments)
 	if !ok {
 		return nil, errors.New("failed to prepare file block/segment ranges")
@@ -603,11 +665,9 @@ func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int
 		_, fraction := math.Modf(segmentsOverTotalSegmentsToEncrypt)
 		if fraction > 0 {
 			encryptEverySegment = int(math.Round((segmentsOverTotalSegmentsToEncrypt) + 0.5))
-			// totalSegmentsToEncrypt--
 		} else {
 			encryptEverySegment = int(math.Round(segmentsOverTotalSegmentsToEncrypt))
 		}
-		// encryptEverySegment = howManySegments / totalSegmentsToEncrypt
 
 		for {
 			if encryptEverySegment*totalSegmentsToEncrypt > howManySegments {

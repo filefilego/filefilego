@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cbergoon/merkletree"
-	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/stretchr/testify/assert"
 )
@@ -250,12 +248,6 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 
 	start := time.Now()
-	// key, err := crypto.RandomEntropy(32)
-	// assert.NoError(t, err)
-	// iv, err := crypto.RandomEntropy(24)
-	// assert.NoError(t, err)
-	// encryptor, err := NewEncryptor(EncryptionTypeChacha20, key, iv)
-	// assert.NoError(t, err)
 	key, err := crypto.RandomEntropy(32)
 	assert.NoError(t, err)
 	iv, err := crypto.RandomEntropy(16)
@@ -278,11 +270,6 @@ func TestEncryptDecryption(t *testing.T) {
 	err = output.Close()
 	assert.NoError(t, err)
 
-	// get the merkle tree of the output file
-	// merkleTreeEncryptedFile, err := HashFileBlockSegments(outputFile, totalSegments)
-	// assert.NoError(t, err)
-	// assert.Len(t, merkleTreeEncryptedFile, totalSegments)
-
 	// reopen output file
 	// nolint:gofumpt
 	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
@@ -293,111 +280,6 @@ func TestEncryptDecryption(t *testing.T) {
 
 	start = time.Now()
 	err = DecryptFileSegments(int(outputStats.Size()), totalSegments, percentageDecrypt, randomSlices, output, outputOriginalRestored, encryptor)
-	elapsed = time.Since(start)
-	log.Printf("DecryptFileSegments took %s", elapsed)
-	assert.NoError(t, err)
-
-	hashOfOriginalFile, err := crypto.Sha1File(inputFile)
-	assert.NoError(t, err)
-	hashOfDecryptedRestoredFile, err := crypto.Sha1File(outputFileDecryptedRestored)
-	assert.NoError(t, err)
-	assert.Equal(t, hashOfDecryptedRestoredFile, hashOfOriginalFile)
-}
-
-// this function tests the randomization of the file segments to test
-// if the merkle hash is properlly derived from a randomized slice
-func TestMerkleHashAfterSegmentRandomizationNoEncryption(t *testing.T) {
-	fileContent := "this is ffg network a decentralized data sharing network+"
-	inputFile := "merkle.txt"
-	outputFile := "merkle.enc.txt"
-	outputFileDecryptedRestored := "merkle.original.txt"
-	percentageEcrypt := 0
-	totalSegments := 8
-
-	_, err := WriteToFile([]byte(fileContent), inputFile)
-	assert.NoError(t, err)
-	t.Cleanup(func() {
-		os.RemoveAll(inputFile)
-		os.RemoveAll(outputFile)
-		os.RemoveAll(outputFileDecryptedRestored)
-	})
-
-	input, err := os.Open(inputFile)
-	assert.NoError(t, err)
-	inputStats, err := input.Stat()
-	assert.NoError(t, err)
-
-	howManySegmentsForInputFile, _, _, encryptEverySegment := FileSegmentsInfo(int(inputStats.Size()), totalSegments, 0)
-	assert.Equal(t, howManySegmentsForInputFile, totalSegments)
-
-	orderedSlice := make([]int, howManySegmentsForInputFile)
-	for i := 0; i < howManySegmentsForInputFile; i++ {
-		orderedSlice[i] = i
-	}
-
-	inputMerkleRootHash, err := GetFileMerkleRootHash(inputFile, totalSegments, orderedSlice)
-	assert.NoError(t, err)
-
-	merkleTree, err := HashFileBlockSegments(inputFile, totalSegments, orderedSlice)
-	assert.NoError(t, err)
-	assert.Len(t, merkleTree, totalSegments)
-
-	// nolint:gofumpt
-	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
-	assert.NoError(t, err)
-
-	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, 0777)
-	assert.NoError(t, err)
-
-	start := time.Now()
-	key, err := crypto.RandomEntropy(32)
-	assert.NoError(t, err)
-	iv, err := crypto.RandomEntropy(16)
-	assert.NoError(t, err)
-	encryptor, err := NewEncryptor(EncryptionTypeAES256, key, iv)
-	assert.NoError(t, err)
-	elapsed := time.Since(start)
-	log.Printf("RandomEntropy for key and iv took %s", elapsed)
-
-	randomSlices := GenerateRandomIntSlice(howManySegmentsForInputFile)
-	start = time.Now()
-	err = EncryptWriteOutput(int(inputStats.Size()), totalSegments, percentageEcrypt, randomSlices, input, output, encryptor)
-	elapsed = time.Since(start)
-	log.Printf("EncryptWriteOutput took %s", elapsed)
-	assert.NoError(t, err)
-
-	err = output.Sync()
-	assert.NoError(t, err)
-
-	err = output.Close()
-	assert.NoError(t, err)
-
-	// get the encrypted merkle hash to see if it matches the original value given the random slice
-	merkleTreeRandomizedSegments, err := HashFileBlockSegments(outputFile, totalSegments, orderedSlice)
-	assert.NoError(t, err)
-	assert.Len(t, merkleTreeRandomizedSegments, howManySegmentsForInputFile)
-
-	reorderedMerkle, err := RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, randomSlices, merkleTreeRandomizedSegments, []merkletree.Content{})
-	assert.NoError(t, err)
-	assert.EqualValues(t, merkleTree, reorderedMerkle)
-
-	merkleOfReorderedMerkle, err := GetFileMerkleRootHashFromNodes(reorderedMerkle)
-	assert.NoError(t, err)
-
-	// check if the merkle root hashes are equal
-	assert.Equal(t, inputMerkleRootHash, merkleOfReorderedMerkle)
-	assert.Equal(t, "0x4c06842c3aa270970f6b0d5ade8a155b268f33e35c19849f1bbd24374bcc8f8a", hexutil.Encode(merkleOfReorderedMerkle))
-
-	// reopen output file
-	// nolint:gofumpt
-	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
-	assert.NoError(t, err)
-
-	outputStats, err := output.Stat()
-	assert.NoError(t, err)
-
-	start = time.Now()
-	err = DecryptFileSegments(int(outputStats.Size()), totalSegments, percentageEcrypt, randomSlices, output, outputOriginalRestored, encryptor)
 	elapsed = time.Since(start)
 	log.Printf("DecryptFileSegments took %s", elapsed)
 	assert.NoError(t, err)
@@ -434,23 +316,19 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.NoError(t, err)
 	input.Close()
 
-	howManySegmentsAllowedForFile, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(int(inputStats.Size()), totalSegmentsDesired, percentageEcrypt)
-	howManySegmentsAllowedForFile2, _, _, _ := FileSegmentsInfo(int(inputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt)
-	assert.Equal(t, howManySegmentsAllowedForFile, howManySegmentsAllowedForFile2)
+	// get the possible file segment size given the filesize and desired segment size.
+	howManySegmentsAllowedForFile, _, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(int(inputStats.Size()), totalSegmentsDesired, percentageEcrypt)
 
-	log.Println("howManySegmentsForInputFile ", howManySegmentsAllowedForFile)
-	log.Println("segmentSizeBytes ", segmentSizeBytes)
-	log.Println("totalSegmentsToEncrypt ", totalSegmentsToEncrypt)
-	log.Println("encryptEverySegment ", encryptEverySegment)
-
+	// ordered slice to get the merkle tree nodes of a file in order
 	orderedSlice := make([]int, howManySegmentsAllowedForFile)
 	for i := 0; i < howManySegmentsAllowedForFile; i++ {
 		orderedSlice[i] = i
 	}
-
+	// merkle root
 	inputMerkleRootHash, err := GetFileMerkleRootHash(inputFile, howManySegmentsAllowedForFile, orderedSlice)
 	assert.NoError(t, err)
 
+	// merkle tree of input with all the nodes
 	merkleTree, err := HashFileBlockSegments(inputFile, howManySegmentsAllowedForFile, orderedSlice)
 	assert.NoError(t, err)
 	assert.Len(t, merkleTree, howManySegmentsAllowedForFile)
@@ -466,8 +344,8 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	encryptor, err := NewEncryptor(EncryptionTypeAES256, key, iv)
 	assert.NoError(t, err)
 
+	// generate a random slice so we shuffle the segments order to be sent
 	randomSlices := GenerateRandomIntSlice(howManySegmentsAllowedForFile)
-
 	// nolint:gofumpt
 	outputUnencrypted, err := os.OpenFile(outputUnencryptedSegments, os.O_RDWR|os.O_CREATE, 0777)
 	assert.NoError(t, err)
@@ -475,12 +353,29 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	input, err = os.Open(inputFile)
 	assert.NoError(t, err)
 
+	// this step is to read the segments bytes which are indicated to be encrypted
+	// they are needed by verifier
 	err = WriteUnencryptedSegments(int(inputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, outputUnencrypted)
 	assert.NoError(t, err)
 	outputUnencrypted.Close()
 	input.Close()
 
-	// here input
+	orderedSliceForRawfile := []int{}
+	for i := 0; i < totalSegmentsToEncrypt; i++ {
+		orderedSliceForRawfile = append(orderedSliceForRawfile, i)
+	}
+	// encrypt the raw segments
+	// needed by verifier
+	outputUnencrypted, err = os.Open(outputUnencryptedSegments)
+	assert.NoError(t, err)
+	outputUnencryptedStats, err := outputUnencrypted.Stat()
+	assert.NoError(t, err)
+	merkleHashedEncryptedRaw, err := EncryptAndHashSegments(int(outputUnencryptedStats.Size()), totalSegmentsToEncrypt, orderedSliceForRawfile, outputUnencrypted, encryptor)
+	assert.NoError(t, err)
+	outputUnencrypted.Close()
+	assert.Len(t, merkleHashedEncryptedRaw, totalSegmentsToEncrypt)
+
+	// encrypt and shuffle segments based on the random slice
 	input, err = os.Open(inputFile)
 	assert.NoError(t, err)
 	err = EncryptWriteOutput(int(inputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, output, encryptor)
@@ -491,29 +386,35 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	err = output.Close()
 	assert.NoError(t, err)
 
-	// get the encrypted merkle hash to see if it matches the original value given the random slice
-	fmt.Println("getting merkle tree nodes of randomized file after encryption and randomisation")
+	// get the encrypted file's merkle hash to see if it matches the original value given the random slice
 	merkleTreeRandomizedSegments, err := HashFileBlockSegments(outputFile, howManySegmentsAllowedForFile, orderedSlice)
 	assert.NoError(t, err)
 	assert.Len(t, merkleTreeRandomizedSegments, howManySegmentsAllowedForFile)
+	merkleTreeRootHashRandomizedSegments, err := GetFileMerkleRootHashFromNodes(merkleTreeRandomizedSegments)
+	assert.NoError(t, err)
 
-	orderedSliceForRawfile := []int{}
-	for i := 0; i < totalSegmentsToEncrypt; i++ {
-		orderedSliceForRawfile = append(orderedSliceForRawfile, i)
-	}
+	// merge the merkle hash nodes of the raw segments with the merkle hashes of the whole file sent to the node (encrypted and shuffled)
+	// the result should be exactly the same merkle hashes of the merkleTreeRandomizedSegments
+	merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash, err := RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, randomSlices, merkleTreeRandomizedSegments, merkleHashedEncryptedRaw)
+	assert.NoError(t, err)
+	assert.EqualValues(t, merkleTreeRandomizedSegments, merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash)
+	merkleRootHashOfEncryptedSegmentsMergedWithEncryptedFile, err := GetFileMerkleRootHashFromNodes(merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash)
+	assert.NoError(t, err)
+	assert.EqualValues(t, merkleTreeRootHashRandomizedSegments, merkleRootHashOfEncryptedSegmentsMergedWithEncryptedFile)
 
-	fmt.Println("geting merkle of the bytes sent to verifier totalSegmentsToEncrypt:", totalSegmentsToEncrypt)
+	// get the merkle tree nodes of the WriteUnencryptedSegments result
 	merkleOfRawSegmentsBeforeEncryption, err := HashFileBlockSegments(outputUnencryptedSegments, totalSegmentsToEncrypt, orderedSliceForRawfile)
 	if totalSegmentsToEncrypt > 0 {
 		assert.NoError(t, err)
 		assert.Len(t, merkleOfRawSegmentsBeforeEncryption, totalSegmentsToEncrypt)
 	}
 
+	// given the merkle hashes from the encrypted file and the ones derived from the raw file we can get the final merkle tree
 	reorderedMerkle, err := RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, randomSlices, merkleTreeRandomizedSegments, merkleOfRawSegmentsBeforeEncryption)
-
 	assert.NoError(t, err)
-	// assert.EqualValues(t, merkleTree, reorderedMerkle)
+	assert.EqualValues(t, merkleTree, reorderedMerkle)
 
+	// get the merkle root hash of the derived file
 	merkleOfReorderedMerkle, err := GetFileMerkleRootHashFromNodes(reorderedMerkle)
 	assert.NoError(t, err)
 
@@ -532,10 +433,12 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, 0777)
 	assert.NoError(t, err)
 
+	// decrypt the file segments
 	err = DecryptFileSegments(int(outputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, output, outputOriginalRestored, encryptor)
 	assert.NoError(t, err)
 	outputOriginalRestored.Close()
 
+	// hash the original input with the final output to see if they match
 	hashOfOriginalFile, err := crypto.Sha1File(inputFile)
 	assert.NoError(t, err)
 	hashOfDecryptedRestoredFile, err := crypto.Sha1File(outputFileDecryptedRestored)
