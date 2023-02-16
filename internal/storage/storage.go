@@ -59,13 +59,14 @@ type AccessToken struct {
 
 // Storage represents the storage engine and the metadata.
 type Storage struct {
-	db          database.Database
-	storagePath string
-	enabled     bool
+	db                      database.Database
+	storagePath             string
+	enabled                 bool
+	merkleTreeTotalSegments int
 }
 
 // New creates a new storage instance.
-func New(db database.Database, storagePath string, enabled bool, adminToken string) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
@@ -78,6 +79,10 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		return nil, errors.New("adminToken is empty")
 	}
 
+	if merkleTreeTotalSegments == 0 {
+		return nil, errors.New("merkle tree total segments is zero")
+	}
+
 	if !common.DirExists(storagePath) {
 		if err := common.CreateDirectory(storagePath); err != nil {
 			return nil, fmt.Errorf("failed to create storage directory: %w", err)
@@ -85,9 +90,10 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 	}
 
 	storage := &Storage{
-		db:          db,
-		storagePath: storagePath,
-		enabled:     enabled,
+		db:                      db,
+		storagePath:             storagePath,
+		enabled:                 enabled,
+		merkleTreeTotalSegments: merkleTreeTotalSegments,
 	}
 
 	token := AccessToken{
@@ -328,11 +334,24 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	orderedSlice := make([]int, howManySegments)
+	for i := 0; i < howManySegments; i++ {
+		orderedSlice[i] = i
+	}
+
+	fMerkleRootHash, err := common.GetFileMerkleRootHash(newPath, s.merkleTreeTotalSegments, orderedSlice)
+	if err != nil {
+		os.Remove(old)
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to get merkle root hash"}`)
+		return
+	}
+
 	fileMetadata := FileMetadata{
-		// MerkleRootHash: , // TODO:
-		Hash:     fHash,
-		FilePath: folderPath,
-		Size:     fileSize,
+		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
+		Hash:           fHash,
+		FilePath:       folderPath,
+		Size:           fileSize,
 	}
 
 	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
@@ -351,7 +370,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_hash": "%s", "size": %d}`, fileMetadata.Hash, fileMetadata.Size))
+	writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_hash": "%s", "merkle_root_hash": "%s", "size": %d}`, fileMetadata.Hash, fileMetadata.MerkleRootHash, fileMetadata.Size))
 }
 
 // Authenticate authenticates storage access.

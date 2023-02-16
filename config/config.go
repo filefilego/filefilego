@@ -15,21 +15,22 @@ type Config struct {
 }
 
 type global struct {
-	NodeIdentityKeyPassphrase string
-	LogPathLine               bool
-	LogLevel                  string
-	DataDir                   string
-	KeystoreDir               string
-	Validator                 bool
-	ValidatorKeypath          string
-	ValidatorPass             string
-	SearchEngine              bool
-	SearchEngineResultCount   int
-	Storage                   bool
-	StorageDir                string
-	StorageToken              string
-	StorageFeesGB             string
-	DataVerifier              bool
+	NodeIdentityKeyPassphrase          string
+	LogPathLine                        bool
+	LogLevel                           string
+	DataDir                            string
+	KeystoreDir                        string
+	Validator                          bool
+	ValidatorKeypath                   string
+	ValidatorPass                      string
+	SearchEngine                       bool
+	SearchEngineResultCount            int
+	Storage                            bool
+	StorageDir                         string
+	StorageToken                       string
+	StorageFeesGB                      string
+	StorageFileMerkleTreeTotalSegments int
+	DataVerifier                       bool
 }
 
 type p2p struct {
@@ -71,7 +72,8 @@ type unixDomainSocket struct {
 func New(ctx *cli.Context) *Config {
 	conf := &Config{
 		Global: global{
-			SearchEngineResultCount: 100,
+			SearchEngineResultCount:            100,
+			StorageFileMerkleTreeTotalSegments: 1024,
 		},
 		RPC: rpc{
 			Whitelist:       []string{},
@@ -156,6 +158,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(StorageFeesGB.Name) {
 		conf.Global.StorageFeesGB = ctx.String(StorageFeesGB.Name)
+	}
+
+	if ctx.IsSet(StorageFileMerkleTreeTotalSegments.Name) {
+		conf.Global.StorageFileMerkleTreeTotalSegments = ctx.Int(StorageFileMerkleTreeTotalSegments.Name)
 	}
 
 	if ctx.IsSet(DataVerifier.Name) {

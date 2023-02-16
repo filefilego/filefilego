@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/cespare/xxhash"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/crypto/sha3"
@@ -125,6 +126,23 @@ func Sha1File(path string) (string, error) {
 	h := sha1.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", fmt.Errorf("failed to copy file content to sha1 handler: %w", err)
+	}
+
+	return hexutil.EncodeNoPrefix(h.Sum(nil)), nil
+}
+
+// XXHashFile peforms a xxhash hash on a file.
+func XXHashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	// nolint:gosec
+	h := xxhash.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("failed to copy file content to xxhash handler: %w", err)
 	}
 
 	return hexutil.EncodeNoPrefix(h.Sum(nil)), nil

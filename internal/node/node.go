@@ -185,7 +185,7 @@ func (n *Node) Sync(ctx context.Context) error {
 		// try to download blocks
 		for n.blockchain.GetHeight() <= n.blockDownloaderProtocol.GetHeighestBlockNumberFromPeers() {
 			localHeight := n.blockchain.GetHeight()
-			request := messages.BlockDownloadRequest{
+			request := messages.BlockDownloadRequestProto{
 				From: localHeight + 1,
 				To:   localHeight + 100,
 			}

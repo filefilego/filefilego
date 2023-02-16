@@ -48,7 +48,7 @@ func (rp *RemotePeer) CurrentHeight() uint64 {
 }
 
 // DownloadBlocksRange downloads a range of blocks
-func (rp *RemotePeer) DownloadBlocksRange(ctx context.Context, request *messages.BlockDownloadRequest) (*messages.BlockDownloadResponse, error) {
+func (rp *RemotePeer) DownloadBlocksRange(ctx context.Context, request *messages.BlockDownloadRequestProto) (*messages.BlockDownloadResponseProto, error) {
 	s, err := rp.host.NewStream(ctx, rp.peer, BlockDownloaderProtocolID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new download stream to remote peer: %w", err)
@@ -89,7 +89,7 @@ func (rp *RemotePeer) DownloadBlocksRange(ctx context.Context, request *messages
 		return nil, fmt.Errorf("failed to read block response payload: %w", err)
 	}
 
-	response := messages.BlockDownloadResponse{}
+	response := messages.BlockDownloadResponseProto{}
 	if err := proto.Unmarshal(buf, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal block download response: %w", err)
 	}
@@ -100,7 +100,7 @@ func (rp *RemotePeer) DownloadBlocksRange(ctx context.Context, request *messages
 }
 
 // GetHeight gets remote peers blockchain height.
-func (rp *RemotePeer) GetHeight(ctx context.Context) (*messages.BlockchainHeightResponse, error) {
+func (rp *RemotePeer) GetHeight(ctx context.Context) (*messages.BlockchainHeightResponseProto, error) {
 	s, err := rp.host.NewStream(ctx, rp.peer, BlockchainHeightProtocolID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a new block height stream to remote peer: %w", err)
@@ -124,7 +124,7 @@ func (rp *RemotePeer) GetHeight(ctx context.Context) (*messages.BlockchainHeight
 		return nil, fmt.Errorf("failed to read all data from stream: %w", err)
 	}
 
-	response := messages.BlockchainHeightResponse{}
+	response := messages.BlockchainHeightResponseProto{}
 	if err := proto.Unmarshal(buf, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal data retrieved from the remote peer: %w", err)
 	}

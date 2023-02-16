@@ -224,7 +224,7 @@ func TestProtocolMethods(t *testing.T) {
 	assert.Equal(t, uint64(1), protocol2.GetHeighestBlockNumberFromPeers())
 
 	// DownloadBlocksRange
-	blockRequestPayload := &messages.BlockDownloadRequest{
+	blockRequestPayload := &messages.BlockDownloadRequestProto{
 		From: 1,
 		To:   1,
 	}

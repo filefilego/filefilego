@@ -29,11 +29,12 @@ func TestNew(t *testing.T) {
 		os.RemoveAll("/tmp/invalidpathffg")
 	})
 	cases := map[string]struct {
-		db          database.Database
-		storagePath string
-		enabled     bool
-		adminToken  string
-		expErr      string
+		db                  database.Database
+		storagePath         string
+		enabled             bool
+		adminToken          string
+		totalMerkleSegments int
+		expErr              string
 	}{
 		"no database": {
 			expErr: "db is nil",
@@ -47,10 +48,17 @@ func TestNew(t *testing.T) {
 			storagePath: "/tmp/",
 			expErr:      "adminToken is empty",
 		},
-		"success": {
+		"zero merkle segments": {
 			db:          driver,
-			storagePath: "/tmp/invalidpathffg/",
+			storagePath: "/tmp/",
 			adminToken:  "12345",
+			expErr:      "merkle tree total segments is zero",
+		},
+		"success": {
+			db:                  driver,
+			storagePath:         "/tmp/invalidpathffg/",
+			adminToken:          "12345",
+			totalMerkleSegments: 1024,
 		},
 	}
 
@@ -58,7 +66,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken)
+			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments)
 			if tt.expErr != "" {
 				assert.Nil(t, storage)
 				assert.EqualError(t, err, tt.expErr)
@@ -80,7 +88,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken")
+	storage, err := New(driver, storagePath, false, "admintoken", 1024)
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -201,7 +209,7 @@ func TestAuthenticateHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024)
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 
@@ -256,7 +264,7 @@ func TestUploadHandler(t *testing.T) {
 		os.RemoveAll("storagetestuploading.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024)
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 
@@ -309,13 +317,16 @@ func TestUploadHandler(t *testing.T) {
 	storage.ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	type fileUploadResponse struct {
-		FileHash string `json:"file_hash"`
-		Size     int    `json:"size"`
+		FileHash       string `json:"file_hash"`
+		MerkleRootHash string `json:"merkle_root_hash"`
+		Size           int    `json:"size"`
 	}
 	fileUploaded := fileUploadResponse{}
 	err = json.Unmarshal(response.Body.Bytes(), &fileUploaded)
 	assert.NoError(t, err)
 	assert.Equal(t, 8, fileUploaded.Size)
+	// the merkle tree root hash is 32 bytes and 66 in hex encoded.
+	assert.Len(t, fileUploaded.MerkleRootHash, 66)
 
 	fileMetadata, err := storage.GetFileMetadata("nodehash123")
 	assert.NoError(t, err)

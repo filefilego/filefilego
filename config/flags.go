@@ -80,6 +80,11 @@ var (
 		Usage: "Storage fees per GB of data",
 	}
 
+	StorageFileMerkleTreeTotalSegments = cli.IntFlag{
+		Name:  "storage_file_merkle_tree_total_segments",
+		Usage: "File's total segments for merkle tree generation",
+	}
+
 	DataVerifier = cli.BoolFlag{
 		Name:  "verify",
 		Usage: "Enable data verification(if verifier in genesis)",

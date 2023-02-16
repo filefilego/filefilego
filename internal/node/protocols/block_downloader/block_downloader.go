@@ -177,14 +177,14 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 		return
 	}
 
-	downloadRequest := messages.BlockDownloadRequest{}
+	downloadRequest := messages.BlockDownloadRequestProto{}
 	if err := proto.Unmarshal(buf, &downloadRequest); err != nil {
 		log.Error("error while unmarshalling data from stream: " + err.Error())
 		return
 	}
 
 	nodeHeight := bd.blockchain.GetHeight()
-	downloadResponse := messages.BlockDownloadResponse{
+	downloadResponse := messages.BlockDownloadResponseProto{
 		From:       downloadRequest.From,
 		To:         downloadRequest.To,
 		Error:      false,
@@ -227,7 +227,7 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 
 // onBlockchainHeightRequest handles the blockchain height request.
 func (bd *Protocol) onBlockchainHeightRequest(s network.Stream) {
-	response := messages.BlockchainHeightResponse{
+	response := messages.BlockchainHeightResponseProto{
 		Height: bd.blockchain.GetHeight(),
 	}
 	data, _ := proto.Marshal(&response)

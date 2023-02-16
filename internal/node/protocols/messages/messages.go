@@ -2,7 +2,7 @@ package messages
 
 // DataQueryRequest represents a data query message.
 type DataQueryRequest struct {
-	Nodes        [][]byte
+	FileHashes   [][]byte
 	FromPeerAddr string
 	Hash         []byte
 	Timestamp    int64
@@ -10,26 +10,26 @@ type DataQueryRequest struct {
 
 // DataQueryResponse represents a data query response.
 type DataQueryResponse struct {
-	FromPeerAddr     string
-	TotalFeesGB      string
-	Hash             []byte
-	PublicKey        []byte
-	Signature        []byte
-	Nodes            [][]byte
-	UnavailableNodes [][]byte
-	Timestamp        int64
+	FromPeerAddr          string
+	TotalFeesGB           string
+	Hash                  []byte
+	PublicKey             []byte
+	Signature             []byte
+	FileHashes            [][]byte
+	UnavailableFileHashes [][]byte
+	Timestamp             int64
 }
 
 // ToDataQueryRequest returns a domain DataQueryRequest object.
 func ToDataQueryRequest(dqr *DataQueryRequestProto) DataQueryRequest {
 	r := DataQueryRequest{
-		Nodes:        make([][]byte, len(dqr.Nodes)),
+		FileHashes:   make([][]byte, len(dqr.FileHashes)),
 		FromPeerAddr: dqr.FromPeerAddr,
 		Hash:         make([]byte, len(dqr.Hash)),
 		Timestamp:    dqr.Timestamp,
 	}
 
-	copy(r.Nodes, dqr.Nodes)
+	copy(r.FileHashes, dqr.FileHashes)
 	copy(r.Hash, dqr.Hash)
 
 	return r
@@ -38,21 +38,21 @@ func ToDataQueryRequest(dqr *DataQueryRequestProto) DataQueryRequest {
 // ToDataQueryResponse returns a domain DataQueryResponse object.
 func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	r := DataQueryResponse{
-		FromPeerAddr:     dqr.FromPeerAddr,
-		TotalFeesGB:      dqr.TotalFeesGB,
-		Hash:             make([]byte, len(dqr.Hash)),
-		PublicKey:        make([]byte, len(dqr.PublicKey)),
-		Signature:        make([]byte, len(dqr.Signature)),
-		Nodes:            make([][]byte, len(dqr.Nodes)),
-		UnavailableNodes: make([][]byte, len(dqr.UnavailableNodes)),
-		Timestamp:        dqr.Timestamp,
+		FromPeerAddr:          dqr.FromPeerAddr,
+		TotalFeesGB:           dqr.TotalFeesPerGb,
+		Hash:                  make([]byte, len(dqr.Hash)),
+		PublicKey:             make([]byte, len(dqr.PublicKey)),
+		Signature:             make([]byte, len(dqr.Signature)),
+		FileHashes:            make([][]byte, len(dqr.FileHashes)),
+		UnavailableFileHashes: make([][]byte, len(dqr.UnavailableFileHashes)),
+		Timestamp:             dqr.Timestamp,
 	}
 
 	copy(r.Hash, dqr.Hash)
 	copy(r.PublicKey, dqr.PublicKey)
 	copy(r.Signature, dqr.Signature)
-	copy(r.Nodes, dqr.Nodes)
-	copy(r.UnavailableNodes, dqr.UnavailableNodes)
+	copy(r.FileHashes, dqr.FileHashes)
+	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 
 	return r
 }

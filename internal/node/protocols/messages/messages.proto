@@ -22,40 +22,93 @@ message ProtoBlocks {
 
 // DataQueryRequestProto represents a data query message.
 message DataQueryRequestProto {
-    repeated bytes nodes = 1;
-    string fromPeerAddr = 2;
+    repeated bytes file_hashes = 1;
+    string from_peer_addr = 2;
     bytes hash = 3;
     int64 timestamp = 4;
 }
 
 // DataQueryResponseProto represents a data query response.
 message DataQueryResponseProto {
-    string fromPeerAddr = 1;
-    string totalFeesGB = 2;
+    string from_peer_addr = 1;
+    string total_fees_per_gb = 2;
     bytes hash = 3;
-    bytes publicKey = 4;
+    bytes public_key = 4;
     bytes signature = 5;
-    repeated bytes nodes = 6;
-    repeated bytes unavailableNodes = 7;
+    repeated bytes file_hashes = 6;
+    repeated bytes unavailable_file_hashes = 7;
     int64 timestamp = 8;
 }
 
-// BlockchainHeightResponse represents the height of a node's blockchain.
-message BlockchainHeightResponse {
+// BlockchainHeightResponseProto represents the height of a node's blockchain.
+message BlockchainHeightResponseProto {
     uint64 height = 1;
 }
 
-// BlockDownloadRequest represents a block download request range.
-message BlockDownloadRequest {
+// BlockDownloadRequestProto represents a block download request range.
+message BlockDownloadRequestProto {
     uint64 from = 1;
     uint64 to = 2;
 }
 
-// BlockDownloadResponse represents a block download response.
-message BlockDownloadResponse {
+// BlockDownloadResponseProto represents a block download response.
+message BlockDownloadResponseProto {
     uint64 from = 1;
     uint64 to = 2;
     bool error = 3;
     uint64 node_height = 4;
     repeated block.ProtoBlock blocks = 5;
+}
+
+// DownloadContractProto represents a download contract.
+message DownloadContractProto {
+    DataQueryResponseProto file_hoster_response = 1;
+    bytes file_requester_public_key = 2;
+    repeated bytes file_hashes_needed = 3;
+    bytes verifier_public_key = 4;
+    string verifier_fees = 5;
+    bytes contract_hash = 6;
+    bytes verifier_signature = 7;
+}
+
+// DownloadContractsHashProto contains a list of contract hashes which will be send as a transaction data payload.
+message DownloadContractsHashProto {
+    repeated bytes contract_hashes = 1;
+}
+
+// MerkleTreeNodesOfFileContractProto is a message which contains a list of merkle tree nodes, contract and file hashes.
+message MerkleTreeNodesOfFileContractProto {
+    bytes contract_hash = 1;
+    bytes file_hash = 2;
+    repeated bytes merkle_tree_nodes = 3;
+}
+
+// KeyIVEnvelopeProto is a message which contains the private key, the iv and the encryption type used.
+// this message is sent from the verifier node to the file downloader node.
+message KeyIVEnvelopeProto {
+    bytes contract_hash = 1;
+    bytes file_hash = 2;
+    bytes key = 3;
+    bytes iv = 4;
+    int32 encryption_type = 5;
+}
+
+// KeyIVRandomizedFileSegmentsEnvelopeProto is a message which contains the private key, the iv, encryption type and randomized order of segments and the raw unencrypted data size.
+// this message is sent from the file hoster to the verifier.
+message KeyIVRandomizedFileSegmentsEnvelopeProto {
+    bytes contract_hash = 1;
+    bytes file_hash = 2;
+    bytes key = 3;
+    bytes iv = 4;
+    int32 encryption_type = 5;
+    repeated int32 randomized_segments = 6;
+    uint64 total_size_raw_unencrypted_segments = 7;
+}
+
+// FileTransferInfoProto is a message which includes the contract hash, file hash and the size of the file.
+// this message is a request payload from file downloader node to file hoster node.
+message FileTransferInfoProto {
+    bytes contract_hash = 1;
+    bytes file_hash = 2;
+    uint64 file_size = 3;
 }

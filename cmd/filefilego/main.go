@@ -140,7 +140,7 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup blockchain database: %w", err)
 	}
-	storageEngine, err := storage.New(blockchainDB, filepath.Join(conf.Global.DataDir, "storage"), true, conf.Global.StorageToken)
+	storageEngine, err := storage.New(blockchainDB, filepath.Join(conf.Global.DataDir, "storage"), true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
 	if err != nil {
 		return fmt.Errorf("failed to setup storage engine: %w", err)
 	}

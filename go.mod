@@ -44,6 +44,7 @@ require (
 	github.com/blevesearch/zapx/v13 v13.3.6 // indirect
 	github.com/blevesearch/zapx/v14 v14.3.6 // indirect
 	github.com/blevesearch/zapx/v15 v15.3.6 // indirect
+	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/coreos/go-systemd/v22 v22.4.0 // indirect
