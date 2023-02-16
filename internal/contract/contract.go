@@ -26,6 +26,7 @@ type Interface interface {
 	SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv []byte, encryptionType common.EncryptionType, randomizedSegments []int) error
 	SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error
 	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
+	DeleteContract(contractHash string) error
 	LoadFromDB() error
 }
 
@@ -114,6 +115,24 @@ func (c *Store) LoadFromDB() error {
 
 	c.contracts = pd.Contracts
 	c.fileContracts = pd.FileContracts
+
+	return nil
+}
+
+// DeleteContract removes a contract.
+func (c *Store) DeleteContract(contractHash string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, ok := c.contracts[contractHash]
+	if !ok {
+		return fmt.Errorf("contract %s hash not found", contractHash)
+	}
+
+	delete(c.contracts, contractHash)
+	delete(c.fileContracts, contractHash)
+
+	_ = c.persistToDB()
 
 	return nil
 }

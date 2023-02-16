@@ -113,4 +113,14 @@ func TestStoreMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, contract)
 	assert.EqualValues(t, []byte{10}, contract.ContractHash)
+
+	err = store2.DeleteContract("0x0a")
+	assert.NoError(t, err)
+
+	contract, err = store2.GetContract("0x0a")
+	assert.EqualError(t, err, "contract 0x0a not found")
+	assert.Nil(t, contract)
+
+	fileInfo, err = store2.GetContractFileInfo("0x0a", fileHash)
+	assert.EqualError(t, err, "contract not found")
 }
