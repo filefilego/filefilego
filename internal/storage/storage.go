@@ -26,7 +26,9 @@ const (
 
 	tokenAccessHours = 2160
 	tokenPrefix      = "token"
-	metadataPrefix   = "metadata"
+	fileHashPrefix   = "mdt"
+
+	fileHashToNodePrefix = "fhn"
 )
 
 // Interface defines the functionalities of the storage engine.
@@ -36,8 +38,8 @@ type Interface interface {
 	SetEnabled(val bool)
 	CreateSubfolders() (string, error)
 	SaveToken(token AccessToken) error
-	SaveFileMetadata(nodeHash string, metadata FileMetadata) error
-	GetFileMetadata(nodeHash string) (FileMetadata, error)
+	SaveFileMetadata(nodeHash, fileHash string, metadata FileMetadata) error
+	GetFileMetadata(fileHash string) (FileMetadata, error)
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 }
@@ -149,8 +151,8 @@ func (s *Storage) SaveToken(token AccessToken) error {
 }
 
 // SaveFileMetadata saves a file's metadata in the database.
-func (s *Storage) SaveFileMetadata(nodeHash string, metadata FileMetadata) error {
-	if metadata.FilePath == "" || metadata.Hash == "" || metadata.Size == 0 {
+func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetadata) error {
+	if metadata.MerkleRootHash == "" || metadata.FilePath == "" || metadata.Hash == "" || metadata.Size == 0 {
 		return errors.New("invalid file metadata")
 	}
 
@@ -159,24 +161,27 @@ func (s *Storage) SaveFileMetadata(nodeHash string, metadata FileMetadata) error
 		return fmt.Errorf("failed to marshal file metadata: %w", err)
 	}
 
-	err = s.db.Put(append([]byte(metadataPrefix), []byte(nodeHash)...), data)
+	err = s.db.Put(append([]byte(fileHashPrefix), []byte(fileHash)...), data)
 	if err != nil {
-		return fmt.Errorf("failed to insert nodeHash %s", nodeHash)
+		return fmt.Errorf("failed to insert nodeHash %s", fileHash)
 	}
 
-	err = s.db.Put(append([]byte(metadataPrefix), []byte(metadata.Hash)...), []byte(nodeHash))
-	if err != nil {
-		return fmt.Errorf("failed to insert fileHash %s", metadata.Hash)
+	if nodeHash != "" {
+		err = s.db.Put(append([]byte(fileHashToNodePrefix), []byte(metadata.Hash)...), []byte(nodeHash))
+		if err != nil {
+			return fmt.Errorf("failed to insert fileHash %s", metadata.Hash)
+		}
 	}
+
 	return nil
 }
 
 // GetFileMetadata gets a file's metadata in the database.
-func (s *Storage) GetFileMetadata(nodeHash string) (FileMetadata, error) {
-	if nodeHash == "" {
-		return FileMetadata{}, errors.New("nodeHash is empty")
+func (s *Storage) GetFileMetadata(fileHash string) (FileMetadata, error) {
+	if fileHash == "" {
+		return FileMetadata{}, errors.New("file hash is empty")
 	}
-	data, err := s.db.Get(append([]byte(metadataPrefix), []byte(nodeHash)...))
+	data, err := s.db.Get(append([]byte(fileHashPrefix), []byte(fileHash)...))
 	if err != nil {
 		return FileMetadata{}, fmt.Errorf("failed to get file metadata: %w", err)
 	}
@@ -194,7 +199,7 @@ func (s *Storage) GetNodeHashFromFileHash(fileHash string) (string, bool) {
 		return "", false
 	}
 
-	nodeData, err := s.db.Get(append([]byte(metadataPrefix), []byte(fileHash)...))
+	nodeData, err := s.db.Get(append([]byte(fileHashToNodePrefix), []byte(fileHash)...))
 	if err != nil {
 		return "", false
 	}
@@ -363,7 +368,8 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err = s.SaveFileMetadata(nodeHash, fileMetadata)
+
+	err = s.SaveFileMetadata(nodeHash, fHash, fileMetadata)
 	if err != nil {
 		os.Remove(newPath)
 		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)

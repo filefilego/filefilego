@@ -24,7 +24,7 @@ import (
 )
 
 // EncryptionType represents an encryption mechanism.
-type EncryptionType int8
+type EncryptionType int32
 
 const (
 	// EncryptionTypeAES key and iv are both 32 bytes for aes
@@ -32,6 +32,7 @@ const (
 	// EncryptionTypeChacha20 key 32 bytes, iv(nounce) 32 bytes
 	EncryptionTypeChacha20 EncryptionType = 2
 
+	// 8KB
 	bufferSize = 8192
 )
 

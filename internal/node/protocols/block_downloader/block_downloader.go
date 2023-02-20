@@ -179,7 +179,7 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 
 	downloadRequest := messages.BlockDownloadRequestProto{}
 	if err := proto.Unmarshal(buf, &downloadRequest); err != nil {
-		log.Error("error while unmarshalling data from stream: " + err.Error())
+		log.Error("failed to unmarshall data from stream: " + err.Error())
 		return
 	}
 
@@ -209,7 +209,7 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 
 	payload, err := proto.Marshal(&downloadResponse)
 	if err != nil {
-		log.Error("error while marshaling BlockQueryResponse")
+		log.Error("failed to marshal BlockQueryResponse")
 		return
 	}
 

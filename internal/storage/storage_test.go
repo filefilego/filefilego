@@ -157,27 +157,28 @@ func TestStorageMethods(t *testing.T) {
 	node1Hash := "nodehash1"
 
 	// invalid file metadata
-	err = storage.SaveFileMetadata(node1Hash, FileMetadata{})
+	err = storage.SaveFileMetadata(node1Hash, "wdasd", FileMetadata{})
 	assert.EqualError(t, err, "invalid file metadata")
 
 	// valid file metadata
 	fileHash := "filehash123"
 	node1Metadata := FileMetadata{
-		Hash:     fileHash,
-		FilePath: "/tmp/filename",
-		Size:     123,
+		MerkleRootHash: "0x0123",
+		Hash:           fileHash,
+		FilePath:       "/tmp/filename",
+		Size:           123,
 	}
-	err = storage.SaveFileMetadata(node1Hash, node1Metadata)
+	err = storage.SaveFileMetadata(node1Hash, fileHash, node1Metadata)
 	assert.NoError(t, err)
 
 	// get file metadata
 	// invalid
 	fileMetadata, err := storage.GetFileMetadata("")
-	assert.EqualError(t, err, "nodeHash is empty")
+	assert.EqualError(t, err, "file hash is empty")
 	assert.Equal(t, FileMetadata{}, fileMetadata)
 
 	// valid
-	fileMetadata, err = storage.GetFileMetadata(node1Hash)
+	fileMetadata, err = storage.GetFileMetadata(fileHash)
 	assert.NoError(t, err)
 	assert.Equal(t, node1Metadata, fileMetadata)
 
@@ -328,7 +329,7 @@ func TestUploadHandler(t *testing.T) {
 	// the merkle tree root hash is 32 bytes and 66 in hex encoded.
 	assert.Len(t, fileUploaded.MerkleRootHash, 66)
 
-	fileMetadata, err := storage.GetFileMetadata("nodehash123")
+	fileMetadata, err := storage.GetFileMetadata(fileUploaded.FileHash)
 	assert.NoError(t, err)
 
 	if _, err := os.Stat(fileMetadata.FilePath); os.IsNotExist(err) {

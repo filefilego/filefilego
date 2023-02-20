@@ -63,7 +63,7 @@ message BlockDownloadResponseProto {
 // DownloadContractProto represents a download contract.
 message DownloadContractProto {
     DataQueryResponseProto file_hoster_response = 1;
-    bytes file_requester_public_key = 2;
+    bytes file_requester_node_public_key = 2;
     repeated bytes file_hashes_needed = 3;
     bytes verifier_public_key = 4;
     string verifier_fees = 5;
@@ -95,6 +95,8 @@ message KeyIVEnvelopeProto {
 
 // KeyIVRandomizedFileSegmentsEnvelopeProto is a message which contains the private key, the iv, encryption type and randomized order of segments and the raw unencrypted data size.
 // this message is sent from the file hoster to the verifier.
+// this message should be written to the netowrk stream and emidiately after read
+// the total_size_raw_unencrypted_segments number of bytes
 message KeyIVRandomizedFileSegmentsEnvelopeProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
@@ -107,6 +109,8 @@ message KeyIVRandomizedFileSegmentsEnvelopeProto {
 
 // FileTransferInfoProto is a message which includes the contract hash, file hash and the size of the file.
 // this message is a request payload from file downloader node to file hoster node.
+// when this message is received, it should start writing to the network stream the data which is encrypted
+// and cut into shuffled segments
 message FileTransferInfoProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
