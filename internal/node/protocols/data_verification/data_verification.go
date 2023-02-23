@@ -2,6 +2,7 @@ package dataverification
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
@@ -33,9 +35,17 @@ const (
 	// FileTransferProtocolID is a protocol which is used to transfer files from file hoster to downloader node.
 	FileTransferProtocolID = "/ffg/dataverification_file_transfer/1.0.0"
 
+	// ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID is a protocol which receives the encryotion data and the raw unencrypted file segments to verifier.
+	ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID = "/ffg/dataverification_receive_keyivrandomsegments_data/1.0.0"
+
+	// EncryptionDataTransferProtocolID is a protocol which transfers the key data from verifier to file requester.
+	EncryptionDataTransferProtocolID = "/ffg/dataverification_encryption_data_transfer/1.0.0"
+
 	deadlineTimeInSecond = 10
 
 	bufferSize = 8192
+
+	verifierSubDirectory = "verifications"
 )
 
 // Protocol wraps the data verification protocols and handlers
@@ -77,14 +87,471 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 
 	p.host.SetStreamHandler(ReceiveMerkleTreeProtocolID, p.HandleIncomingMerkleTreeNodes)
 	p.host.SetStreamHandler(FileTransferProtocolID, p.HandleIncomingFileTransfer)
+	p.host.SetStreamHandler(ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID, p.HandleIncomingKeyIVRandomizedFileSegmentsAndData)
+	p.host.SetStreamHandler(EncryptionDataTransferProtocolID, p.HandleIncomingEncryptionDataTransfer)
+
 	return p, nil
+}
+
+// RequestEncryptionData requests the encryption data from a verifier.
+func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error) {
+	s, err := d.host.NewStream(ctx, verifierID, EncryptionDataTransferProtocolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new stream to verifier for getting encryption data: %w", err)
+	}
+	defer s.Close()
+
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set encryption data for verifier stream deadline: %w", err)
+	}
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal protobuf encryption data request message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write encryption data request to stream: %w", err)
+	}
+
+	msgLengthBuffer := make([]byte, 8)
+	c := bufio.NewReader(s)
+	_, err = c.Read(msgLengthBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read encryption data from stream: %w", err)
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read protobuf encryption data from stream to buffer: %w", err)
+	}
+
+	keyData := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{}
+	if err := proto.Unmarshal(buf, &keyData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshall encryption data from stream: %w", err)
+	}
+
+	return &keyData, nil
+}
+
+// HandleIncomingEncryptionDataTransfer handles incoming encryption data request.
+func (d *Protocol) HandleIncomingEncryptionDataTransfer(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream to buffer: %s", err.Error())
+		return
+	}
+
+	keyIVrequest := messages.KeyIVRequestProto{}
+	if err := proto.Unmarshal(buf, &keyIVrequest); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingEncryptionDataTransfer stream: %s", err.Error())
+		return
+	}
+
+	contractHashHex := hexutil.Encode(keyIVrequest.ContractHash)
+	fileInfo, err := d.contractStore.GetContractFileInfo(contractHashHex, keyIVrequest.FileHash)
+	if err != nil {
+		log.Errorf("failed to get contract file info in handleIncomingEncryptionDataTransfer: %s", err.Error())
+		return
+	}
+
+	if fileInfo.ReceivedUnencryptedDataFromFileHoster {
+		fileHashHex := hexutil.Encode(fileInfo.FileHash)
+		destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
+		// nolint:gofumpt
+		destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDONLY, 0777)
+		if err != nil {
+			log.Errorf("failed to open unencrypted file: %s", err.Error())
+			return
+		}
+		destinationFileStats, err := destinationFile.Stat()
+		if err != nil {
+			log.Errorf("failed to get status of unencrypted file: %s", err.Error())
+			return
+		}
+
+		encryptor, err := common.NewEncryptor(fileInfo.EncryptionType, fileInfo.Key, fileInfo.IV)
+		if err != nil {
+			log.Errorf("failed to create a new encryptor in handleIncomingEncryptionDataTransfer: %s", err.Error())
+			return
+		}
+
+		_, _, totalSegmentsToEncrypt, encryptEverySegment := common.FileSegmentsInfo(int(fileInfo.FileSize), d.merkleTreeTotalSegments, d.encryptionPercentage)
+		orderedSliceForRawfile := []int{}
+		for i := 0; i < totalSegmentsToEncrypt; i++ {
+			orderedSliceForRawfile = append(orderedSliceForRawfile, i)
+		}
+		merkleHashedEncryptedRaw, err := common.EncryptAndHashSegments(int(destinationFileStats.Size()), totalSegmentsToEncrypt, orderedSliceForRawfile, destinationFile, encryptor)
+		if err != nil {
+			log.Errorf("failed to encrypt and hash segments in handleIncomingEncryptionDataTransfer: %s", err.Error())
+			return
+		}
+		destinationFile.Close()
+
+		merkleTreeRandomizedSegments := make([]merkletree.Content, len(fileInfo.MerkleTreeNodes))
+		for i, v := range fileInfo.MerkleTreeNodes {
+			fbh := common.FileBlockHash{
+				X: make([]byte, len(v)),
+			}
+			copy(fbh.X, v)
+			merkleTreeRandomizedSegments[i] = fbh
+		}
+
+		randomizedSegments := make([]int, len(fileInfo.RandomSegments))
+		copy(randomizedSegments, fileInfo.RandomSegments)
+
+		merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash, err := common.RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, randomizedSegments, merkleTreeRandomizedSegments, merkleHashedEncryptedRaw)
+		if err != nil {
+			log.Errorf("failed to retrieve merkle tree nodes from unencrypted file data: %s", err.Error())
+			return
+		}
+		merkleRootHash, err := common.GetFileMerkleRootHashFromNodes(merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash)
+		if err != nil {
+			log.Errorf("failed to retrieve merkle root hash of file data: %s", err.Error())
+			return
+		}
+
+		if bytes.Equal(merkleRootHash, fileInfo.MerkleRootHash) {
+			err = d.contractStore.SetProofOfTransferVerified(contractHashHex, fileInfo.FileHash, true)
+			if err != nil {
+				log.Errorf("failed to set proof of transfer verified: %s", err.Error())
+				return
+			}
+		}
+	}
+
+	// read again the file info
+	fileInfo, _ = d.contractStore.GetContractFileInfo(contractHashHex, keyIVrequest.FileHash)
+	if !fileInfo.ProofOfTransferVerified {
+		log.Errorf("proof of transfer failed")
+		return
+	}
+
+	randomizedSegments := make([]int32, len(fileInfo.RandomSegments))
+	for i, v := range fileInfo.RandomSegments {
+		randomizedSegments[i] = int32(v)
+	}
+
+	response := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{
+		ContractHash:       keyIVrequest.ContractHash,
+		FileHash:           fileInfo.FileHash,
+		Key:                fileInfo.Key,
+		Iv:                 fileInfo.IV,
+		EncryptionType:     int32(fileInfo.EncryptionType),
+		RandomizedSegments: randomizedSegments,
+	}
+
+	responseBytes, err := proto.Marshal(&response)
+	if err != nil {
+		log.Errorf("failed to marshal protobuf encryption data in handleIncomingEncryptionDataTransfer message: %s", err.Error())
+		return
+	}
+
+	responseBytesPayloadWithLength := make([]byte, 8+len(responseBytes))
+	binary.LittleEndian.PutUint64(responseBytesPayloadWithLength, uint64(len(responseBytes)))
+	copy(responseBytesPayloadWithLength[8:], responseBytes)
+	_, err = s.Write(responseBytesPayloadWithLength)
+	if err != nil {
+		log.Errorf("failed to write encryption key data in handleIncomingEncryptionDataTransfer to stream: %s", err.Error())
+		return
+	}
+}
+
+// SendFileMerkleTreeNodesToVerifier sends the file merkle tree nodes to the verifier.
+func (d *Protocol) SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error {
+	s, err := d.host.NewStream(ctx, verifierID, ReceiveMerkleTreeProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to create new stream to verifier for sending merkle tree nodes: %w", err)
+	}
+	defer s.Close()
+
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
+	}
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf merkle tree nodes request message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to write merkle tree nodes request to stream: %w", err)
+	}
+
+	return nil
+}
+
+// SendKeyIVRandomizedFileSegmentsAndDataToVerifier sends the encryption key and iv with the random segments and the unencrypted file segments.
+func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error {
+	fileContractInfo, err := d.contractStore.GetContractFileInfo(contractHash, fileHash)
+	if err != nil {
+		return fmt.Errorf("failed to get contract and file info in sendKeyIVRandomizedFileSegmentsAndDataToVerifier: %w ", err)
+	}
+
+	s, err := d.host.NewStream(ctx, verifierID, ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to create new stream to verifier for sending merkle tree nodes: %w", err)
+	}
+	defer s.Close()
+
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
+	}
+
+	// nolint:gofumpt
+	inputFile, err := os.OpenFile(filePath, os.O_RDONLY, 0777)
+	if err != nil {
+		return fmt.Errorf("failed to open input file: %w", err)
+	}
+	defer inputFile.Close()
+
+	inputStats, err := inputFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get stats of input file: %w", err)
+	}
+
+	howManySegmentsAllowedForFile, segmentSizeBytes, totalSegmentsToEncrypt, _ := common.FileSegmentsInfo(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage)
+	contractHashBytes, err := hexutil.Decode(contractHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode contract hash: %w", err)
+	}
+
+	randomizedSegments := make([]int32, len(fileContractInfo.RandomSegments))
+	for i, v := range fileContractInfo.RandomSegments {
+		randomizedSegments[i] = int32(v)
+	}
+
+	request := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{
+		FileSize:                        uint64(inputStats.Size()),
+		ContractHash:                    contractHashBytes,
+		FileHash:                        fileHash,
+		Key:                             fileContractInfo.Key,
+		Iv:                              fileContractInfo.IV,
+		MerkleRootHash:                  fileContractInfo.MerkleRootHash,
+		EncryptionType:                  int32(fileContractInfo.EncryptionType),
+		RandomizedSegments:              randomizedSegments,
+		TotalSizeRawUnencryptedSegments: uint64(totalSegmentsToEncrypt) * uint64(segmentSizeBytes),
+	}
+
+	requestBytes, err := proto.Marshal(&request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf merkle tree nodes request message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to write merkle tree nodes request to stream: %w", err)
+	}
+
+	err = common.WriteUnencryptedSegments(int(inputStats.Size()), howManySegmentsAllowedForFile, d.encryptionPercentage, fileContractInfo.RandomSegments, inputFile, s)
+	if err != nil {
+		return fmt.Errorf("failed to write unencrypted data to verifier's stream: %w", err)
+	}
+
+	return nil
+}
+
+// HandleIncomingKeyIVRandomizedFileSegmentsAndData this message is sent from the file hoster to the verifier node
+// which contains the metadata and the unencrypted file segments.
+func (d *Protocol) HandleIncomingKeyIVRandomizedFileSegmentsAndData(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream to buffer: %s", err.Error())
+		return
+	}
+
+	keyIVRandomizedFileSegmentsEnvelope := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{}
+	if err := proto.Unmarshal(buf, &keyIVRandomizedFileSegmentsEnvelope); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %s", err.Error())
+		return
+	}
+
+	contractHash := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.ContractHash)
+
+	fileContract, err := d.contractStore.GetContract(contractHash)
+	if err != nil {
+		log.Errorf("failed to get contract in handleIncomingKeyIVRandomizedFileSegmentsAndData: %s", err.Error())
+		return
+	}
+
+	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(fileContract.FileHosterResponse.PublicKey)
+	if err != nil {
+		log.Errorf("failed to get the public key of the file hoster: %s", err.Error())
+		return
+	}
+
+	if !verifyConnection(publicKeyFileHoster, s.Conn().RemotePublicKey()) {
+		log.Error("malicious request from host which is not file hoster")
+		return
+	}
+
+	randomizedSegments := make([]int, len(keyIVRandomizedFileSegmentsEnvelope.RandomizedSegments))
+	for i, v := range keyIVRandomizedFileSegmentsEnvelope.RandomizedSegments {
+		randomizedSegments[i] = int(v)
+	}
+
+	err = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, keyIVRandomizedFileSegmentsEnvelope.Key, keyIVRandomizedFileSegmentsEnvelope.Iv, keyIVRandomizedFileSegmentsEnvelope.MerkleRootHash, common.EncryptionType(keyIVRandomizedFileSegmentsEnvelope.EncryptionType), randomizedSegments, keyIVRandomizedFileSegmentsEnvelope.FileSize)
+	if err != nil {
+		log.Errorf("failed to update key, iv and random segments of file contract: %s", err.Error())
+		return
+	}
+
+	contractHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.ContractHash)
+	err = common.CreateDirectory(filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex))
+	if err != nil {
+		log.Errorf("failed to created contract directory: %s", err.Error())
+		return
+	}
+
+	fileHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.FileHash)
+	destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
+	// nolint:gofumpt
+	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, 0777)
+	if err != nil {
+		log.Errorf("failed to open a file for downloading its content from hoster: %s", err.Error())
+		return
+	}
+	defer destinationFile.Close()
+
+	buf = make([]byte, bufferSize)
+	totalFileBytesReceived := uint64(0)
+	for totalFileBytesReceived != keyIVRandomizedFileSegmentsEnvelope.TotalSizeRawUnencryptedSegments {
+		n, err := s.Read(buf)
+		if n > 0 {
+			wroteN, err := destinationFile.Write(buf[:n])
+			if wroteN != n || err != nil {
+				log.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %s", n, wroteN, err.Error())
+				return
+			}
+			totalFileBytesReceived += uint64(wroteN)
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			log.Errorf("fialed to read file content to buffer: %s", err.Error())
+			return
+		}
+	}
+
+	err = d.contractStore.SetReceivedUnencryptedDataFromFileHoster(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, true)
+	if err != nil {
+		log.Errorf("failed to set received unencrypted data from file hoster: %s", err.Error())
+		return
+	}
 }
 
 // HandleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a node.
 // this protocol handler is used by a verifier.
 func (d *Protocol) HandleIncomingMerkleTreeNodes(s network.Stream) {
-	// contract hash
-	// file hash
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream to buffer: %s", err.Error())
+		return
+	}
+
+	merkleTreeNodesOfFileMessage := messages.MerkleTreeNodesOfFileContractProto{}
+	if err := proto.Unmarshal(buf, &merkleTreeNodesOfFileMessage); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingMerkleTreeNodes stream: %s", err.Error())
+		return
+	}
+
+	contractHash := hexutil.Encode(merkleTreeNodesOfFileMessage.ContractHash)
+
+	fileContract, err := d.contractStore.GetContract(contractHash)
+	if err != nil {
+		log.Errorf("failed to get contract in handleIncomingMerkleTreeNodes: %s", err.Error())
+		return
+	}
+
+	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(fileContract.FileRequesterNodePublicKey)
+	if err != nil {
+		log.Errorf("failed to get the public key of the file requester: %s", err.Error())
+		return
+	}
+
+	if !verifyConnection(publicKeyFileRequester, s.Conn().RemotePublicKey()) {
+		log.Error("malicious request from downloader")
+		return
+	}
+
+	err = d.contractStore.SetMerkleTreeNodes(contractHash, merkleTreeNodesOfFileMessage.FileHash, merkleTreeNodesOfFileMessage.MerkleTreeNodes)
+	if err != nil {
+		log.Errorf("failed to update merkle tree nodes for a file contract: %s", err.Error())
+		return
+	}
 }
 
 // RequestFileTransfer requests a file download from the file hoster.
@@ -159,8 +626,6 @@ func (d *Protocol) HandleIncomingFileTransfer(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
 
-	s.Conn().RemotePublicKey()
-
 	// read the first 8 bytes to determine the size of the message
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
@@ -182,26 +647,26 @@ func (d *Protocol) HandleIncomingFileTransfer(s network.Stream) {
 
 	fileTransferRequest := messages.FileTransferInfoProto{}
 	if err := proto.Unmarshal(buf, &fileTransferRequest); err != nil {
-		log.Error("failed to unmarshall data from handleIncomingFileTransfer stream: " + err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingFileTransfer stream: %s", err.Error())
 		return
 	}
 
 	contractHash := hexutil.Encode(fileTransferRequest.ContractHash)
 	fileContractInfo, err := d.contractStore.GetContractFileInfo(contractHash, fileTransferRequest.FileHash)
 	if err != nil {
-		log.Error("failed to get contract and file info in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to get contract and file info in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 
 	downloadContract, err := d.contractStore.GetContract(contractHash)
 	if err != nil {
-		log.Error("failed to get contract in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to get contract in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 
-	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterPublicKey)
+	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterNodePublicKey)
 	if err != nil {
-		log.Error("failed to get the public key of the file requester")
+		log.Errorf("failed to get the public key of the file requester: %s", err.Error())
 		return
 	}
 
@@ -213,31 +678,26 @@ func (d *Protocol) HandleIncomingFileTransfer(s network.Stream) {
 	fileHashHex := hexutil.EncodeNoPrefix(fileTransferRequest.FileHash)
 	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex)
 	if err != nil {
-		log.Error("failed to get file metadata from storage engine in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 
-	// howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileMetadata.Size), d.merkleTreeTotalSegments, 0)
-	// orderedSlice := make([]int, howManySegments)
-	// for i := 0; i < howManySegments; i++ {
-	// 	orderedSlice[i] = i
-	// }
 	input, err := os.Open(fileMetadata.FilePath)
 	if err != nil {
-		log.Error("failed to open file for encryption and streaming in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to open file for encryption and streaming in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 
 	encryptor, err := common.NewEncryptor(fileContractInfo.EncryptionType, fileContractInfo.Key, fileContractInfo.IV)
 	if err != nil {
-		log.Error("failed to setup encryptor in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to setup encryptor in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 
 	// write to the stream the content of the input file while encrypting and shuffling its segments.
 	err = common.EncryptWriteOutput(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
 	if err != nil {
-		log.Error("failed to encryptWriteOutput in handleIncomingFileTransfer: " + err.Error())
+		log.Errorf("failed to encryptWriteOutput in handleIncomingFileTransfer: %s", err.Error())
 		return
 	}
 

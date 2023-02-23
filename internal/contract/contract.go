@@ -23,7 +23,7 @@ type Interface interface {
 	GetContract(contractHash string) (*messages.DownloadContractProto, error)
 	GetContractFileInfo(contractHash string, fileHash []byte) (FileInfo, error)
 	SetMerkleTreeNodes(contractHash string, fileHash []byte, merkleTreeNodes [][]byte) error
-	SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv []byte, encryptionType common.EncryptionType, randomizedSegments []int) error
+	SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv, merkleRootHash []byte, encryptionType common.EncryptionType, randomizedSegments []int, fileSize uint64) error
 	SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error
 	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
 	DeleteContract(contractHash string) error
@@ -32,8 +32,10 @@ type Interface interface {
 
 // FileInfo represents a contract with the file information.
 type FileInfo struct {
+	FileSize                              uint64
 	Key                                   []byte
 	IV                                    []byte
+	MerkleRootHash                        []byte
 	FileHash                              []byte
 	RandomSegments                        []int
 	MerkleTreeNodes                       [][]byte
@@ -178,6 +180,7 @@ func (c *Store) GetContractFileInfo(contractHash string, fileHash []byte) (FileI
 	if !ok {
 		return FileInfo{}, errors.New("contract not found")
 	}
+
 	for _, v := range fileContracts {
 		if bytes.Equal(v.FileHash, fileHash) {
 			return v, nil
@@ -236,7 +239,7 @@ func (c *Store) SetMerkleTreeNodes(contractHash string, fileHash []byte, merkleT
 }
 
 // SetKeyIVEncryptionTypeRandomizedFileSegments sets the key and iv, encryption type and randomized segments of the of file.
-func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv []byte, encryptionType common.EncryptionType, randomizedSegments []int) error {
+func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv, merkleRootHash []byte, encryptionType common.EncryptionType, randomizedSegments []int, fileSize uint64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	fileContracts, ok := c.fileContracts[contractHash]
@@ -253,15 +256,18 @@ func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string
 
 	if foundFileContractIndex == -1 {
 		fileInfo := FileInfo{
+			FileSize:       fileSize,
 			FileHash:       make([]byte, len(fileHash)),
 			Key:            make([]byte, len(key)),
 			IV:             make([]byte, len(iv)),
+			MerkleRootHash: make([]byte, len(merkleRootHash)),
 			RandomSegments: make([]int, len(randomizedSegments)),
 			EncryptionType: encryptionType,
 		}
 		copy(fileInfo.FileHash, fileHash)
 		copy(fileInfo.Key, key)
 		copy(fileInfo.IV, iv)
+		copy(fileInfo.MerkleRootHash, merkleRootHash)
 		copy(fileInfo.RandomSegments, randomizedSegments)
 
 		fileInfoSlice := c.fileContracts[contractHash]
@@ -277,10 +283,14 @@ func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string
 	v.IV = make([]byte, len(iv))
 	copy(v.IV, iv)
 
+	v.MerkleRootHash = make([]byte, len(merkleRootHash))
+	copy(v.MerkleRootHash, merkleRootHash)
+
 	v.RandomSegments = make([]int, len(randomizedSegments))
 	copy(v.RandomSegments, randomizedSegments)
 
 	v.EncryptionType = encryptionType
+	v.FileSize = fileSize
 
 	c.fileContracts[contractHash][foundFileContractIndex] = v
 	_ = c.persistToDB()

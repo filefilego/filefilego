@@ -50,13 +50,13 @@ type FileBlockRange struct {
 
 // FileBlockHash represents a hash of a block (range of bytes) of a file.
 type FileBlockHash struct {
-	x []byte
+	X []byte
 }
 
 // CalculateHash hashes the content of FileBlockHash.x.
 func (f FileBlockHash) CalculateHash() ([]byte, error) {
 	h := sha256.New()
-	if _, err := h.Write(f.x); err != nil {
+	if _, err := h.Write(f.X); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +65,7 @@ func (f FileBlockHash) CalculateHash() ([]byte, error) {
 
 // Equals tests for equality of two FileBlockHash.
 func (f FileBlockHash) Equals(other merkletree.Content) (bool, error) {
-	return bytes.Equal(f.x, other.(FileBlockHash).x), nil
+	return bytes.Equal(f.X, other.(FileBlockHash).X), nil
 }
 
 // Encryptor represents an encryptor.
@@ -389,8 +389,8 @@ func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments 
 		}
 
 		hash := sha256Sum.Sum(nil)
-		fbh := FileBlockHash{x: make([]byte, len(hash))}
-		copy(fbh.x, hash)
+		fbh := FileBlockHash{X: make([]byte, len(hash))}
+		copy(fbh.X, hash)
 
 		hashes = append(hashes, fbh)
 	}
@@ -614,8 +614,8 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 		}
 
 		hash := sha256Sum.Sum(nil)
-		fbh := FileBlockHash{x: make([]byte, len(hash))}
-		copy(fbh.x, hash)
+		fbh := FileBlockHash{X: make([]byte, len(hash))}
+		copy(fbh.X, hash)
 
 		hashes = append(hashes, fbh)
 	}

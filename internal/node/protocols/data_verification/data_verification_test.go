@@ -90,7 +90,7 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestHandleIncomingFileTransfer(t *testing.T) {
+func TestDataVerificationMethods(t *testing.T) {
 	currentDir, err := os.Getwd()
 	assert.NoError(t, err)
 
@@ -102,37 +102,70 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 
 	h1, _, h1PubKey := newHost(t, "1139")
 	h2, _, h2PubKey := newHost(t, "1140")
+	verifier1, _, verifier1PubKey := newHost(t, "1141")
 	peer2Info := peer.AddrInfo{
 		ID:    h2.ID(),
 		Addrs: h2.Addrs(),
 	}
 	err = h1.Connect(context.TODO(), peer2Info)
 	assert.NoError(t, err)
+
+	v1PeerInfo := peer.AddrInfo{
+		ID:    verifier1.ID(),
+		Addrs: verifier1.Addrs(),
+	}
+	err = h2.Connect(context.TODO(), v1PeerInfo)
+	assert.NoError(t, err)
+
+	err = h1.Connect(context.TODO(), v1PeerInfo)
+	assert.NoError(t, err)
+
 	t.Cleanup(func() {
 		h1.Close()
 		h2.Close()
-		os.RemoveAll("filetransfer.db")
+		verifier1.Close()
+		os.RemoveAll("filetransfer1.db")
+		os.RemoveAll("filetransfer2.db")
+		os.RemoveAll("filetransfer3.db")
 		os.RemoveAll("datastorage")
 		os.RemoveAll("datastorage2")
+		os.RemoveAll("datastorage3")
 		os.RemoveAll("data_download")
 		os.RemoveAll("data_download2")
+		os.RemoveAll("data_downloadverifier")
 	})
 
-	db, err := leveldb.OpenFile("filetransfer.db", nil)
+	db1, err := leveldb.OpenFile("filetransfer1.db", nil)
 	assert.NoError(t, err)
-	driver, err := database.New(db)
+	driver, err := database.New(db1)
+	assert.NoError(t, err)
+
+	db2, err := leveldb.OpenFile("filetransfer2.db", nil)
+	assert.NoError(t, err)
+	driver2, err := database.New(db2)
+	assert.NoError(t, err)
+
+	db3, err := leveldb.OpenFile("filetransfer3.db", nil)
+	assert.NoError(t, err)
+	driver3, err := database.New(db3)
 	assert.NoError(t, err)
 
 	contractStore, err := contract.New(driver)
 	assert.NoError(t, err)
 
-	contractStore2, err := contract.New(driver)
+	contractStore2, err := contract.New(driver2)
+	assert.NoError(t, err)
+
+	contractStoreVerifier1, err := contract.New(driver3)
 	assert.NoError(t, err)
 
 	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", 8)
 	assert.NoError(t, err)
 
-	strg2, err := storage.New(driver, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", 8)
+	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", 8)
+	assert.NoError(t, err)
+
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", 8)
 	assert.NoError(t, err)
 
 	protocolH1, err := New(h1, contractStore, strg, 8, 25, filepath.Join(currentDir, "data_download"))
@@ -142,6 +175,10 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 	protocolH2, err := New(h2, contractStore2, strg2, 8, 25, filepath.Join(currentDir, "data_download2"))
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
+
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, 8, 25, filepath.Join(currentDir, "data_downloadverifier"))
+	assert.NoError(t, err)
+	assert.NotNil(t, protocolVerifier1)
 
 	input, err := os.Open(uploadedFilepath)
 	assert.NoError(t, err)
@@ -182,6 +219,9 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 	h2PublicKeyBytes, err := h2PubKey.Raw()
 	assert.NoError(t, err)
 
+	verifier1PublicKeyBytes, err := verifier1PubKey.Raw()
+	assert.NoError(t, err)
+
 	fileHashBytes, err := hexutil.DecodeNoPrefix(fileHash)
 	assert.NoError(t, err)
 
@@ -196,12 +236,12 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 			Signature:      []byte{17}, // this is just a placeholder
 			Timestamp:      time.Now().Unix(),
 		},
-		FileRequesterPublicKey: h2PublicKeyBytes,
-		FileHashesNeeded:       [][]byte{fileHashBytes},
-		VerifierPublicKey:      []byte{10}, // this is just a placeholder
-		VerifierFees:           "0x02",
-		ContractHash:           contractHash,
-		VerifierSignature:      []byte{90},
+		FileRequesterNodePublicKey: h2PublicKeyBytes,
+		FileHashesNeeded:           [][]byte{fileHashBytes},
+		VerifierPublicKey:          verifier1PublicKeyBytes,
+		VerifierFees:               "0x02",
+		ContractHash:               contractHash,
+		VerifierSignature:          []byte{90},
 	}
 
 	key, err := ffgcrypto.RandomEntropy(32)
@@ -214,12 +254,15 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 	err = contractStore.CreateContract(fileContract)
 	assert.NoError(t, err)
 
-	err = contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHashHex, fileHashBytes, key, iv, common.EncryptionTypeAES256, randomSlices)
+	// this is to set the node 1's keys and iv and randoclices store contact store
+	err = contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHashHex, fileHashBytes, key, iv, merkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileSize))
 	assert.NoError(t, err)
 
 	err = contractStore2.CreateContract(fileContract)
 	assert.NoError(t, err)
 
+	err = contractStoreVerifier1.CreateContract(fileContract)
+	assert.NoError(t, err)
 	request := &messages.FileTransferInfoProto{
 		ContractHash: contractHash,
 		FileHash:     fileHashBytes,
@@ -229,6 +272,52 @@ func TestHandleIncomingFileTransfer(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
 	assert.Contains(t, res, "/data_download2/0x21/0x61645c4d245f5f979904a55bffe76ef084541b85")
+
+	merkleNodes, err := common.HashFileBlockSegments(res, 8, orderedSlice)
+	assert.NoError(t, err)
+	merkleRequest := &messages.MerkleTreeNodesOfFileContractProto{
+		ContractHash:    contractHash,
+		FileHash:        fileHashBytes,
+		MerkleTreeNodes: make([][]byte, len(merkleNodes)),
+	}
+
+	for i, v := range merkleNodes {
+		hashOfSegment, err := v.CalculateHash()
+		assert.NoError(t, err)
+		merkleRequest.MerkleTreeNodes[i] = hashOfSegment
+	}
+
+	// send merkle
+	err = protocolH2.SendFileMerkleTreeNodesToVerifier(context.TODO(), verifier1.ID(), merkleRequest)
+	assert.NoError(t, err)
+	// sleep is required
+	time.Sleep(100 * time.Millisecond)
+	retrievedContractInfo, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
+	assert.NoError(t, err)
+	assert.EqualValues(t, merkleRequest.MerkleTreeNodes, retrievedContractInfo.MerkleTreeNodes)
+
+	// try to get verification when key and file data havent been transfered yet
+	encRequest := &messages.KeyIVRequestProto{
+		ContractHash: contractHash,
+		FileHash:     fileHashBytes,
+	}
+	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
+	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
+
+	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
+	assert.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+
+	contractFilesSentData, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
+	assert.NoError(t, err)
+	assert.True(t, contractFilesSentData.ReceivedUnencryptedDataFromFileHoster)
+
+	keyData, err := protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
+	assert.NoError(t, err)
+	if err == nil {
+		assert.EqualValues(t, key, keyData.Key)
+		assert.EqualValues(t, iv, keyData.Iv)
+	}
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

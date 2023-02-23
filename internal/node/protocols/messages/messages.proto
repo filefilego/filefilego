@@ -83,28 +83,27 @@ message MerkleTreeNodesOfFileContractProto {
     repeated bytes merkle_tree_nodes = 3;
 }
 
-// KeyIVEnvelopeProto is a message which contains the private key, the iv and the encryption type used.
-// this message is sent from the verifier node to the file downloader node.
-message KeyIVEnvelopeProto {
+// KeyIVRequestProto is a message that represents a data encryption payload to verifier node.
+message KeyIVRequestProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
-    bytes key = 3;
-    bytes iv = 4;
-    int32 encryption_type = 5;
 }
 
 // KeyIVRandomizedFileSegmentsEnvelopeProto is a message which contains the private key, the iv, encryption type and randomized order of segments and the raw unencrypted data size.
 // this message is sent from the file hoster to the verifier.
-// this message should be written to the netowrk stream and emidiately after read
+// this message should be written to the netowrk stream and after read
 // the total_size_raw_unencrypted_segments number of bytes
 message KeyIVRandomizedFileSegmentsEnvelopeProto {
-    bytes contract_hash = 1;
-    bytes file_hash = 2;
-    bytes key = 3;
-    bytes iv = 4;
-    int32 encryption_type = 5;
-    repeated int32 randomized_segments = 6;
-    uint64 total_size_raw_unencrypted_segments = 7;
+    uint64 file_size = 1;
+    bytes contract_hash = 2;
+    bytes file_hash = 3;
+    bytes key = 4;
+    bytes iv = 5;
+    bytes merkle_root_hash = 6;
+    int32 encryption_type = 7;
+    repeated int32 randomized_segments = 8;
+    uint64 total_size_raw_unencrypted_segments = 9;
+    string error = 10;
 }
 
 // FileTransferInfoProto is a message which includes the contract hash, file hash and the size of the file.

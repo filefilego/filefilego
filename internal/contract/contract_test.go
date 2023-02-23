@@ -67,14 +67,16 @@ func TestStoreMethods(t *testing.T) {
 	iv := []byte{3}
 	randomizedSegments := []int{2, 1, 0}
 
-	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash, key, iv, common.EncryptionTypeAES256, randomizedSegments)
+	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
 	assert.NoError(t, err)
 
 	fileInfo, err = store.GetContractFileInfo("0x0a", fileHash)
 	assert.NoError(t, err)
 	assert.Len(t, fileInfo.MerkleTreeNodes, 1)
+	assert.Equal(t, fileInfo.FileSize, uint64(14))
 	assert.Equal(t, fileInfo.Key, key)
 	assert.Equal(t, fileInfo.IV, iv)
+	assert.Equal(t, fileInfo.MerkleRootHash, []byte{73})
 	assert.Equal(t, randomizedSegments, fileInfo.RandomSegments)
 	assert.Equal(t, fileInfo.EncryptionType, common.EncryptionTypeAES256)
 
