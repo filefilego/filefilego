@@ -39,6 +39,7 @@ const (
 // DataEncryptor is an interface to define the functionality of a data encryptor.
 type DataEncryptor interface {
 	StreamEncryptor() (cipher.Stream, error)
+	EncryptionType() EncryptionType
 }
 
 // FileBlockRange represents range of bytes to be encrypted.
@@ -73,6 +74,11 @@ type Encryptor struct {
 	encryptionType EncryptionType
 	key            []byte
 	iv             []byte
+}
+
+// EncryptionType returns the type of the encryptor.
+func (e *Encryptor) EncryptionType() EncryptionType {
+	return e.encryptionType
 }
 
 // StreamEncryptor gets the encryptor.
@@ -186,11 +192,12 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 					stream.XORKeyStream(buf, buf[:n])
 					totalOffset += n
 					okn, err := input.Write(buf[:n])
-					if okn != n {
-						return errors.New("number of bytes replaced from buffer to input file are not equal")
-					}
 					if err != nil {
 						return fmt.Errorf("failed to replace decrypted bytes from buffer to input file: %w", err)
+					}
+
+					if okn != n {
+						return errors.New("number of bytes replaced from buffer to input file are not equal")
 					}
 				}
 
@@ -328,7 +335,7 @@ func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData i
 }
 
 // EncryptAndHashSegments encrypts a file's raw segment given a key and hashes the segment.
-func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments []int, input io.ReadSeekCloser, encryptor DataEncryptor) ([]merkletree.Content, error) {
+func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments []int, input io.ReadSeekCloser, encryptor DataEncryptor) ([]FileBlockHash, error) {
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 100)
 	if len(randomizedFileSegments) != howManySegments {
 		return nil, fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
@@ -338,7 +345,7 @@ func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments 
 		return nil, errors.New("failed to prepare file blocks")
 	}
 	sha256Sum := sha256.New()
-	hashes := make([]merkletree.Content, 0)
+	hashes := make([]FileBlockHash, 0)
 
 	for _, v := range ranges {
 		sha256Sum.Reset()
@@ -519,8 +526,8 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 }
 
 // RetrieveMerkleTreeNodes retrives the original order of merkle tree given the random list.
-func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomizedFileSegments []int, merkleTreeItems, merkleTreeOfRawSegments []merkletree.Content) ([]merkletree.Content, error) {
-	items := make([]merkletree.Content, 0)
+func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomizedFileSegments []int, merkleTreeItems, merkleTreeOfRawSegments []FileBlockHash) ([]FileBlockHash, error) {
+	items := make([]FileBlockHash, 0)
 	for i := 0; i < len(randomizedFileSegments); i++ {
 		idx := -1
 		for j, v := range randomizedFileSegments {
@@ -534,6 +541,9 @@ func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomi
 			return nil, errors.New("index of randomized file segments not found")
 		}
 
+		if idx > len(merkleTreeItems) {
+			return nil, errors.New("index of randomized file segment is greater than the supplied merkle tree items")
+		}
 		items = append(items, merkleTreeItems[idx])
 	}
 
@@ -556,7 +566,7 @@ func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomi
 
 // HashFileBlockSegments hashes all the file block segments and returns the merkle tree nodes.
 // default totalSegments is 4096
-func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []int) ([]merkletree.Content, error) {
+func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []int) ([]FileBlockHash, error) {
 	if totalSegments == 0 {
 		return nil, errors.New("total segments is zero")
 	}
@@ -579,7 +589,7 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 	}
 
 	sha256Sum := sha256.New()
-	hashes := make([]merkletree.Content, 0)
+	hashes := make([]FileBlockHash, 0)
 	for _, v := range ranges {
 		sha256Sum.Reset()
 		_, err := inputFile.Seek(int64(v.from), 0)
@@ -688,7 +698,12 @@ func GetFileMerkleRootHash(filePath string, totalSegments int, segmentsOrder []i
 	if err != nil {
 		return nil, fmt.Errorf("failed to get the list of merkle tree hashes")
 	}
-	t, err := merkletree.NewTree(fileBlockHashes)
+	merkleNodes := make([]merkletree.Content, len(fileBlockHashes))
+	for i, v := range fileBlockHashes {
+		merkleNodes[i] = v
+	}
+
+	t, err := merkletree.NewTree(merkleNodes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a merkle tree from hash list: %w", err)
 	}
@@ -697,8 +712,13 @@ func GetFileMerkleRootHash(filePath string, totalSegments int, segmentsOrder []i
 }
 
 // GetFileMerkleRootHashFromNodes get a merkle root from the content.
-func GetFileMerkleRootHashFromNodes(fileBlockHashes []merkletree.Content) ([]byte, error) {
-	t, err := merkletree.NewTree(fileBlockHashes)
+func GetFileMerkleRootHashFromNodes(fileBlockHashes []FileBlockHash) ([]byte, error) {
+	merkleNodes := make([]merkletree.Content, len(fileBlockHashes))
+	for i, v := range fileBlockHashes {
+		merkleNodes[i] = v
+	}
+
+	t, err := merkletree.NewTree(merkleNodes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a merkle tree from hash list: %w", err)
 	}

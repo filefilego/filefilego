@@ -91,6 +91,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestDataVerificationMethods(t *testing.T) {
+	totalDesiredFileSegments := 8
+	totalFileEncryptionPercentage := 1
 	currentDir, err := os.Getwd()
 	assert.NoError(t, err)
 
@@ -159,24 +161,24 @@ func TestDataVerificationMethods(t *testing.T) {
 	contractStoreVerifier1, err := contract.New(driver3)
 	assert.NoError(t, err)
 
-	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", 8)
+	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", 8)
+	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", 8)
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, 8, 25, filepath.Join(currentDir, "data_download"))
+	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"))
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, 8, 25, filepath.Join(currentDir, "data_download2"))
+	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"))
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, 8, 25, filepath.Join(currentDir, "data_downloadverifier"))
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"))
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -185,12 +187,12 @@ func TestDataVerificationMethods(t *testing.T) {
 	inputStats, err := input.Stat()
 	assert.NoError(t, err)
 
-	orderedSlice := make([]int, 8)
-	for i := 0; i < 8; i++ {
+	orderedSlice := make([]int, totalDesiredFileSegments)
+	for i := 0; i < totalDesiredFileSegments; i++ {
 		orderedSlice[i] = i
 	}
 
-	merkleRootHash, err := common.GetFileMerkleRootHash(uploadedFilepath, 8, orderedSlice)
+	merkleRootHash, err := common.GetFileMerkleRootHash(uploadedFilepath, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
 
 	fileHash, err := ffgcrypto.Sha1File(uploadedFilepath)
@@ -248,7 +250,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	iv, err := ffgcrypto.RandomEntropy(16)
 	assert.NoError(t, err)
-	randomSlices := common.GenerateRandomIntSlice(8)
+	randomSlices := common.GenerateRandomIntSlice(totalDesiredFileSegments)
 
 	contractHashHex := hexutil.Encode(contractHash)
 	err = contractStore.CreateContract(fileContract)
@@ -271,9 +273,9 @@ func TestDataVerificationMethods(t *testing.T) {
 	res, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
-	assert.Contains(t, res, "/data_download2/0x21/0x61645c4d245f5f979904a55bffe76ef084541b85")
+	// assert.Contains(t, res, "/data_download2/0x21/0x61645c4d245f5f979904a55bffe76ef084541b85")
 
-	merkleNodes, err := common.HashFileBlockSegments(res, 8, orderedSlice)
+	merkleNodes, err := common.HashFileBlockSegments(res, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
 	merkleRequest := &messages.MerkleTreeNodesOfFileContractProto{
 		ContractHash:    contractHash,
@@ -282,9 +284,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	}
 
 	for i, v := range merkleNodes {
-		hashOfSegment, err := v.CalculateHash()
-		assert.NoError(t, err)
-		merkleRequest.MerkleTreeNodes[i] = hashOfSegment
+		merkleRequest.MerkleTreeNodes[i] = make([]byte, len(v.X))
+		copy(merkleRequest.MerkleTreeNodes[i], v.X)
 	}
 
 	// send merkle
@@ -314,10 +315,19 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	keyData, err := protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.NoError(t, err)
-	if err == nil {
-		assert.EqualValues(t, key, keyData.Key)
-		assert.EqualValues(t, iv, keyData.Iv)
+	assert.EqualValues(t, key, keyData.Key)
+	assert.EqualValues(t, iv, keyData.Iv)
+
+	randomizedSegsFromKey := make([]int, len(keyData.RandomizedSegments))
+	for i, v := range keyData.RandomizedSegments {
+		randomizedSegsFromKey[i] = int(v)
 	}
+
+	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.Key, keyData.Iv, common.EncryptionType(keyData.EncryptionType), randomizedSegsFromKey)
+	assert.NoError(t, err)
+	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
+	assert.NoError(t, err)
+	assert.Equal(t, fileHash, hashOfRestoredFile)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

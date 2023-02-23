@@ -10,9 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
@@ -93,6 +91,36 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 	return p, nil
 }
 
+// DecryptFile descrypts a file given the file's encryption setup.
+func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error) {
+	inputFile, err := os.OpenFile(filePath, os.O_RDWR, 0777)
+	if err != nil {
+		return "", fmt.Errorf("failed to open input file in decryptFile: %w", err)
+	}
+	defer inputFile.Close()
+
+	inputStats, err := inputFile.Stat()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stats of input file in decryptFile: %w", err)
+	}
+
+	encryptor, err := common.NewEncryptor(encryptionType, key, iv)
+	if err != nil {
+		return "", fmt.Errorf("failed to create a new encryptor in decryptFile: %w", err)
+	}
+
+	outputFile, err := os.OpenFile(decryptedFilePath, os.O_RDWR|os.O_CREATE, 0777)
+	if err != nil {
+		return "", fmt.Errorf("failed to open output file in decryptFile: %w", err)
+	}
+
+	err = common.DecryptFileSegments(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage, randomizedFileSegments, inputFile, outputFile, encryptor)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt file segments in decryptFile: %w", err)
+	}
+	return decryptedFilePath, nil
+}
+
 // RequestEncryptionData requests the encryption data from a verifier.
 func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error) {
 	s, err := d.host.NewStream(ctx, verifierID, EncryptionDataTransferProtocolID)
@@ -101,11 +129,11 @@ func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID
 	}
 	defer s.Close()
 
-	future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	err = s.SetDeadline(future)
-	if err != nil {
-		return nil, fmt.Errorf("failed to set encryption data for verifier stream deadline: %w", err)
-	}
+	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	// err = s.SetDeadline(future)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to set encryption data for verifier stream deadline: %w", err)
+	// }
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
@@ -185,37 +213,13 @@ func (d *Protocol) HandleIncomingEncryptionDataTransfer(s network.Stream) {
 	if fileInfo.ReceivedUnencryptedDataFromFileHoster {
 		fileHashHex := hexutil.Encode(fileInfo.FileHash)
 		destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
-		// nolint:gofumpt
-		destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDONLY, 0777)
-		if err != nil {
-			log.Errorf("failed to open unencrypted file: %s", err.Error())
-			return
-		}
-		destinationFileStats, err := destinationFile.Stat()
-		if err != nil {
-			log.Errorf("failed to get status of unencrypted file: %s", err.Error())
-			return
-		}
-
-		encryptor, err := common.NewEncryptor(fileInfo.EncryptionType, fileInfo.Key, fileInfo.IV)
-		if err != nil {
-			log.Errorf("failed to create a new encryptor in handleIncomingEncryptionDataTransfer: %s", err.Error())
-			return
-		}
-
 		_, _, totalSegmentsToEncrypt, encryptEverySegment := common.FileSegmentsInfo(int(fileInfo.FileSize), d.merkleTreeTotalSegments, d.encryptionPercentage)
 		orderedSliceForRawfile := []int{}
 		for i := 0; i < totalSegmentsToEncrypt; i++ {
 			orderedSliceForRawfile = append(orderedSliceForRawfile, i)
 		}
-		merkleHashedEncryptedRaw, err := common.EncryptAndHashSegments(int(destinationFileStats.Size()), totalSegmentsToEncrypt, orderedSliceForRawfile, destinationFile, encryptor)
-		if err != nil {
-			log.Errorf("failed to encrypt and hash segments in handleIncomingEncryptionDataTransfer: %s", err.Error())
-			return
-		}
-		destinationFile.Close()
 
-		merkleTreeRandomizedSegments := make([]merkletree.Content, len(fileInfo.MerkleTreeNodes))
+		merkleTreeRandomizedSegments := make([]common.FileBlockHash, len(fileInfo.MerkleTreeNodes))
 		for i, v := range fileInfo.MerkleTreeNodes {
 			fbh := common.FileBlockHash{
 				X: make([]byte, len(v)),
@@ -224,21 +228,23 @@ func (d *Protocol) HandleIncomingEncryptionDataTransfer(s network.Stream) {
 			merkleTreeRandomizedSegments[i] = fbh
 		}
 
-		randomizedSegments := make([]int, len(fileInfo.RandomSegments))
-		copy(randomizedSegments, fileInfo.RandomSegments)
-
-		merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash, err := common.RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, randomizedSegments, merkleTreeRandomizedSegments, merkleHashedEncryptedRaw)
+		merkleOfRawSegmentsBeforeEncryption, err := common.HashFileBlockSegments(destinationFilePath, totalSegmentsToEncrypt, orderedSliceForRawfile)
 		if err != nil {
-			log.Errorf("failed to retrieve merkle tree nodes from unencrypted file data: %s", err.Error())
+			log.Errorf("failed to get file block hashes in handleIncomingEncryptionDataTransfer: %s", err.Error())
 			return
 		}
-		merkleRootHash, err := common.GetFileMerkleRootHashFromNodes(merkleTreeRandomizedSegmentsMergedWithRawSegmentsHash)
+		reorderedMerkle, err := common.RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, fileInfo.RandomSegments, merkleTreeRandomizedSegments, merkleOfRawSegmentsBeforeEncryption)
 		if err != nil {
-			log.Errorf("failed to retrieve merkle root hash of file data: %s", err.Error())
+			log.Errorf("failed to retrieve the original order of merkle tree nodes in handleIncomingEncryptionDataTransfer: %s", err.Error())
+			return
+		}
+		merkleOfReorderedMerkle, err := common.GetFileMerkleRootHashFromNodes(reorderedMerkle)
+		if err != nil {
+			log.Errorf("failed get merkle root hash in handleIncomingEncryptionDataTransfer: %s", err.Error())
 			return
 		}
 
-		if bytes.Equal(merkleRootHash, fileInfo.MerkleRootHash) {
+		if bytes.Equal(merkleOfReorderedMerkle, fileInfo.MerkleRootHash) {
 			err = d.contractStore.SetProofOfTransferVerified(contractHashHex, fileInfo.FileHash, true)
 			if err != nil {
 				log.Errorf("failed to set proof of transfer verified: %s", err.Error())
@@ -292,11 +298,11 @@ func (d *Protocol) SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifi
 	}
 	defer s.Close()
 
-	future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	err = s.SetDeadline(future)
-	if err != nil {
-		return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
-	}
+	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	// err = s.SetDeadline(future)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
+	// }
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
@@ -327,11 +333,11 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 	}
 	defer s.Close()
 
-	future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	err = s.SetDeadline(future)
-	if err != nil {
-		return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
-	}
+	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	// err = s.SetDeadline(future)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
+	// }
 
 	// nolint:gofumpt
 	inputFile, err := os.OpenFile(filePath, os.O_RDONLY, 0777)
@@ -564,8 +570,8 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 	}
 	defer s.Close()
 
-	future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	err = s.SetDeadline(future)
+	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	// err = s.SetDeadline(future)
 	if err != nil {
 		return "", fmt.Errorf("failed to set file transfer stream deadline: %w", err)
 	}
@@ -596,6 +602,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 	if err != nil {
 		return "", fmt.Errorf("failed to open a file for downloading its content from hoster: %w", err)
 	}
+	defer destinationFile.Close()
 
 	buf := make([]byte, bufferSize)
 	totalFileBytesTransfered := uint64(0)
