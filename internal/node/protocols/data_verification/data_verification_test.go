@@ -270,18 +270,39 @@ func TestDataVerificationMethods(t *testing.T) {
 	randomSlices := common.GenerateRandomIntSlice(totalDesiredFileSegments)
 
 	contractHashHex := hexutil.Encode(contractHash)
-	err = contractStore.CreateContract(fileContract)
+
+	assert.Empty(t, fileContract.VerifierSignature)
+	signedContract, err := protocolH2.SendContractToVerifierForAcceptance(context.TODO(), verifier1.ID(), fileContract)
 	assert.NoError(t, err)
+	assert.NotNil(t, signedContract)
+	assert.NotEmpty(t, signedContract.VerifierSignature)
+	assert.Equal(t, "0x64", signedContract.VerifierFees)
+
+	verified, err := messages.VerifyDownloadContractProto(verifier1.Peerstore().PubKey(verifier1.ID()), signedContract)
+	assert.NoError(t, err)
+	assert.True(t, verified)
+
+	// send a contract to a node which is not supposed to receive this contract
+	err = protocolVerifier1.TransferContract(context.TODO(), h2.ID(), signedContract)
+	assert.EqualError(t, err, "failed to read confirmation byte: EOF")
+	_, err = contractStore2.GetContract(contractHashHex)
+	assert.EqualError(t, err, "contract 0x21 not found")
+
+	err = protocolH2.TransferContract(context.TODO(), h1.ID(), signedContract)
+	assert.NoError(t, err)
+
+	err = protocolH2.TransferContract(context.TODO(), verifier1.ID(), signedContract)
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
 
 	// this is to set the node 1's keys and iv and randoclices store contact store
 	err = contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHashHex, fileHashBytes, key, iv, merkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileSize))
 	assert.NoError(t, err)
 
-	err = contractStore2.CreateContract(fileContract)
+	err = contractStore2.CreateContract(signedContract)
 	assert.NoError(t, err)
 
-	err = contractStoreVerifier1.CreateContract(fileContract)
-	assert.NoError(t, err)
 	request := &messages.FileTransferInfoProto{
 		ContractHash: contractHash,
 		FileHash:     fileHashBytes,
@@ -325,7 +346,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
 	assert.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
-
 	contractFilesSentData, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
 	assert.NoError(t, err)
 	assert.True(t, contractFilesSentData.ReceivedUnencryptedDataFromFileHoster)
@@ -345,17 +365,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
 	assert.NoError(t, err)
 	assert.Equal(t, fileHash, hashOfRestoredFile)
-
-	assert.Empty(t, fileContract.VerifierSignature)
-	signedContract, err := protocolH2.SendContractToVerifierForAcceptance(context.TODO(), verifier1.ID(), fileContract)
-	assert.NoError(t, err)
-	assert.NotNil(t, signedContract)
-	assert.NotEmpty(t, signedContract.VerifierSignature)
-	assert.Equal(t, "0x64", signedContract.VerifierFees)
-
-	verified, err := messages.VerifyDownloadContractProto(verifier1.Peerstore().PubKey(verifier1.ID()), signedContract)
-	assert.NoError(t, err)
-	assert.True(t, verified)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

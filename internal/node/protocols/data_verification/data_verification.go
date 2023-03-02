@@ -315,17 +315,23 @@ func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
 
 	if !d.dataVerifier {
 		if downloadContract.FileHosterResponse.FromPeerAddr != d.host.ID().String() {
-			log.Errorf("got a download contract which this node is not the file hoster in handleIncomingContractTransfer stream: %s", err.Error())
+			log.Error("got a download contract which this node is not the file hoster in handleIncomingContractTransfer stream")
 			return
 		}
 	}
 
 	_ = d.contractStore.CreateContract(&downloadContract)
+
+	okByte := []byte{1}
+	_, err = s.Write(okByte)
+	if err != nil {
+		log.Errorf("failed to send confirmation byte in handleIncomingContractTransfer stream: %v", err)
+	}
 }
 
 // TransferContract transfers a contract to a node.
 func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error {
-	s, err := d.host.NewStream(ctx, peerID, ContractVerifierAcceptanceProtocolID)
+	s, err := d.host.NewStream(ctx, peerID, ContractTransferProtocolID)
 	if err != nil {
 		return fmt.Errorf("failed to create new stream to send transfer contract protocol data: %w", err)
 	}
@@ -348,6 +354,17 @@ func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request
 	_, err = s.Write(requestPayloadWithLength)
 	if err != nil {
 		return fmt.Errorf("failed to write transfer contract to stream: %w", err)
+	}
+
+	c := bufio.NewReader(s)
+	okBuf := make([]byte, 1)
+	_, err = io.ReadFull(c, okBuf)
+	if err != nil {
+		return fmt.Errorf("failed to read confirmation byte: %w", err)
+	}
+
+	if !bytes.Equal(okBuf, []byte{1}) {
+		return errors.New("failed to get download contract confirmation from remote node")
 	}
 
 	return nil
