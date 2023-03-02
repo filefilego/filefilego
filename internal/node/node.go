@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -12,10 +13,13 @@ import (
 	ffgconfig "github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/internal/block"
 	"github.com/filefilego/filefilego/internal/blockchain"
+	"github.com/filefilego/filefilego/internal/common/hexutil"
+	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
+	"github.com/filefilego/filefilego/internal/storage"
 	"github.com/filefilego/filefilego/internal/transaction"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
@@ -26,7 +30,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const findPeerTimeoutSeconds = 5
+const findPeerTimeoutSeconds = 3
 
 // PublishSubscriber is a pub sub interface.
 type PublishSubscriber interface {
@@ -68,6 +72,7 @@ type Node struct {
 	discovery               libp2pdiscovery.Discovery
 	pubSub                  PublishSubscriber
 	searchEngine            search.IndexSearcher
+	storage                 storage.Interface
 	blockchain              blockchain.Interface
 	dataQueryProtocol       dataquery.Interface
 	blockDownloaderProtocol blockdownloader.Interface
@@ -79,7 +84,7 @@ type Node struct {
 }
 
 // New creates a new node.
-func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface) (*Node, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -98,6 +103,10 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 
 	if search == nil {
 		return nil, errors.New("search is nil")
+	}
+
+	if storage == nil {
+		return nil, errors.New("storage is nil")
 	}
 
 	if pubSub == nil {
@@ -122,6 +131,7 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		discovery:               discovery,
 		pubSub:                  pubSub,
 		searchEngine:            search,
+		storage:                 storage,
 		blockchain:              blockchain,
 		dataQueryProtocol:       dataQuery,
 		blockDownloaderProtocol: blockDownloaderProtocol,
@@ -304,7 +314,7 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 				continue
 			}
 
-			err = n.processIncomingMessage(msg)
+			err = n.processIncomingMessage(ctx, msg)
 			if err != nil {
 				log.Errorf("failed to process incoming message: %v", err)
 			}
@@ -313,7 +323,7 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 	return nil
 }
 
-func (n *Node) processIncomingMessage(message *pubsub.Message) error {
+func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Message) error {
 	payload := messages.GossipPayload{}
 	if err := proto.Unmarshal(message.Data, &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal pubsub data: %w", err)
@@ -363,13 +373,117 @@ func (n *Node) processIncomingMessage(message *pubsub.Message) error {
 		if !n.config.Global.Storage {
 			return nil
 		}
-		dataQueryRequest := payload.GetQuery()
-		fromPeer, err := peer.Decode(dataQueryRequest.FromPeerAddr)
+
+		pubKey, err := n.host.ID().ExtractPublicKey()
 		if err != nil {
-			return fmt.Errorf("failed to decode the peer from the proto request: %w", err)
+			return fmt.Errorf("failed to extract public key from host: %w", err)
 		}
-		log.Info("from peer: ", fromPeer)
+
+		pubKeyBytes, err := pubKey.Raw()
+		if err != nil {
+			return fmt.Errorf("failed to get public key bytes: %w", err)
+		}
+
+		dataQueryRequest := payload.GetQuery()
+		response := messages.DataQueryResponse{
+			FromPeerAddr:          n.GetID(),
+			UnavailableFileHashes: make([][]byte, 0),
+			FileHashes:            make([][]byte, 0),
+			Hash:                  make([]byte, len(dataQueryRequest.Hash)),
+			PublicKey:             make([]byte, len(pubKeyBytes)),
+			Timestamp:             time.Now().Unix(),
+		}
+
+		totalSize := int64(0)
+		for _, v := range dataQueryRequest.FileHashes {
+			fileMetaData, err := n.storage.GetFileMetadata(hexutil.Encode(v))
+			if err != nil {
+				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
+				continue
+			}
+			totalSize += fileMetaData.Size
+			response.FileHashes = append(response.FileHashes, v)
+		}
+
+		finalAmount, err := calculateFileFees(n.config.Global.StorageFeesPerByte, totalSize)
+		if err != nil {
+			return fmt.Errorf("failed to calculate files fees: %w", err)
+		}
+		response.TotalFees = hexutil.EncodeBig(finalAmount)
+		copy(response.Hash, dataQueryRequest.Hash)
+		copy(response.PublicKey, pubKeyBytes)
+		signature, err := messages.SignDataQueryResponse(n.host.Peerstore().PrivKey(n.GetPeerID()), response)
+		if err != nil {
+			return fmt.Errorf("failed to sign data query response: %w", err)
+		}
+		response.Signature = make([]byte, len(signature))
+		copy(response.Signature, signature)
+
+		fileRequesterID, err := peer.Decode(dataQueryRequest.FromPeerAddr)
+		if err != nil {
+			return fmt.Errorf("failed get the file requester peerd id: %w", err)
+		}
+
+		// send to requester, if it fails
+		// then send to verifiers
+		verfiers := block.GetBlockVerifiers()
+		peerIDs := make([]peer.ID, 0)
+		peerIDs = append(peerIDs, fileRequesterID)
+
+		for _, v := range verfiers {
+			publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
+			if err != nil {
+				continue
+			}
+
+			peerID, err := peer.IDFromPublicKey(publicKey)
+			if err != nil {
+				continue
+			}
+			peerIDs = append(peerIDs, peerID)
+		}
+
+		addrsInfos := n.FindPeers(ctx, peerIDs)
+		if len(addrsInfos) > 0 {
+			// check if file requester was found
+			foundFileRequester := false
+			for _, v := range addrsInfos {
+				if v.ID.String() == fileRequesterID.String() {
+					foundFileRequester = true
+					break
+				}
+			}
+
+			dataQueryResponseSentToRequester := false
+			if foundFileRequester {
+				err := n.dataQueryProtocol.SendDataQueryResponse(ctx, fileRequesterID, messages.ToDataQueryResponseProto(response))
+				if err == nil {
+					dataQueryResponseSentToRequester = true
+				}
+			}
+
+			// if not found, then contact verifiers
+			if !dataQueryResponseSentToRequester {
+				var wg sync.WaitGroup
+				for _, addInfo := range addrsInfos {
+					// skip the file requester
+					if addInfo.ID.String() == fileRequesterID.String() {
+						continue
+					}
+					wg.Add(1)
+					go func(peerID peer.ID) {
+						defer wg.Done()
+						err := n.dataQueryProtocol.SendDataQueryResponse(ctx, peerID, messages.ToDataQueryResponseProto(response))
+						if err != nil {
+							log.Warnf("failed to sent data query response to verifiers: %s", err.Error())
+						}
+					}(addInfo.ID)
+				}
+				wg.Wait()
+			}
+		}
 	}
+
 	return nil
 }
 
@@ -459,4 +573,13 @@ func GetMultiAddrFromString(addr string) (multiaddr.Multiaddr, error) {
 		return nil, fmt.Errorf("failed to validate multiaddr: %w", err)
 	}
 	return maddr, nil
+}
+
+func calculateFileFees(storageFeesByte string, totalSize int64) (*big.Int, error) {
+	storageFeesPerByte, ok := big.NewInt(0).SetString(storageFeesByte, 10)
+	if !ok {
+		return nil, fmt.Errorf("storage fees per GB is an incorrect format: %s", storageFeesByte)
+	}
+
+	return storageFeesPerByte.Mul(storageFeesPerByte, big.NewInt(totalSize)), nil
 }

@@ -43,6 +43,7 @@ func TestNew(t *testing.T) {
 		merkleTreeTotalSegments int
 		encryptionPercentage    int
 		downloadDirectory       string
+		dataVerifier            bool
 		expErr                  string
 	}{
 		"no host": {
@@ -79,7 +80,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -102,9 +103,9 @@ func TestDataVerificationMethods(t *testing.T) {
 	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "datastorage", inputFile))
 	assert.NoError(t, err)
 
-	h1, _, h1PubKey := newHost(t, "1139")
-	h2, _, h2PubKey := newHost(t, "1140")
-	verifier1, _, verifier1PubKey := newHost(t, "1141")
+	h1, _, h1PubKey := newHost(t, "1175")
+	h2, _, h2PubKey := newHost(t, "1167")
+	verifier1, _, verifier1PubKey := newHost(t, "1181")
 	peer2Info := peer.AddrInfo{
 		ID:    h2.ID(),
 		Addrs: h2.Addrs(),
@@ -170,15 +171,15 @@ func TestDataVerificationMethods(t *testing.T) {
 	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"))
+	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"))
+	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"))
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -230,13 +231,13 @@ func TestDataVerificationMethods(t *testing.T) {
 	contractHash := []byte{33}
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
-			FromPeerAddr:   h1.ID().Pretty(),
-			TotalFeesPerGb: "0x01",
-			Hash:           []byte{12}, // this is just a placeholder
-			PublicKey:      h1PublicKeyBytes,
-			FileHashes:     [][]byte{fileHashBytes},
-			Signature:      []byte{17}, // this is just a placeholder
-			Timestamp:      time.Now().Unix(),
+			FromPeerAddr: h1.ID().Pretty(),
+			TotalFees:    "0x01",
+			Hash:         []byte{12}, // this is just a placeholder
+			PublicKey:    h1PublicKeyBytes,
+			FileHashes:   [][]byte{fileHashBytes},
+			Signature:    []byte{17}, // this is just a placeholder
+			Timestamp:    time.Now().Unix(),
 		},
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
 		FileHashesNeeded:           [][]byte{fileHashBytes},

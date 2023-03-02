@@ -16,12 +16,12 @@ import (
 	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestDataQueryProtocol(t *testing.T) {
 	h1, privKey1, pubkey1 := newHost(t, "7965")
 	h2, _, _ := newHost(t, "7966")
+	h3, _, _ := newHost(t, "7963")
 
 	protocol1, err := New(nil)
 	assert.EqualError(t, err, "host is nil")
@@ -32,6 +32,10 @@ func TestDataQueryProtocol(t *testing.T) {
 	protocol2, err := New(h2)
 	assert.NoError(t, err)
 
+	protocol3, err := New(h3)
+	assert.NoError(t, err)
+	assert.NotNil(t, protocol3)
+
 	peer2Info := peer.AddrInfo{
 		ID:    h2.ID(),
 		Addrs: h2.Addrs(),
@@ -40,42 +44,46 @@ func TestDataQueryProtocol(t *testing.T) {
 	err = h1.Connect(context.Background(), peer2Info)
 	assert.NoError(t, err)
 
-	stream, err := h1.NewStream(context.Background(), h2.ID(), ProtocolID)
-
+	err = h3.Connect(context.Background(), peer2Info)
 	assert.NoError(t, err)
 
 	protocol2.PutQueryHistory(hexutil.Encode([]byte{1}), messages.DataQueryRequest{})
-
 	pkbytes, err := pubkey1.Raw()
 	assert.NoError(t, err)
 	pmsg := messages.DataQueryResponseProto{
-		PublicKey:    pkbytes,
-		Hash:         []byte{1},
-		FromPeerAddr: h1.ID().Pretty(),
+		TotalFees:             "0x1",
+		FileHashes:            [][]byte{{1}},
+		UnavailableFileHashes: [][]byte{},
+		Timestamp:             time.Now().Unix(),
+		PublicKey:             pkbytes,
+		Hash:                  []byte{1},
+		FromPeerAddr:          h1.ID().Pretty(),
 	}
 
-	bts, err := proto.Marshal(&pmsg)
+	dqr := messages.ToDataQueryResponse(&pmsg)
+	sig, err := messages.SignDataQueryResponse(privKey1, dqr)
 	assert.NoError(t, err)
-	signedData, err := privKey1.Sign(bts)
-	assert.NoError(t, err)
-	pmsg.Signature = signedData
+	dqr.Signature = make([]byte, len(sig))
+	pmsg.Signature = make([]byte, len(sig))
+	copy(pmsg.Signature, sig)
+	copy(dqr.Signature, sig)
 
-	err = protocol1.SendDataQueryResponse(stream, &pmsg)
+	err = protocol1.SendDataQueryResponse(context.TODO(), h2.ID(), &pmsg)
 	assert.NoError(t, err)
-	err = protocol1.SendDataQueryResponse(stream, &pmsg)
-	assert.NoError(t, err)
-
-	err = stream.Close()
-	assert.NoError(t, err)
-
-	// one more close to verify behaviour
-	err = stream.Close()
+	err = protocol1.SendDataQueryResponse(context.TODO(), h2.ID(), &pmsg)
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
-	messages, ok := protocol2.GetQueryResponse(hexutil.Encode([]byte{1}))
+	msgs, ok := protocol2.GetQueryResponse(hexutil.Encode([]byte{1}))
 	assert.True(t, ok)
-	assert.NotEmpty(t, messages)
+	assert.NotEmpty(t, msgs)
+
+	err = protocol3.RequestDataQueryResponseTransfer(context.TODO(), h2.ID(), &messages.DataQueryResponseTransferProto{Hash: []byte{1}})
+	assert.NoError(t, err)
+	results, ok := protocol3.GetQueryResponse(hexutil.Encode([]byte{1}))
+	assert.True(t, ok)
+	assert.Len(t, results, 1)
+	assert.Equal(t, results[0], dqr)
 }
 
 func TestVerifyDataFromPeer(t *testing.T) {

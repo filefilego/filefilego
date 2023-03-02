@@ -18,6 +18,7 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
 	"github.com/filefilego/filefilego/internal/search"
+	"github.com/filefilego/filefilego/internal/storage"
 	transaction "github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -226,7 +227,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol, blockDownloader)
+	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader)
 	assert.NoError(t, err)
 	return node, bchain, searchEngine
 }

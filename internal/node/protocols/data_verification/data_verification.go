@@ -39,12 +39,29 @@ const (
 	// EncryptionDataTransferProtocolID is a protocol which transfers the key data from verifier to file requester.
 	EncryptionDataTransferProtocolID = "/ffg/dataverification_encryption_data_transfer/1.0.0"
 
-	deadlineTimeInSecond = 10
+	// ContractTransferProtocolID is a protocol which transfers download contracts between nodes.
+	ContractTransferProtocolID = "/ffg/dataverification_contract_transfer/1.0.0"
+
+	// ContractVerifierAcceptanceProtocolID is a protocol which accepts incoming download contracts and seal them by verifier.
+	ContractVerifierAcceptanceProtocolID = "/ffg/dataverification_contract_accept/1.0.0"
+
+	// deadlineTimeInSecond = 10
 
 	bufferSize = 8192
 
 	verifierSubDirectory = "verifications"
 )
+
+// Interface specifies the data verification functionalities.
+type Interface interface {
+	SendContractForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error
+	TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error
+	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error)
+	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
+	SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error
+	SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error
+	RequestFileTransfer(ctx context.Context, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
+}
 
 // Protocol wraps the data verification protocols and handlers
 type Protocol struct {
@@ -54,10 +71,11 @@ type Protocol struct {
 	merkleTreeTotalSegments int
 	encryptionPercentage    int
 	downloadDirectory       string
+	dataVerifier            bool
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string) (*Protocol, error) {
+func New(h host.Host, contractStore contract.Interface, storage storage.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -81,19 +99,49 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		merkleTreeTotalSegments: merkleTreeTotalSegments,
 		encryptionPercentage:    encryptionPercentage,
 		downloadDirectory:       downloadDirectory,
+		dataVerifier:            dataVerifier,
 	}
 
-	p.host.SetStreamHandler(ReceiveMerkleTreeProtocolID, p.HandleIncomingMerkleTreeNodes)
-	p.host.SetStreamHandler(FileTransferProtocolID, p.HandleIncomingFileTransfer)
-	p.host.SetStreamHandler(ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID, p.HandleIncomingKeyIVRandomizedFileSegmentsAndData)
-	p.host.SetStreamHandler(EncryptionDataTransferProtocolID, p.HandleIncomingEncryptionDataTransfer)
+	// the following protocols are hanlded by verifier
+	if p.dataVerifier {
+		p.host.SetStreamHandler(ReceiveMerkleTreeProtocolID, p.handleIncomingMerkleTreeNodes)
+		p.host.SetStreamHandler(ContractVerifierAcceptanceProtocolID, p.handleIncomingContractVerifierAcceptance)
+		p.host.SetStreamHandler(ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID, p.handleIncomingKeyIVRandomizedFileSegmentsAndData)
+		p.host.SetStreamHandler(EncryptionDataTransferProtocolID, p.handleIncomingEncryptionDataTransfer)
+	}
+
+	p.host.SetStreamHandler(FileTransferProtocolID, p.handleIncomingFileTransfer)
+	p.host.SetStreamHandler(ContractTransferProtocolID, p.handleIncomingContract)
 
 	return p, nil
 }
 
+// handleIncomingContractVerifierAcceptance handles incoming contracts to verifier nodes for acceptance.
+// verifier signs the contract and sends it back.
+func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
+	// TODO
+}
+
+// TransferContract transfers a contract to a node.
+func (d *Protocol) SendContractForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error {
+	// TODO
+	return nil
+}
+
+// handleIncomingContract handles incoming contracts from nodes.
+func (d *Protocol) handleIncomingContract(s network.Stream) {
+	// TODO
+}
+
+// TransferContract transfers a contract to a node.
+func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error {
+	// TODO
+	return nil
+}
+
 // DecryptFile descrypts a file given the file's encryption setup.
 func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error) {
-	inputFile, err := os.OpenFile(filePath, os.O_RDWR, 0777)
+	inputFile, err := os.OpenFile(filePath, os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to open input file in decryptFile: %w", err)
 	}
@@ -109,7 +157,7 @@ func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byt
 		return "", fmt.Errorf("failed to create a new encryptor in decryptFile: %w", err)
 	}
 
-	outputFile, err := os.OpenFile(decryptedFilePath, os.O_RDWR|os.O_CREATE, 0777)
+	outputFile, err := os.OpenFile(decryptedFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to open output file in decryptFile: %w", err)
 	}
@@ -173,8 +221,8 @@ func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID
 	return &keyData, nil
 }
 
-// HandleIncomingEncryptionDataTransfer handles incoming encryption data request.
-func (d *Protocol) HandleIncomingEncryptionDataTransfer(s network.Stream) {
+// handleIncomingEncryptionDataTransfer handles incoming encryption data request.
+func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
 
@@ -339,8 +387,7 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 	// 	return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
 	// }
 
-	// nolint:gofumpt
-	inputFile, err := os.OpenFile(filePath, os.O_RDONLY, 0777)
+	inputFile, err := os.OpenFile(filePath, os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to open input file: %w", err)
 	}
@@ -395,9 +442,9 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 	return nil
 }
 
-// HandleIncomingKeyIVRandomizedFileSegmentsAndData this message is sent from the file hoster to the verifier node
+// handleIncomingKeyIVRandomizedFileSegmentsAndData this message is sent from the file hoster to the verifier node
 // which contains the metadata and the unencrypted file segments.
-func (d *Protocol) HandleIncomingKeyIVRandomizedFileSegmentsAndData(s network.Stream) {
+func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
 
@@ -465,8 +512,7 @@ func (d *Protocol) HandleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 
 	fileHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.FileHash)
 	destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
-	// nolint:gofumpt
-	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, 0777)
+	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		log.Errorf("failed to open a file for downloading its content from hoster: %s", err.Error())
 		return
@@ -503,9 +549,9 @@ func (d *Protocol) HandleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	}
 }
 
-// HandleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a node.
+// handleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a node.
 // this protocol handler is used by a verifier.
-func (d *Protocol) HandleIncomingMerkleTreeNodes(s network.Stream) {
+func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
 
@@ -597,8 +643,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 
 	fileHashHex := hexutil.Encode(request.FileHash)
 	destinationFilePath := filepath.Join(d.downloadDirectory, contractHashHex, fileHashHex)
-	// nolint:gofumpt
-	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, 0777)
+	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to open a file for downloading its content from hoster: %w", err)
 	}
@@ -628,8 +673,8 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 	return destinationFilePath, nil
 }
 
-// HandleIncomingFileTransfer handles an incoming file transfer initiated from file downloader towards file hoster node.
-func (d *Protocol) HandleIncomingFileTransfer(s network.Stream) {
+// handleIncomingFileTransfer handles an incoming file transfer initiated from file downloader towards file hoster node.
+func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
 

@@ -240,11 +240,10 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, merkleTree, totalSegments)
 
-	// nolint:gofumpt
-	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
+	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
-	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, 0777)
+	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	start := time.Now()
@@ -271,8 +270,7 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 
 	// reopen output file
-	// nolint:gofumpt
-	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
+	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	outputStats, err := output.Stat()
@@ -333,8 +331,7 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, merkleTree, howManySegmentsAllowedForFile)
 
-	// nolint:gofumpt
-	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
+	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	key, err := crypto.RandomEntropy(32)
@@ -346,8 +343,7 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 
 	// generate a random slice so we shuffle the segments order to be sent
 	randomSlices := GenerateRandomIntSlice(howManySegmentsAllowedForFile)
-	// nolint:gofumpt
-	outputUnencrypted, err := os.OpenFile(outputUnencryptedSegments, os.O_RDWR|os.O_CREATE, 0777)
+	outputUnencrypted, err := os.OpenFile(outputUnencryptedSegments, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	input, err = os.Open(inputFile)
@@ -422,15 +418,13 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.Equal(t, inputMerkleRootHash, merkleOfReorderedMerkle)
 
 	// reopen output file
-	// nolint:gofumpt
-	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, 0777)
+	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	outputStats, err := output.Stat()
 	assert.NoError(t, err)
 
-	// nolint:gofumpt
-	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, 0777)
+	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	// decrypt the file segments

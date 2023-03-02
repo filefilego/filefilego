@@ -75,9 +75,9 @@ var (
 		Usage: "Access token for storage engine",
 	}
 
-	StorageFeesGB = cli.StringFlag{
-		Name:  "storage_fees_gb",
-		Usage: "Storage fees per GB of data",
+	StorageFeesPerByte = cli.StringFlag{
+		Name:  "storage_fees_byte",
+		Usage: "Storage fees per Byte of data",
 	}
 
 	StorageFileMerkleTreeTotalSegments = cli.IntFlag{
@@ -85,9 +85,19 @@ var (
 		Usage: "File's total segments for merkle tree generation",
 	}
 
+	StorageFileSegmentsEncryptionPercentage = cli.IntFlag{
+		Name:  "storage_file_segments_encryption_percentage",
+		Usage: "File's segments total encryption",
+	}
+
 	DataVerifier = cli.BoolFlag{
 		Name:  "verify",
 		Usage: "Enable data verification(if verifier in genesis)",
+	}
+
+	DataDownloadsPath = cli.StringFlag{
+		Name:  "data_downloads_path",
+		Usage: "Directory path for data downloads",
 	}
 
 	RPCWhitelistFlag = cli.StringFlag{
@@ -209,8 +219,11 @@ var AppFlags = []cli.Flag{
 	&Storage,
 	&StorageDir,
 	&StorageToken,
-	&StorageFeesGB,
+	&StorageFeesPerByte,
+	&StorageFileMerkleTreeTotalSegments,
+	&StorageFileSegmentsEncryptionPercentage,
 	&DataVerifier,
+	&DataDownloadsPath,
 
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,
@@ -224,6 +237,7 @@ var AppFlags = []cli.Flag{
 	&RPCWSPortFlag,
 	&RPCWSAddrFlag,
 	&RPCWSCrossOriginFlag,
+
 	&P2PMaxGossipSize,
 	&MaxPeersFlag,
 	&P2PListenPortFlag,

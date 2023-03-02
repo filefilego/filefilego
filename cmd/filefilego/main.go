@@ -22,11 +22,13 @@ import (
 	"github.com/filefilego/filefilego/internal/blockchain"
 	ffgcli "github.com/filefilego/filefilego/internal/cli"
 	"github.com/filefilego/filefilego/internal/common"
+	"github.com/filefilego/filefilego/internal/contract"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/keystore"
 	"github.com/filefilego/filefilego/internal/node"
 	blockdownloader "github.com/filefilego/filefilego/internal/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/internal/node/protocols/data_query"
+	dataverification "github.com/filefilego/filefilego/internal/node/protocols/data_verification"
 	internalrpc "github.com/filefilego/filefilego/internal/rpc"
 	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/storage"
@@ -184,7 +186,18 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup block downloader protocol: %w", err)
 	}
 
-	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+	contractStore, err := contract.New(blockchainDB)
+	if err != nil {
+		return fmt.Errorf("failed to setup contract store: %w", err)
+	}
+
+	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier)
+	if err != nil {
+		return fmt.Errorf("failed to setup data verification protocol: %w", err)
+	}
+	log.Println(dataVerificationProtocol)
+
+	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
 	if err != nil {
 		return fmt.Errorf("failed to setup node: %w", err)
 	}
@@ -223,6 +236,8 @@ func run(ctx *cli.Context) error {
 
 		go func(validator *validator.Validator) {
 			for {
+				// TODO: calculate the amount of time it needed to seal
+				// and recalculate the ticker
 				<-time.After(blockValidatorIntervalSeconds * time.Second)
 				sealedBlock, err := validator.SealBlock(time.Now().Unix())
 				if err != nil {

@@ -1,6 +1,9 @@
 package dataquery
 
 import (
+	"bufio"
+	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -20,14 +23,18 @@ import (
 // ProtocolID represents the response protocol version
 const ProtocolID = "/ffg/dataquery_response/1.0.0"
 
+// DataQueryResponseTransferProtocolID is a protocol to handle sending data query responses to a querying node.
+// this protocol will be mostly used by verifiers to act as a proxy so node's which cant be dialed back by the
+// file hoster can pull the data query response from the verifiers.
+const DataQueryResponseTransferProtocolID = "/ffg/dataquery_response_transfer/1.0.0"
+
 // Interface represents a data quertier.
 type Interface interface {
 	PutQueryHistory(key string, val messages.DataQueryRequest)
 	GetQueryHistory(key string) (messages.DataQueryRequest, bool)
 	PutQueryResponse(key string, val messages.DataQueryResponse)
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
-	HandleIncomingDataQueryResponse(s network.Stream)
-	SendDataQueryResponse(s network.Stream, payload *messages.DataQueryResponseProto) error
+	SendDataQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.DataQueryResponseProto) error
 }
 
 // Protocol wraps the data query protocols and handlers
@@ -50,7 +57,9 @@ func New(h host.Host) (*Protocol, error) {
 		queryResponse: make(map[string][]messages.DataQueryResponse),
 	}
 
-	p.host.SetStreamHandler(ProtocolID, p.HandleIncomingDataQueryResponse)
+	p.host.SetStreamHandler(ProtocolID, p.handleIncomingDataQueryResponse)
+	p.host.SetStreamHandler(DataQueryResponseTransferProtocolID, p.handleDataQueryResponseTransfer)
+
 	return p, nil
 }
 
@@ -97,14 +106,126 @@ func (d *Protocol) GetQueryResponse(key string) ([]messages.DataQueryResponse, b
 	return v, ok
 }
 
+func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleDataQueryResponseTransfer stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleDataQueryResponseTransfer stream to buffer: %s", err.Error())
+		return
+	}
+
+	request := messages.DataQueryResponseTransferProto{}
+	if err := proto.Unmarshal(buf, &request); err != nil {
+		log.Errorf("failed to unmarshall data from handleDataQueryResponseTransfer stream: %s", err.Error())
+		return
+	}
+
+	response := messages.DataQueryResponseTransferResultProto{
+		Responses: make([]*messages.DataQueryResponseProto, 0),
+	}
+
+	dataqueries, ok := d.GetQueryResponse(hexutil.Encode(request.Hash))
+	if ok && len(dataqueries) > 0 {
+		for _, v := range dataqueries {
+			dqrProto := messages.ToDataQueryResponseProto(v)
+			response.Responses = append(response.Responses, dqrProto)
+		}
+	}
+
+	responseBytes, err := proto.Marshal(&response)
+	if err != nil {
+		log.Errorf("failed to marshal protobuf file transfer request message: %s", err.Error())
+		return
+	}
+
+	responsePayloadWithLength := make([]byte, 8+len(responseBytes))
+	binary.LittleEndian.PutUint64(responsePayloadWithLength, uint64(len(responseBytes)))
+	copy(responsePayloadWithLength[8:], responseBytes)
+	_, err = s.Write(responsePayloadWithLength)
+	if err != nil {
+		log.Errorf("failed to write file transfer request to stream: %s", err.Error())
+		return
+	}
+}
+
+// RequestDataQueryResponseTransfer requests a data query response transfer from a peer, mostly a verifier.
+func (d *Protocol) RequestDataQueryResponseTransfer(ctx context.Context, peerID peer.ID, request *messages.DataQueryResponseTransferProto) error {
+	s, err := d.host.NewStream(ctx, peerID, DataQueryResponseTransferProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to create new request data query response transfer: %w", err)
+	}
+	defer s.Close()
+
+	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	// err = s.SetDeadline(future)
+	if err != nil {
+		return fmt.Errorf("failed to set request data query response transfer stream deadline: %w", err)
+	}
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf request data query response transfer request message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to write data query response to stream: %w", err)
+	}
+
+	msgLengthBuffer := make([]byte, 8)
+	c := bufio.NewReader(s)
+	_, err = c.Read(msgLengthBuffer)
+	if err != nil {
+		return fmt.Errorf("failed to read data query response from stream: %w", err)
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		return fmt.Errorf("failed to read protobuf data query response from stream to buffer: %w", err)
+	}
+
+	result := messages.DataQueryResponseTransferResultProto{}
+	if err := proto.Unmarshal(buf, &result); err != nil {
+		return fmt.Errorf("failed to unmarshall data query response from stream: %w", err)
+	}
+
+	for _, v := range result.Responses {
+		resp := messages.ToDataQueryResponse(v)
+		d.PutQueryResponse(hexutil.Encode(resp.Hash), resp)
+	}
+
+	return nil
+}
+
 // HandleIncomingDataQueryResponse handles incoming data query messages.
-func (d *Protocol) HandleIncomingDataQueryResponse(s network.Stream) {
+func (d *Protocol) handleIncomingDataQueryResponse(s network.Stream) {
 	buf, err := io.ReadAll(s)
 	defer s.Close()
 	if err != nil {
 		log.Warnf("failed to read data from stream: %v", err)
-		// nolint:errcheck
-		s.Reset()
 		return
 	}
 
@@ -112,39 +233,34 @@ func (d *Protocol) HandleIncomingDataQueryResponse(s network.Stream) {
 	err = proto.Unmarshal(buf, &tmp)
 	if err != nil {
 		log.Warnf("failed to unmarshal data query response: %v", err)
-		// nolint:errcheck
-		s.Reset()
 		return
 	}
-	sig := tmp.Signature
-	tmp.Signature = []byte{}
 
-	payloadBts, err := proto.Marshal(&tmp)
+	dqr := messages.ToDataQueryResponse(&tmp)
+	// dqr.PublicKey
+	publicKeyHoster, err := crypto.PublicKeyFromBytes(dqr.PublicKey)
 	if err != nil {
-		log.Warnf("failed to marshal data query response: %v", err)
+		log.Warnf("failed to get public key from data query response: %v", err)
 		return
 	}
 
-	// verify response
-	if err := VerifyDataFromPeer(payloadBts, sig, s.Conn().RemotePeer(), tmp.PublicKey); err != nil {
-		log.Warnf("verification failed: %v", err)
+	ok, err := messages.VerifyDataQueryResponse(publicKeyHoster, dqr)
+	if !ok || err != nil {
+		log.Warnf("failed to verify data query response: %v", err)
 		return
 	}
 
-	// check if this node has not requested, deny
-	_, ok := d.GetQueryHistory(hexutil.Encode(tmp.Hash))
-	if !ok {
-		return
-	}
-
-	// need the sig for later verification
-	tmp.Signature = sig
-	d.PutQueryResponse(hexutil.Encode(tmp.Hash), messages.ToDataQueryResponse(&tmp))
+	d.PutQueryResponse(hexutil.Encode(tmp.Hash), dqr)
 }
 
 // SendDataQueryResponse sends back the response to initiator
-// closing the stream should be handled outside the scope of this function.
-func (d *Protocol) SendDataQueryResponse(s network.Stream, payload *messages.DataQueryResponseProto) error {
+func (d *Protocol) SendDataQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.DataQueryResponseProto) error {
+	s, err := d.host.NewStream(ctx, peerID, ProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to connect to peer for sending data query response: %w", err)
+	}
+	defer s.Close()
+
 	bts, err := proto.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)

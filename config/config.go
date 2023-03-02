@@ -15,22 +15,24 @@ type Config struct {
 }
 
 type global struct {
-	NodeIdentityKeyPassphrase          string
-	LogPathLine                        bool
-	LogLevel                           string
-	DataDir                            string
-	KeystoreDir                        string
-	Validator                          bool
-	ValidatorKeypath                   string
-	ValidatorPass                      string
-	SearchEngine                       bool
-	SearchEngineResultCount            int
-	Storage                            bool
-	StorageDir                         string
-	StorageToken                       string
-	StorageFeesGB                      string
-	StorageFileMerkleTreeTotalSegments int
-	DataVerifier                       bool
+	NodeIdentityKeyPassphrase               string
+	LogPathLine                             bool
+	LogLevel                                string
+	DataDir                                 string
+	KeystoreDir                             string
+	Validator                               bool
+	ValidatorKeypath                        string
+	ValidatorPass                           string
+	SearchEngine                            bool
+	SearchEngineResultCount                 int
+	Storage                                 bool
+	StorageDir                              string
+	StorageToken                            string
+	StorageFeesPerByte                      string
+	StorageFileMerkleTreeTotalSegments      int
+	StorageFileSegmentsEncryptionPercentage int
+	DataVerifier                            bool
+	DataDownloadsPath                       string
 }
 
 type p2p struct {
@@ -72,8 +74,9 @@ type unixDomainSocket struct {
 func New(ctx *cli.Context) *Config {
 	conf := &Config{
 		Global: global{
-			SearchEngineResultCount:            100,
-			StorageFileMerkleTreeTotalSegments: 1024,
+			SearchEngineResultCount:                 100,
+			StorageFileMerkleTreeTotalSegments:      1024,
+			StorageFileSegmentsEncryptionPercentage: 5,
 		},
 		RPC: rpc{
 			Whitelist:       []string{},
@@ -156,16 +159,24 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 		conf.Global.StorageToken = ctx.String(StorageToken.Name)
 	}
 
-	if ctx.IsSet(StorageFeesGB.Name) {
-		conf.Global.StorageFeesGB = ctx.String(StorageFeesGB.Name)
+	if ctx.IsSet(StorageFeesPerByte.Name) {
+		conf.Global.StorageFeesPerByte = ctx.String(StorageFeesPerByte.Name)
 	}
 
 	if ctx.IsSet(StorageFileMerkleTreeTotalSegments.Name) {
 		conf.Global.StorageFileMerkleTreeTotalSegments = ctx.Int(StorageFileMerkleTreeTotalSegments.Name)
 	}
 
+	if ctx.IsSet(StorageFileSegmentsEncryptionPercentage.Name) {
+		conf.Global.StorageFileSegmentsEncryptionPercentage = ctx.Int(StorageFileSegmentsEncryptionPercentage.Name)
+	}
+
 	if ctx.IsSet(DataVerifier.Name) {
 		conf.Global.DataVerifier = ctx.Bool(DataVerifier.Name)
+	}
+
+	if ctx.IsSet(DataDownloadsPath.Name) {
+		conf.Global.DataDownloadsPath = ctx.String(DataDownloadsPath.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {

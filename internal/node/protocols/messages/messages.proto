@@ -31,13 +31,24 @@ message DataQueryRequestProto {
 // DataQueryResponseProto represents a data query response.
 message DataQueryResponseProto {
     string from_peer_addr = 1;
-    string total_fees_per_gb = 2;
+    string total_fees = 2;
+    // hash must be same as the DataQueryRequestProto hash
     bytes hash = 3;
     bytes public_key = 4;
     bytes signature = 5;
     repeated bytes file_hashes = 6;
     repeated bytes unavailable_file_hashes = 7;
     int64 timestamp = 8;
+}
+
+// DataQueryResponseTransferProto is used to request a data query response from a verifier.
+message DataQueryResponseTransferProto {
+    bytes hash = 1;
+}
+
+// DataQueryResponseTransferResultProto encapsulates multiple data query responses from verifier to the querying node.
+message DataQueryResponseTransferResultProto {
+    repeated DataQueryResponseProto responses = 1;
 }
 
 // BlockchainHeightResponseProto represents the height of a node's blockchain.
@@ -71,9 +82,19 @@ message DownloadContractProto {
     bytes verifier_signature = 7;
 }
 
-// DownloadContractsHashProto contains a list of contract hashes which will be send as a transaction data payload.
-message DownloadContractsHashProto {
-    repeated bytes contract_hashes = 1;
+// DownloadContractInTransactionDataProto is a contract metadata with the smallest fingerprint.
+message DownloadContractInTransactionDataProto {
+    bytes contract_hash = 1;
+    bytes file_requester_node_public_key = 2;
+    bytes file_hoster_node_public_key = 3;
+    bytes verifier_public_key = 4;
+    string verifier_fees = 5;
+    string file_hoster_fees = 6;
+}
+
+// DownloadContractsHashesProto contains a list of contracts hashes which will be send as a transaction data payload.
+message DownloadContractsHashesProto {
+    repeated DownloadContractInTransactionDataProto contracts = 1;
 }
 
 // MerkleTreeNodesOfFileContractProto is a message which contains a list of merkle tree nodes, contract and file hashes.
