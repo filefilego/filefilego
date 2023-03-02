@@ -37,14 +37,15 @@ func TestNew(t *testing.T) {
 	assert.NoError(t, err)
 
 	cases := map[string]struct {
-		host                    host.Host
-		contractStore           contract.Interface
-		storage                 storage.Interface
-		merkleTreeTotalSegments int
-		encryptionPercentage    int
-		downloadDirectory       string
-		dataVerifier            bool
-		expErr                  string
+		host                         host.Host
+		contractStore                contract.Interface
+		storage                      storage.Interface
+		merkleTreeTotalSegments      int
+		encryptionPercentage         int
+		downloadDirectory            string
+		dataVerifier                 bool
+		dataVerifierVerificationFees string
+		expErr                       string
 	}{
 		"no host": {
 			expErr: "host is nil",
@@ -66,6 +67,16 @@ func TestNew(t *testing.T) {
 			encryptionPercentage:    5,
 			expErr:                  "download directory is empty",
 		},
+		"empty data verification fees": {
+			host:                    h,
+			contractStore:           c,
+			storage:                 &storage.Storage{},
+			merkleTreeTotalSegments: 1024,
+			encryptionPercentage:    5,
+			downloadDirectory:       "./",
+			dataVerifier:            true,
+			expErr:                  "data verification fees is empty",
+		},
 		"success": {
 			host:                    h,
 			contractStore:           c,
@@ -80,7 +91,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -102,7 +113,6 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "datastorage", inputFile))
 	assert.NoError(t, err)
-
 	h1, _, h1PubKey := newHost(t, "1175")
 	h2, _, h2PubKey := newHost(t, "1167")
 	verifier1, _, verifier1PubKey := newHost(t, "1181")
@@ -171,15 +181,15 @@ func TestDataVerificationMethods(t *testing.T) {
 	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false)
+	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false)
+	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true)
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "100")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -242,10 +252,16 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
 		FileHashesNeeded:           [][]byte{fileHashBytes},
 		VerifierPublicKey:          verifier1PublicKeyBytes,
-		VerifierFees:               "0x02",
+		VerifierFees:               "",
 		ContractHash:               contractHash,
-		VerifierSignature:          []byte{90},
+		VerifierSignature:          []byte{},
 	}
+
+	domainQueryResponse := messages.ToDataQueryResponse(fileContract.FileHosterResponse)
+	sigFileContractResponse, err := messages.SignDataQueryResponse(h1.Peerstore().PrivKey(h1.ID()), domainQueryResponse)
+	assert.NoError(t, err)
+	fileContract.FileHosterResponse.Signature = make([]byte, len(sigFileContractResponse))
+	copy(fileContract.FileHosterResponse.Signature, sigFileContractResponse)
 
 	key, err := ffgcrypto.RandomEntropy(32)
 	assert.NoError(t, err)
@@ -329,6 +345,17 @@ func TestDataVerificationMethods(t *testing.T) {
 	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
 	assert.NoError(t, err)
 	assert.Equal(t, fileHash, hashOfRestoredFile)
+
+	assert.Empty(t, fileContract.VerifierSignature)
+	signedContract, err := protocolH2.SendContractToVerifierForAcceptance(context.TODO(), verifier1.ID(), fileContract)
+	assert.NoError(t, err)
+	assert.NotNil(t, signedContract)
+	assert.NotEmpty(t, signedContract.VerifierSignature)
+	assert.Equal(t, "0x64", signedContract.VerifierFees)
+
+	verified, err := messages.VerifyDownloadContractProto(verifier1.Peerstore().PubKey(verifier1.ID()), signedContract)
+	assert.NoError(t, err)
+	assert.True(t, verified)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

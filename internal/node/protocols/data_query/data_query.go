@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -20,13 +21,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ProtocolID represents the response protocol version
-const ProtocolID = "/ffg/dataquery_response/1.0.0"
+const (
 
-// DataQueryResponseTransferProtocolID is a protocol to handle sending data query responses to a querying node.
-// this protocol will be mostly used by verifiers to act as a proxy so node's which cant be dialed back by the
-// file hoster can pull the data query response from the verifiers.
-const DataQueryResponseTransferProtocolID = "/ffg/dataquery_response_transfer/1.0.0"
+	// ProtocolID represents the response protocol version
+	ProtocolID = "/ffg/dataquery_response/1.0.0"
+
+	// DataQueryResponseTransferProtocolID is a protocol to handle sending data query responses to a querying node.
+	// this protocol will be mostly used by verifiers to act as a proxy so node's which cant be dialed back by the
+	// file hoster can pull the data query response from the verifiers.
+	DataQueryResponseTransferProtocolID = "/ffg/dataquery_response_transfer/1.0.0"
+
+	deadlineTimeInSecond = 10
+)
 
 // Interface represents a data quertier.
 type Interface interface {
@@ -171,8 +177,8 @@ func (d *Protocol) RequestDataQueryResponseTransfer(ctx context.Context, peerID 
 	}
 	defer s.Close()
 
-	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	// err = s.SetDeadline(future)
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
 	if err != nil {
 		return fmt.Errorf("failed to set request data query response transfer stream deadline: %w", err)
 	}

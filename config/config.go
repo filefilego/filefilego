@@ -32,6 +32,7 @@ type global struct {
 	StorageFileMerkleTreeTotalSegments      int
 	StorageFileSegmentsEncryptionPercentage int
 	DataVerifier                            bool
+	DataVerifierVerificationFees            string
 	DataDownloadsPath                       string
 }
 
@@ -173,6 +174,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(DataVerifier.Name) {
 		conf.Global.DataVerifier = ctx.Bool(DataVerifier.Name)
+	}
+
+	if ctx.IsSet(DataVerifierVerificationFees.Name) {
+		conf.Global.DataVerifierVerificationFees = ctx.String(DataVerifierVerificationFees.Name)
 	}
 
 	if ctx.IsSet(DataDownloadsPath.Name) {

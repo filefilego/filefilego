@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -45,7 +47,7 @@ const (
 	// ContractVerifierAcceptanceProtocolID is a protocol which accepts incoming download contracts and seal them by verifier.
 	ContractVerifierAcceptanceProtocolID = "/ffg/dataverification_contract_accept/1.0.0"
 
-	// deadlineTimeInSecond = 10
+	deadlineTimeInSecond = 10
 
 	bufferSize = 8192
 
@@ -54,7 +56,7 @@ const (
 
 // Interface specifies the data verification functionalities.
 type Interface interface {
-	SendContractForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error
+	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error
 	TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error
 	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error)
 	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
@@ -65,17 +67,18 @@ type Interface interface {
 
 // Protocol wraps the data verification protocols and handlers
 type Protocol struct {
-	host                    host.Host
-	contractStore           contract.Interface
-	storage                 storage.Interface
-	merkleTreeTotalSegments int
-	encryptionPercentage    int
-	downloadDirectory       string
-	dataVerifier            bool
+	host                         host.Host
+	contractStore                contract.Interface
+	storage                      storage.Interface
+	merkleTreeTotalSegments      int
+	encryptionPercentage         int
+	downloadDirectory            string
+	dataVerifier                 bool
+	dataVerifierVerificationFees string
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool) (*Protocol, error) {
+func New(h host.Host, contractStore contract.Interface, storage storage.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees string) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -93,13 +96,14 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 	}
 
 	p := &Protocol{
-		host:                    h,
-		contractStore:           contractStore,
-		storage:                 storage,
-		merkleTreeTotalSegments: merkleTreeTotalSegments,
-		encryptionPercentage:    encryptionPercentage,
-		downloadDirectory:       downloadDirectory,
-		dataVerifier:            dataVerifier,
+		host:                         h,
+		contractStore:                contractStore,
+		storage:                      storage,
+		merkleTreeTotalSegments:      merkleTreeTotalSegments,
+		encryptionPercentage:         encryptionPercentage,
+		downloadDirectory:            downloadDirectory,
+		dataVerifier:                 dataVerifier,
+		dataVerifierVerificationFees: dataVerifierVerificationFees,
 	}
 
 	// the following protocols are hanlded by verifier
@@ -108,10 +112,14 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		p.host.SetStreamHandler(ContractVerifierAcceptanceProtocolID, p.handleIncomingContractVerifierAcceptance)
 		p.host.SetStreamHandler(ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID, p.handleIncomingKeyIVRandomizedFileSegmentsAndData)
 		p.host.SetStreamHandler(EncryptionDataTransferProtocolID, p.handleIncomingEncryptionDataTransfer)
+
+		if p.dataVerifierVerificationFees == "" {
+			return nil, errors.New("data verification fees is empty")
+		}
 	}
 
 	p.host.SetStreamHandler(FileTransferProtocolID, p.handleIncomingFileTransfer)
-	p.host.SetStreamHandler(ContractTransferProtocolID, p.handleIncomingContract)
+	p.host.SetStreamHandler(ContractTransferProtocolID, p.handleIncomingContractTransfer)
 
 	return p, nil
 }
@@ -119,23 +127,229 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 // handleIncomingContractVerifierAcceptance handles incoming contracts to verifier nodes for acceptance.
 // verifier signs the contract and sends it back.
 func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
-	// TODO
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream to buffer: %s", err.Error())
+		return
+	}
+
+	downloadContract := messages.DownloadContractProto{}
+	if err := proto.Unmarshal(buf, &downloadContract); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingContractVerifierAcceptance stream: %s", err.Error())
+		return
+	}
+
+	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterNodePublicKey)
+	if err != nil {
+		log.Errorf("failed to get the public key of the file hoster: %s", err.Error())
+		return
+	}
+
+	// check if this connection is from file requester
+	if !verifyConnection(publicKeyFileRequester, s.Conn().RemotePublicKey()) {
+		log.Error("malicious request from host which is not file requester in handleIncomingContractVerifierAcceptance")
+		return
+	}
+
+	dataQueryResponse := messages.ToDataQueryResponse(downloadContract.FileHosterResponse)
+	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
+	if err != nil {
+		log.Errorf("failed to get the public key of the file hoster in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		return
+	}
+
+	ok, err := messages.VerifyDataQueryResponse(publicKeyFileHoster, dataQueryResponse)
+	if !ok || err != nil {
+		log.Errorf("failed to verify data query response from file hoster in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		return
+	}
+
+	verificationAmount, ok := big.NewInt(0).SetString(d.dataVerifierVerificationFees, 10)
+	if !ok {
+		log.Errorf("failed to parse verification fees in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		return
+	}
+	downloadContract.VerifierFees = hexutil.EncodeBig(verificationAmount)
+	publicKey := d.host.Peerstore().PubKey(d.host.ID())
+	publicKeyBytes, err := publicKey.Raw()
+	if err != nil {
+		log.Errorf("failed to get the public key of the verifier in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		return
+	}
+
+	downloadContract.VerifierPublicKey = make([]byte, len(publicKeyBytes))
+	copy(downloadContract.VerifierPublicKey, publicKeyBytes)
+
+	sig, err := messages.SignDownloadContractProto(d.host.Peerstore().PrivKey(d.host.ID()), &downloadContract)
+	if err != nil {
+		log.Errorf("failed to get the sign download contract in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		return
+	}
+
+	downloadContract.VerifierSignature = make([]byte, len(sig))
+	copy(downloadContract.VerifierSignature, sig)
+
+	downloadContractBytes, err := proto.Marshal(&downloadContract)
+	if err != nil {
+		log.Errorf("failed to marshal protobuf download contract message: %v", err)
+		return
+	}
+	contractPayloadWithLength := make([]byte, 8+len(downloadContractBytes))
+	binary.LittleEndian.PutUint64(contractPayloadWithLength, uint64(len(downloadContractBytes)))
+	copy(contractPayloadWithLength[8:], downloadContractBytes)
+	_, err = s.Write(contractPayloadWithLength)
+	if err != nil {
+		log.Errorf("failed to write download contract bytes to stream: %v", err)
+	}
 }
 
-// TransferContract transfers a contract to a node.
-func (d *Protocol) SendContractForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error {
-	// TODO
-	return nil
+// SendContractToVerifierForAcceptance sends a contract to a verifier and gets signed by verifier.
+// this method is called by file requester
+func (d *Protocol) SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) (*messages.DownloadContractProto, error) {
+	s, err := d.host.NewStream(ctx, verifierID, ContractVerifierAcceptanceProtocolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new stream to send download contract protocol data: %w", err)
+	}
+	defer s.Close()
+
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set download contract stream deadline: %w", err)
+	}
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal protobuf download contract message message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write download contract to stream: %w", err)
+	}
+
+	msgLengthBuffer := make([]byte, 8)
+	c := bufio.NewReader(s)
+	_, err = c.Read(msgLengthBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read download contract from stream: %w", err)
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read protobuf download contract from stream to buffer: %w", err)
+	}
+
+	downloadedContract := messages.DownloadContractProto{}
+	if err := proto.Unmarshal(buf, &downloadedContract); err != nil {
+		return nil, fmt.Errorf("failed to unmarshall download contract from stream: %w", err)
+	}
+
+	return &downloadedContract, nil
 }
 
-// handleIncomingContract handles incoming contracts from nodes.
-func (d *Protocol) handleIncomingContract(s network.Stream) {
-	// TODO
+// handleIncomingContractTransfer handles incoming contracts from nodes.
+func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractTransfer stream: %s", err.Error())
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractTransfer stream to buffer: %s", err.Error())
+		return
+	}
+
+	downloadContract := messages.DownloadContractProto{}
+	if err := proto.Unmarshal(buf, &downloadContract); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingContractTransfer stream: %s", err.Error())
+		return
+	}
+	verifierPubKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
+	if err != nil {
+		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %s", err.Error())
+		return
+	}
+
+	ok, err := messages.VerifyDownloadContractProto(verifierPubKey, &downloadContract)
+	if !ok || err != nil {
+		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %s", err.Error())
+		return
+	}
+
+	if !d.dataVerifier {
+		if downloadContract.FileHosterResponse.FromPeerAddr != d.host.ID().String() {
+			log.Errorf("got a download contract which this node is not the file hoster in handleIncomingContractTransfer stream: %s", err.Error())
+			return
+		}
+	}
+
+	_ = d.contractStore.CreateContract(&downloadContract)
 }
 
 // TransferContract transfers a contract to a node.
 func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error {
-	// TODO
+	s, err := d.host.NewStream(ctx, peerID, ContractVerifierAcceptanceProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to create new stream to send transfer contract protocol data: %w", err)
+	}
+	defer s.Close()
+
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return fmt.Errorf("failed to set transfer contract stream deadline: %w", err)
+	}
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf transfer contract message message: %w", err)
+	}
+
+	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to write transfer contract to stream: %w", err)
+	}
+
 	return nil
 }
 
@@ -177,11 +391,11 @@ func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID
 	}
 	defer s.Close()
 
-	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	// err = s.SetDeadline(future)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to set encryption data for verifier stream deadline: %w", err)
-	// }
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set encryption data for verifier stream deadline: %w", err)
+	}
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
@@ -346,11 +560,11 @@ func (d *Protocol) SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifi
 	}
 	defer s.Close()
 
-	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
-	// err = s.SetDeadline(future)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
-	// }
+	future := time.Now().Add(deadlineTimeInSecond * time.Second)
+	err = s.SetDeadline(future)
+	if err != nil {
+		return fmt.Errorf("failed to set merkle tree nodes for verifier stream deadline: %w", err)
+	}
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
@@ -618,9 +832,9 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 
 	// future := time.Now().Add(deadlineTimeInSecond * time.Second)
 	// err = s.SetDeadline(future)
-	if err != nil {
-		return "", fmt.Errorf("failed to set file transfer stream deadline: %w", err)
-	}
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to set file transfer stream deadline: %w", err)
+	// }
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {

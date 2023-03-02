@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
+	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
@@ -85,6 +86,73 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 
 	return &r
+}
+
+// SignDownloadContractProto signs a download contract from the verifiers side.
+func SignDownloadContractProto(privateKey crypto.PrivKey, contract *DownloadContractProto) ([]byte, error) {
+	fileHahes := []byte{}
+	for _, v := range contract.FileHashesNeeded {
+		fileHahes = append(fileHahes, v...)
+	}
+
+	data := bytes.Join(
+		[][]byte{
+			[]byte(contract.VerifierFees),
+			contract.ContractHash,
+			contract.FileRequesterNodePublicKey,
+			contract.VerifierPublicKey,
+			contract.FileHosterResponse.PublicKey,
+			contract.FileHosterResponse.Signature,
+			fileHahes,
+		},
+		[]byte{},
+	)
+
+	sig, err := privateKey.Sign(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign download contract proto payload: %w", err)
+	}
+
+	return sig, nil
+}
+
+// VerifyDownloadContractProto verifies a download contract.
+func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadContractProto) (bool, error) {
+	dataQueryResponse := ToDataQueryResponse(contract.FileHosterResponse)
+	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to get the public key of the file hoster: %w", err)
+	}
+
+	ok, err := VerifyDataQueryResponse(publicKeyFileHoster, dataQueryResponse)
+	if !ok || err != nil {
+		return false, fmt.Errorf("failed to verify data query resonse payload: %w", err)
+	}
+
+	fileHahes := []byte{}
+	for _, v := range contract.FileHashesNeeded {
+		fileHahes = append(fileHahes, v...)
+	}
+
+	data := bytes.Join(
+		[][]byte{
+			[]byte(contract.VerifierFees),
+			contract.ContractHash,
+			contract.FileRequesterNodePublicKey,
+			contract.VerifierPublicKey,
+			contract.FileHosterResponse.PublicKey,
+			contract.FileHosterResponse.Signature,
+			fileHahes,
+		},
+		[]byte{},
+	)
+
+	ok, err = publicKey.Verify(data, contract.VerifierSignature)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify download contract signature using public key: %w", err)
+	}
+
+	return ok, nil
 }
 
 // SignDataQueryResponse signs a data query response given the node's private key.

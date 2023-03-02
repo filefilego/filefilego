@@ -95,6 +95,11 @@ var (
 		Usage: "Enable data verification(if verifier in genesis)",
 	}
 
+	DataVerifierVerificationFees = cli.StringFlag{
+		Name:  "data_verification_fees",
+		Usage: "Data verification fees",
+	}
+
 	DataDownloadsPath = cli.StringFlag{
 		Name:  "data_downloads_path",
 		Usage: "Directory path for data downloads",
@@ -223,6 +228,7 @@ var AppFlags = []cli.Flag{
 	&StorageFileMerkleTreeTotalSegments,
 	&StorageFileSegmentsEncryptionPercentage,
 	&DataVerifier,
+	&DataVerifierVerificationFees,
 	&DataDownloadsPath,
 
 	&RPCServicesFlag,
