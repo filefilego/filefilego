@@ -47,16 +47,27 @@ func TestDataQueryProtocol(t *testing.T) {
 	err = h3.Connect(context.Background(), peer2Info)
 	assert.NoError(t, err)
 
-	protocol2.PutQueryHistory(hexutil.Encode([]byte{1}), messages.DataQueryRequest{})
+	dqrequest := messages.DataQueryRequest{
+		FileHashes:   [][]byte{{12}},
+		FromPeerAddr: h1.ID().String(),
+		Timestamp:    time.Now().Unix(),
+	}
+
+	hashOfReq := dqrequest.GetHash()
+	dqrequest.Hash = make([]byte, len(hashOfReq))
+	copy(dqrequest.Hash, hashOfReq)
+
+	err = protocol2.PutQueryHistory(hexutil.Encode(hashOfReq), dqrequest)
+	assert.NoError(t, err)
 	pkbytes, err := pubkey1.Raw()
 	assert.NoError(t, err)
 	pmsg := messages.DataQueryResponseProto{
 		TotalFees:             "0x1",
-		FileHashes:            [][]byte{{1}},
+		FileHashes:            [][]byte{{12}},
 		UnavailableFileHashes: [][]byte{},
 		Timestamp:             time.Now().Unix(),
 		PublicKey:             pkbytes,
-		Hash:                  []byte{1},
+		HashDataQueryRequest:  hashOfReq,
 		FromPeerAddr:          h1.ID().Pretty(),
 	}
 
@@ -74,13 +85,13 @@ func TestDataQueryProtocol(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
-	msgs, ok := protocol2.GetQueryResponse(hexutil.Encode([]byte{1}))
+	msgs, ok := protocol2.GetQueryResponse(hexutil.Encode(hashOfReq))
 	assert.True(t, ok)
 	assert.NotEmpty(t, msgs)
 
-	err = protocol3.RequestDataQueryResponseTransfer(context.TODO(), h2.ID(), &messages.DataQueryResponseTransferProto{Hash: []byte{1}})
+	err = protocol3.RequestDataQueryResponseTransfer(context.TODO(), h2.ID(), &messages.DataQueryResponseTransferProto{Hash: hashOfReq})
 	assert.NoError(t, err)
-	results, ok := protocol3.GetQueryResponse(hexutil.Encode([]byte{1}))
+	results, ok := protocol3.GetQueryResponse(hexutil.Encode(hashOfReq))
 	assert.True(t, ok)
 	assert.Len(t, results, 1)
 	assert.Equal(t, results[0], dqr)

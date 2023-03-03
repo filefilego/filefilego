@@ -238,7 +238,8 @@ func run(ctx *cli.Context) error {
 			for {
 				// TODO: calculate the amount of time it needed to seal
 				// and recalculate the ticker
-				<-time.After(blockValidatorIntervalSeconds * time.Second)
+				tickDuration := blockValidatorIntervalSeconds * time.Second
+				<-time.After(tickDuration)
 				sealedBlock, err := validator.SealBlock(time.Now().Unix())
 				if err != nil {
 					log.Errorf("sealing block failed: %s", err.Error())

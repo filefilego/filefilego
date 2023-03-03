@@ -384,12 +384,17 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return fmt.Errorf("failed to get public key bytes: %w", err)
 		}
 
-		dataQueryRequest := payload.GetQuery()
+		dataQueryRequestProto := payload.GetQuery()
+		dataQueryRequest := messages.ToDataQueryRequest(dataQueryRequestProto)
+		if err := dataQueryRequest.Validate(); err != nil {
+			return fmt.Errorf("failed to validate data query request: %w", err)
+		}
+
 		response := messages.DataQueryResponse{
 			FromPeerAddr:          n.GetID(),
 			UnavailableFileHashes: make([][]byte, 0),
 			FileHashes:            make([][]byte, 0),
-			Hash:                  make([]byte, len(dataQueryRequest.Hash)),
+			HashDataQueryRequest:  make([]byte, len(dataQueryRequest.Hash)),
 			PublicKey:             make([]byte, len(pubKeyBytes)),
 			Timestamp:             time.Now().Unix(),
 		}
@@ -410,7 +415,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return fmt.Errorf("failed to calculate files fees: %w", err)
 		}
 		response.TotalFees = hexutil.EncodeBig(finalAmount)
-		copy(response.Hash, dataQueryRequest.Hash)
+		copy(response.HashDataQueryRequest, dataQueryRequest.Hash)
 		copy(response.PublicKey, pubKeyBytes)
 		signature, err := messages.SignDataQueryResponse(n.host.Peerstore().PrivKey(n.GetPeerID()), response)
 		if err != nil {

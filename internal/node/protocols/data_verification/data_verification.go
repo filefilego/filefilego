@@ -196,6 +196,10 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	downloadContract.VerifierPublicKey = make([]byte, len(publicKeyBytes))
 	copy(downloadContract.VerifierPublicKey, publicKeyBytes)
 
+	contractHash := messages.GetDownloadContractHash(&downloadContract)
+	downloadContract.ContractHash = make([]byte, len(contractHash))
+	copy(downloadContract.ContractHash, contractHash)
+
 	sig, err := messages.SignDownloadContractProto(d.host.Peerstore().PrivKey(d.host.ID()), &downloadContract)
 	if err != nil {
 		log.Errorf("failed to get the sign download contract in handleIncomingContractVerifierAcceptance: %s", err.Error())

@@ -36,7 +36,7 @@ const (
 
 // Interface represents a data quertier.
 type Interface interface {
-	PutQueryHistory(key string, val messages.DataQueryRequest)
+	PutQueryHistory(key string, val messages.DataQueryRequest) error
 	GetQueryHistory(key string) (messages.DataQueryRequest, bool)
 	PutQueryResponse(key string, val messages.DataQueryResponse)
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
@@ -70,10 +70,15 @@ func New(h host.Host) (*Protocol, error) {
 }
 
 // PutQueryHistory puts the query history.
-func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) {
+func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) error {
+	if err := val.Validate(); err != nil {
+		return fmt.Errorf("failed to insert data query request: %w", err)
+	}
+
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
 	d.queryHistory[key] = val
+	return nil
 }
 
 // GetQueryHistory gets a val from history.
@@ -220,7 +225,7 @@ func (d *Protocol) RequestDataQueryResponseTransfer(ctx context.Context, peerID 
 
 	for _, v := range result.Responses {
 		resp := messages.ToDataQueryResponse(v)
-		d.PutQueryResponse(hexutil.Encode(resp.Hash), resp)
+		d.PutQueryResponse(hexutil.Encode(resp.HashDataQueryRequest), resp)
 	}
 
 	return nil
@@ -256,7 +261,7 @@ func (d *Protocol) handleIncomingDataQueryResponse(s network.Stream) {
 		return
 	}
 
-	d.PutQueryResponse(hexutil.Encode(tmp.Hash), dqr)
+	d.PutQueryResponse(hexutil.Encode(tmp.HashDataQueryRequest), dqr)
 }
 
 // SendDataQueryResponse sends back the response to initiator

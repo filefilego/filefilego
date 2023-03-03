@@ -238,22 +238,21 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileHashBytes, err := hexutil.DecodeNoPrefix(fileHash)
 	assert.NoError(t, err)
 
-	contractHash := []byte{33}
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
-			FromPeerAddr: h1.ID().Pretty(),
-			TotalFees:    "0x01",
-			Hash:         []byte{12}, // this is just a placeholder
-			PublicKey:    h1PublicKeyBytes,
-			FileHashes:   [][]byte{fileHashBytes},
-			Signature:    []byte{17}, // this is just a placeholder
-			Timestamp:    time.Now().Unix(),
+			FromPeerAddr:         h1.ID().Pretty(),
+			TotalFees:            "0x01",
+			HashDataQueryRequest: []byte{12}, // this is just a placeholder
+			PublicKey:            h1PublicKeyBytes,
+			FileHashes:           [][]byte{fileHashBytes},
+			Signature:            []byte{17}, // this is just a placeholder
+			Timestamp:            time.Now().Unix(),
 		},
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
 		FileHashesNeeded:           [][]byte{fileHashBytes},
 		VerifierPublicKey:          verifier1PublicKeyBytes,
 		VerifierFees:               "",
-		ContractHash:               contractHash,
+		ContractHash:               []byte{},
 		VerifierSignature:          []byte{},
 	}
 
@@ -269,8 +268,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	randomSlices := common.GenerateRandomIntSlice(totalDesiredFileSegments)
 
-	contractHashHex := hexutil.Encode(contractHash)
-
 	assert.Empty(t, fileContract.VerifierSignature)
 	signedContract, err := protocolH2.SendContractToVerifierForAcceptance(context.TODO(), verifier1.ID(), fileContract)
 	assert.NoError(t, err)
@@ -282,11 +279,16 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, verified)
 
+	contractHash := messages.GetDownloadContractHash(signedContract)
+	assert.EqualValues(t, signedContract.ContractHash, contractHash)
+
+	contractHashHex := hexutil.Encode(contractHash)
+
 	// send a contract to a node which is not supposed to receive this contract
 	err = protocolVerifier1.TransferContract(context.TODO(), h2.ID(), signedContract)
 	assert.EqualError(t, err, "failed to read confirmation byte: EOF")
 	_, err = contractStore2.GetContract(contractHashHex)
-	assert.EqualError(t, err, "contract 0x21 not found")
+	assert.ErrorContains(t, err, " not found")
 
 	err = protocolH2.TransferContract(context.TODO(), h1.ID(), signedContract)
 	assert.NoError(t, err)

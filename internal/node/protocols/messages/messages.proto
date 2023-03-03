@@ -32,8 +32,8 @@ message DataQueryRequestProto {
 message DataQueryResponseProto {
     string from_peer_addr = 1;
     string total_fees = 2;
-    // hash must be same as the DataQueryRequestProto hash
-    bytes hash = 3;
+    // hash_data_query_request must be same as the DataQueryRequestProto hash
+    bytes hash_data_query_request = 3;
     bytes public_key = 4;
     bytes signature = 5;
     repeated bytes file_hashes = 6;

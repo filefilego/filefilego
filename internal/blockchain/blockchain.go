@@ -14,6 +14,7 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	log "github.com/sirupsen/logrus"
@@ -30,6 +31,7 @@ const (
 	addressTransactionPrefix = "atx"
 	transactionPrefix        = "tx"
 	nodePrefix               = "nd"
+	contractPrefix           = "co"
 	nodeNodesPrefix          = "nn"
 	channelPrefix            = "ch"
 	channelsCountPrefix      = "channels_count"
@@ -610,6 +612,19 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 		return nil
 	}
 
+	if dataPayload.Type == transaction.DataType_DATA_CONTRACT {
+		downloadContracts := messages.DownloadContractInTransactionDataProto{}
+		err := proto.Unmarshal(dataPayload.Payload, &downloadContracts)
+		if err != nil {
+			return nil
+		}
+
+		err = b.saveContract(&downloadContracts)
+		if err != nil {
+			return fmt.Errorf("failed to save contract in db: %w", err)
+		}
+	}
+
 	// support creating multiple nodes
 	if dataPayload.Type == transaction.DataType_CREATE_NODE {
 		nodesEnvelope := NodeItems{}
@@ -1038,6 +1053,21 @@ func (b *Blockchain) saveNode(node *NodeItem) error {
 	err = b.db.Put(append([]byte(nodePrefix), node.NodeHash...), nodeData)
 	if err != nil {
 		return fmt.Errorf("failed to insert node item into db: %w", err)
+	}
+
+	return nil
+}
+
+func (b *Blockchain) saveContract(contractInfo *messages.DownloadContractInTransactionDataProto) error {
+	contactInfoBytes, err := proto.Marshal(contractInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal contract info: %w", err)
+	}
+
+	prefixWithContractHash := append([]byte(contractPrefix), contractInfo.ContractHash...)
+	err = b.db.Put(append(prefixWithContractHash, contractInfo.FileHosterNodePublicKey...), contactInfoBytes)
+	if err != nil {
+		return fmt.Errorf("failed to insert contract into db: %w", err)
 	}
 
 	return nil

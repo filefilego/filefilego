@@ -2,6 +2,7 @@ package messages
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -21,7 +22,7 @@ type DataQueryRequest struct {
 type DataQueryResponse struct {
 	FromPeerAddr          string
 	TotalFees             string
-	Hash                  []byte
+	HashDataQueryRequest  []byte
 	PublicKey             []byte
 	Signature             []byte
 	FileHashes            [][]byte
@@ -44,12 +45,46 @@ func ToDataQueryRequest(dqr *DataQueryRequestProto) DataQueryRequest {
 	return r
 }
 
+// GetHash gets the hash of data query request.
+func (dqr DataQueryRequest) GetHash() []byte {
+	fileHahes := []byte{}
+	for _, v := range dqr.FileHashes {
+		fileHahes = append(fileHahes, v...)
+	}
+	timestampBytes := big.NewInt(dqr.Timestamp).Bytes()
+	data := bytes.Join(
+		[][]byte{
+			fileHahes,
+			[]byte(dqr.FromPeerAddr),
+			timestampBytes,
+		},
+		[]byte{},
+	)
+
+	hash := ffgcrypto.Sha256(data)
+	return hash
+}
+
+// Validate a data query request.
+func (dqr DataQueryRequest) Validate() error {
+	if len(dqr.FileHashes) == 0 {
+		return errors.New("no file hashes in the request")
+	}
+
+	hashRequest := dqr.GetHash()
+	if !bytes.Equal(hashRequest, dqr.Hash) {
+		return errors.New("data query request hash mismatch")
+	}
+
+	return nil
+}
+
 // ToDataQueryResponse returns a domain DataQueryResponse object.
 func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	r := DataQueryResponse{
 		FromPeerAddr:          dqr.FromPeerAddr,
 		TotalFees:             dqr.TotalFees,
-		Hash:                  make([]byte, len(dqr.Hash)),
+		HashDataQueryRequest:  make([]byte, len(dqr.HashDataQueryRequest)),
 		PublicKey:             make([]byte, len(dqr.PublicKey)),
 		Signature:             make([]byte, len(dqr.Signature)),
 		FileHashes:            make([][]byte, len(dqr.FileHashes)),
@@ -57,7 +92,7 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 		Timestamp:             dqr.Timestamp,
 	}
 
-	copy(r.Hash, dqr.Hash)
+	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
 	copy(r.PublicKey, dqr.PublicKey)
 	copy(r.Signature, dqr.Signature)
 	copy(r.FileHashes, dqr.FileHashes)
@@ -71,7 +106,7 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	r := DataQueryResponseProto{
 		FromPeerAddr:          dqr.FromPeerAddr,
 		TotalFees:             dqr.TotalFees,
-		Hash:                  make([]byte, len(dqr.Hash)),
+		HashDataQueryRequest:  make([]byte, len(dqr.HashDataQueryRequest)),
 		PublicKey:             make([]byte, len(dqr.PublicKey)),
 		Signature:             make([]byte, len(dqr.Signature)),
 		FileHashes:            make([][]byte, len(dqr.FileHashes)),
@@ -79,13 +114,36 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 		Timestamp:             dqr.Timestamp,
 	}
 
-	copy(r.Hash, dqr.Hash)
+	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
 	copy(r.PublicKey, dqr.PublicKey)
 	copy(r.Signature, dqr.Signature)
 	copy(r.FileHashes, dqr.FileHashes)
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 
 	return &r
+}
+
+// GetDownloadContractHash returns the contract hash.
+func GetDownloadContractHash(contract *DownloadContractProto) []byte {
+	fileHahes := []byte{}
+	for _, v := range contract.FileHashesNeeded {
+		fileHahes = append(fileHahes, v...)
+	}
+
+	data := bytes.Join(
+		[][]byte{
+			[]byte(contract.VerifierFees),
+			contract.FileRequesterNodePublicKey,
+			contract.VerifierPublicKey,
+			contract.FileHosterResponse.PublicKey,
+			contract.FileHosterResponse.Signature,
+			fileHahes,
+		},
+		[]byte{},
+	)
+
+	hash := ffgcrypto.Sha256(data)
+	return hash
 }
 
 // SignDownloadContractProto signs a download contract from the verifiers side.
@@ -122,6 +180,11 @@ func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadCont
 	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to get the public key of the file hoster: %w", err)
+	}
+
+	contractHash := GetDownloadContractHash(contract)
+	if !bytes.Equal(contractHash, contract.ContractHash) {
+		return false, errors.New("contract hash has been modified")
 	}
 
 	ok, err := VerifyDataQueryResponse(publicKeyFileHoster, dataQueryResponse)
@@ -172,7 +235,7 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 		[][]byte{
 			[]byte(response.FromPeerAddr),
 			[]byte(response.TotalFees),
-			response.Hash,
+			response.HashDataQueryRequest,
 			response.PublicKey,
 			fileHahes,
 			fileHahesNotFound,
@@ -205,7 +268,7 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 		[][]byte{
 			[]byte(response.FromPeerAddr),
 			[]byte(response.TotalFees),
-			response.Hash,
+			response.HashDataQueryRequest,
 			response.PublicKey,
 			fileHahes,
 			fileHahesNotFound,
