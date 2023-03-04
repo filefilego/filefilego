@@ -67,6 +67,7 @@ type Interface interface {
 	GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error)
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
+	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -117,7 +118,7 @@ func New(db database.Database, search search.IndexSearcher, genesisBlockHash []b
 	return b, nil
 }
 
-// InitOrLoad increments the blockchain height by the given number.
+// InitOrLoad intializes or loads the blockchain from the database.
 func (b *Blockchain) InitOrLoad() error {
 	// reset height
 	b.SetHeight(0)
@@ -146,7 +147,7 @@ func (b *Blockchain) InitOrLoad() error {
 		}
 		ok, err := foundBlock.Validate()
 		if err != nil || !ok {
-			return fmt.Errorf("failed to verify block: %s", hexutil.Encode(lastBlockHash))
+			return fmt.Errorf("failed to verify block: %s : %w", hexutil.Encode(lastBlockHash), err)
 		}
 
 		lastBlockHash = make([]byte, len(foundBlock.PreviousBlockHash))
@@ -619,7 +620,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return nil
 		}
 
-		err = b.saveContract(&downloadContracts)
+		err = b.saveContractFromTransactionDataPayload(&downloadContracts, tx.Hash)
 		if err != nil {
 			return fmt.Errorf("failed to save contract in db: %w", err)
 		}
@@ -1058,14 +1059,52 @@ func (b *Blockchain) saveNode(node *NodeItem) error {
 	return nil
 }
 
-func (b *Blockchain) saveContract(contractInfo *messages.DownloadContractInTransactionDataProto) error {
+// DownloadContractInTransactionDataTxHash represents a contract metadata and a tx hash.
+type DownloadContractInTransactionDataTxHash struct {
+	TxHash                                 []byte
+	DownloadContractInTransactionDataProto *messages.DownloadContractInTransactionDataProto
+}
+
+// GetDownloadContractInTransactionDataTransactionHash returns a list of contract data found in a transaction payload which are arrived in the node.
+func (b *Blockchain) GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error) {
+	prefixWithContractHash := append([]byte(contractPrefix), contractHash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithContractHash), nil)
+	contractData := make([]DownloadContractInTransactionDataTxHash, 0)
+	for iter.Next() {
+		key := iter.Key()
+		txHash := key[len(prefixWithContractHash):]
+		m := messages.DownloadContractInTransactionDataProto{}
+		err := proto.Unmarshal(iter.Value(), &m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal the download contract metadata: %w", err)
+		}
+
+		dc := DownloadContractInTransactionDataTxHash{
+			TxHash:                                 make([]byte, len(txHash)),
+			DownloadContractInTransactionDataProto: &m,
+		}
+		copy(dc.TxHash, txHash)
+
+		contractData = append(contractData, dc)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release get download contract in transaction data iterator: %w", err)
+	}
+
+	return contractData, nil
+}
+
+// saveContractFromTransactionDataPayload saves a contract in the blockchain when a transaction is updating the blockchain state.
+func (b *Blockchain) saveContractFromTransactionDataPayload(contractInfo *messages.DownloadContractInTransactionDataProto, txHash []byte) error {
 	contactInfoBytes, err := proto.Marshal(contractInfo)
 	if err != nil {
 		return fmt.Errorf("failed to marshal contract info: %w", err)
 	}
 
 	prefixWithContractHash := append([]byte(contractPrefix), contractInfo.ContractHash...)
-	err = b.db.Put(append(prefixWithContractHash, contractInfo.FileHosterNodePublicKey...), contactInfoBytes)
+	err = b.db.Put(append(prefixWithContractHash, txHash...), contactInfoBytes)
 	if err != nil {
 		return fmt.Errorf("failed to insert contract into db: %w", err)
 	}

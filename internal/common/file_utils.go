@@ -541,7 +541,7 @@ func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomi
 			return nil, errors.New("index of randomized file segments not found")
 		}
 
-		if idx > len(merkleTreeItems) {
+		if idx >= len(merkleTreeItems) {
 			return nil, errors.New("index of randomized file segment is greater than the supplied merkle tree items")
 		}
 		items = append(items, merkleTreeItems[idx])

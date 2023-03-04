@@ -8,13 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/filefilego/filefilego/internal/block"
+	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/contract"
 	ffgcrypto "github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
 	"github.com/filefilego/filefilego/internal/node/protocols/messages"
+	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/storage"
+	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -24,6 +28,7 @@ import (
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestNew(t *testing.T) {
@@ -40,6 +45,7 @@ func TestNew(t *testing.T) {
 		host                         host.Host
 		contractStore                contract.Interface
 		storage                      storage.Interface
+		blockchain                   blockchain.Interface
 		merkleTreeTotalSegments      int
 		encryptionPercentage         int
 		downloadDirectory            string
@@ -59,10 +65,17 @@ func TestNew(t *testing.T) {
 			contractStore: c,
 			expErr:        "storage is nil",
 		},
+		"no blockchain": {
+			host:          h,
+			contractStore: c,
+			storage:       &storage.Storage{},
+			expErr:        "blockchain is nil",
+		},
 		"empty download directory": {
 			host:                    h,
 			contractStore:           c,
 			storage:                 &storage.Storage{},
+			blockchain:              &blockchain.Blockchain{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			expErr:                  "download directory is empty",
@@ -71,6 +84,7 @@ func TestNew(t *testing.T) {
 			host:                    h,
 			contractStore:           c,
 			storage:                 &storage.Storage{},
+			blockchain:              &blockchain.Blockchain{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			downloadDirectory:       "./",
@@ -81,6 +95,7 @@ func TestNew(t *testing.T) {
 			host:                    h,
 			contractStore:           c,
 			storage:                 &storage.Storage{},
+			blockchain:              &blockchain.Blockchain{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			downloadDirectory:       "./",
@@ -91,7 +106,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -181,15 +196,33 @@ func TestDataVerificationMethods(t *testing.T) {
 	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
+	genesisblockValid, err := block.GetGenesisBlock()
+	assert.NoError(t, err)
+
+	blockchain1, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	err = blockchain1.InitOrLoad()
+	assert.NoError(t, err)
+
+	blockchain2, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	err = blockchain2.InitOrLoad()
+	assert.NoError(t, err)
+
+	blockchain3, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
+	assert.NoError(t, err)
+	err = blockchain3.InitOrLoad()
+	assert.NoError(t, err)
+
+	protocolH1, err := New(h1, contractStore, strg, blockchain1, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
+	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "100")
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -241,7 +274,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
 			FromPeerAddr:         h1.ID().Pretty(),
-			TotalFees:            "0x01",
+			TotalFees:            "0x2",
 			HashDataQueryRequest: []byte{12}, // this is just a placeholder
 			PublicKey:            h1PublicKeyBytes,
 			FileHashes:           [][]byte{fileHashBytes},
@@ -273,7 +306,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, signedContract)
 	assert.NotEmpty(t, signedContract.VerifierSignature)
-	assert.Equal(t, "0x64", signedContract.VerifierFees)
+	assert.Equal(t, "0x7", signedContract.VerifierFees)
 
 	verified, err := messages.VerifyDownloadContractProto(verifier1.Peerstore().PubKey(verifier1.ID()), signedContract)
 	assert.NoError(t, err)
@@ -296,6 +329,45 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = protocolH2.TransferContract(context.TODO(), verifier1.ID(), signedContract)
 	assert.NoError(t, err)
 
+	// create a transaction that contains the contract details and perform state update
+	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
+	assert.NoError(t, err)
+
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
+	assert.NoError(t, err)
+
+	dcinTX := &messages.DownloadContractInTransactionDataProto{
+		ContractHash:               signedContract.ContractHash,
+		FileRequesterNodePublicKey: signedContract.FileRequesterNodePublicKey,
+		FileHosterNodePublicKey:    signedContract.FileHosterResponse.PublicKey,
+		VerifierPublicKey:          signedContract.VerifierPublicKey,
+		VerifierFees:               signedContract.VerifierFees,
+		FileHosterFees:             signedContract.FileHosterResponse.TotalFees,
+	}
+
+	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0x9")
+	validBlock2.PreviousBlockHash = make([]byte, len(genesisblockValid.Hash))
+	copy(validBlock2.PreviousBlockHash, genesisblockValid.Hash)
+
+	err = validBlock2.Sign(h2.Peerstore().PrivKey(h2.ID()))
+	assert.NoError(t, err)
+	block.SetBlockVerifiers(block.Verifier{
+		Address:   fromaddr,
+		PublicKey: hexutil.Encode(h2PublicKeyBytes),
+	})
+
+	err = blockchain1.PerformStateUpdateFromBlock(*validBlock2)
+	assert.NoError(t, err)
+	blockOne, err := blockchain1.GetBlockByNumber(1)
+	assert.NoError(t, err)
+	assert.NotNil(t, blockOne)
+	verifierAddrBytes, err := hexutil.Decode(verifierAddr)
+	assert.NoError(t, err)
+	verifierState, err := blockchain1.GetAddressState(verifierAddrBytes)
+	assert.NoError(t, err)
+	verifierBalance, err := verifierState.GetBalance()
+	assert.NoError(t, err)
+	assert.Equal(t, "9", verifierBalance.Text(10))
 	time.Sleep(200 * time.Millisecond)
 
 	// this is to set the node 1's keys and iv and randoclices store contact store
@@ -354,9 +426,12 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	keyData, err := protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.NoError(t, err)
+	if keyData == nil {
+		t.Fatalf("keyData is nil")
+	}
+
 	assert.EqualValues(t, key, keyData.Key)
 	assert.EqualValues(t, iv, keyData.Iv)
-
 	randomizedSegsFromKey := make([]int, len(keyData.RandomizedSegments))
 	for i, v := range keyData.RandomizedSegments {
 		randomizedSegsFromKey[i] = int(v)
@@ -391,4 +466,75 @@ func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKe
 	)
 	assert.NoError(t, err)
 	return host, priv, pubKey
+}
+
+// generate a block and propagate the keypair used for the tx
+func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContractInTransactionDataProto, privateKey crypto.PrivKey, publicKey crypto.PubKey, from, to, txValue string) *block.Block {
+	pkyData, err := publicKey.Raw()
+	assert.NoError(t, err)
+
+	addr, err := ffgcrypto.RawPublicToAddress(pkyData)
+	assert.NoError(t, err)
+
+	mainChain, err := hexutil.Decode("0x01")
+	assert.NoError(t, err)
+
+	coinbasetx := transaction.Transaction{
+		PublicKey:       pkyData,
+		Nounce:          []byte{0},
+		Data:            []byte{1},
+		From:            addr,
+		To:              addr,
+		Chain:           mainChain,
+		Value:           "0x22b1c8c1227a00000",
+		TransactionFees: "0x0",
+	}
+	err = coinbasetx.Sign(privateKey)
+	assert.NoError(t, err)
+
+	// addr, err := ffgcrypto.RawPublicToAddress(pkyData)
+	// assert.NoError(t, err)
+
+	txData := validContractPayload(t, dcinTX)
+
+	validTx2 := transaction.Transaction{
+		PublicKey:       pkyData,
+		Nounce:          []byte{1},
+		Data:            txData,
+		From:            from,
+		To:              to,
+		Chain:           mainChain,
+		Value:           txValue,
+		TransactionFees: "0x1",
+	}
+
+	err = validTx2.Sign(privateKey)
+	assert.NoError(t, err)
+
+	b := block.Block{
+		Timestamp:         time.Now().Unix(),
+		Data:              []byte{1},
+		PreviousBlockHash: []byte{1, 1},
+		Transactions: []transaction.Transaction{
+			// its a coinbase tx
+			coinbasetx,
+			validTx2,
+		},
+		Number: blockNumber,
+	}
+
+	return &b
+}
+
+func validContractPayload(t *testing.T, dc *messages.DownloadContractInTransactionDataProto) []byte {
+	itemsBytes, err := proto.Marshal(dc)
+	assert.NoError(t, err)
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_DATA_CONTRACT,
+		Payload: itemsBytes,
+	}
+
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	assert.NoError(t, err)
+	return txPayloadBytes
 }

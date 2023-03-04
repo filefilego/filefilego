@@ -13,6 +13,7 @@ import (
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/crypto"
 	"github.com/filefilego/filefilego/internal/database"
+	"github.com/filefilego/filefilego/internal/node/protocols/messages"
 	"github.com/filefilego/filefilego/internal/search"
 	"github.com/filefilego/filefilego/internal/transaction"
 	"github.com/stretchr/testify/assert"
@@ -802,6 +803,32 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, searchResults, 1)
 	assert.Equal(t, uint64(2), blockchain.GetChannelsCount())
+
+	// transaction with download contract payload
+	txPayloadBytes4 := transactionWithContractPayload(t)
+	txWithContractPayload := &transaction.Transaction{
+		Hash:            []byte{2, 4},
+		Nounce:          []byte{1},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            txPayloadBytes4,
+		Value:           "0x0",
+		TransactionFees: "0x" + fees.Mul(fees, big.NewInt(4)).Text(16),
+		Chain:           mainChain,
+	}
+	err = blockchain.performStateUpdateFromDataPayload(txWithContractPayload)
+	assert.NoError(t, err)
+
+	contractMetadata, err := blockchain.GetDownloadContractInTransactionDataTransactionHash([]byte{23})
+	assert.NoError(t, err)
+	assert.Len(t, contractMetadata, 1)
+	assert.Equal(t, []byte{2, 4}, contractMetadata[0].TxHash)
+	assert.Equal(t, []byte{23}, contractMetadata[0].DownloadContractInTransactionDataProto.ContractHash)
+	assert.Equal(t, []byte{2}, contractMetadata[0].DownloadContractInTransactionDataProto.FileRequesterNodePublicKey)
+	assert.Equal(t, []byte{3}, contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterNodePublicKey)
+	assert.Equal(t, []byte{4}, contractMetadata[0].DownloadContractInTransactionDataProto.VerifierPublicKey)
+	assert.Equal(t, "0x1", contractMetadata[0].DownloadContractInTransactionDataProto.VerifierFees)
+	assert.Equal(t, "0x5", contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterFees)
 }
 
 func TestPerformAddressStateUpdate(t *testing.T) {
@@ -908,6 +935,27 @@ func transactionWithChannelPayload(t *testing.T, nodes []*NodeItem) []byte {
 	assert.NoError(t, err)
 	txPayload := transaction.DataPayload{
 		Type:    transaction.DataType_CREATE_NODE,
+		Payload: itemsBytes,
+	}
+
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	assert.NoError(t, err)
+	return txPayloadBytes
+}
+
+func transactionWithContractPayload(t *testing.T) []byte {
+	dc := messages.DownloadContractInTransactionDataProto{
+		ContractHash:               []byte{23},
+		FileRequesterNodePublicKey: []byte{2},
+		FileHosterNodePublicKey:    []byte{3},
+		VerifierPublicKey:          []byte{4},
+		VerifierFees:               "0x1",
+		FileHosterFees:             "0x5",
+	}
+	itemsBytes, err := proto.Marshal(&dc)
+	assert.NoError(t, err)
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_DATA_CONTRACT,
 		Payload: itemsBytes,
 	}
 

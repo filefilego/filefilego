@@ -191,7 +191,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup contract store: %w", err)
 	}
 
-	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees)
+	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees)
 	if err != nil {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
 	}

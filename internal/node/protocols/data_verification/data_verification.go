@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/filefilego/filefilego/internal/blockchain"
 	"github.com/filefilego/filefilego/internal/common"
 	"github.com/filefilego/filefilego/internal/common/hexutil"
 	"github.com/filefilego/filefilego/internal/contract"
@@ -70,6 +71,7 @@ type Protocol struct {
 	host                         host.Host
 	contractStore                contract.Interface
 	storage                      storage.Interface
+	blockchain                   blockchain.Interface
 	merkleTreeTotalSegments      int
 	encryptionPercentage         int
 	downloadDirectory            string
@@ -78,7 +80,7 @@ type Protocol struct {
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees string) (*Protocol, error) {
+func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees string) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -91,6 +93,10 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		return nil, errors.New("storage is nil")
 	}
 
+	if blockchain == nil {
+		return nil, errors.New("blockchain is nil")
+	}
+
 	if downloadDirectory == "" {
 		return nil, errors.New("download directory is empty")
 	}
@@ -99,6 +105,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		host:                         h,
 		contractStore:                contractStore,
 		storage:                      storage,
+		blockchain:                   blockchain,
 		merkleTreeTotalSegments:      merkleTreeTotalSegments,
 		encryptionPercentage:         encryptionPercentage,
 		downloadDirectory:            downloadDirectory,
@@ -949,6 +956,64 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	if err != nil {
 		log.Errorf("failed to get contract in handleIncomingFileTransfer: %s", err.Error())
 		return
+	}
+
+	// check if a tx was arrived containing the contract hash in tx data payload
+	contractDataFromTX, err := d.blockchain.GetDownloadContractInTransactionDataTransactionHash(fileTransferRequest.ContractHash)
+	if err != nil {
+		log.Errorf("failed to get download contract in transaction from handleIncomingFileTransfer stream: %s", err.Error())
+		return
+	}
+
+	if len(contractDataFromTX) == 0 {
+		log.Error("download contract confirmation not found from handleIncomingFileTransfer stream")
+		return
+	}
+
+	for _, v := range contractDataFromTX {
+		tx, _, err := d.blockchain.GetTransactionByHash(v.TxHash)
+		if err != nil {
+			log.Errorf("transaction wasn't found in handleIncomingFileTransfer: %v", err)
+			continue
+		}
+
+		if len(tx) == 0 {
+			log.Errorf("no transactions found with transaction hash of %s handleIncomingFileTransfer stream", hexutil.Encode(v.TxHash))
+			return
+		}
+
+		verifierAddr, err := ffgcrypto.RawPublicToAddress(v.DownloadContractInTransactionDataProto.VerifierPublicKey)
+		if err != nil {
+			log.Errorf("failed to retrieve the public key of the verifier from contract metadata in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		if tx[0].To != verifierAddr {
+			log.Errorf("no transactions found with transaction hash of %s handleIncomingFileTransfer stream", hexutil.Encode(v.TxHash))
+			return
+		}
+
+		// check the fees
+		txValue, _ := hexutil.DecodeBig(tx[0].Value)
+		verifierFees, err := hexutil.DecodeBig(downloadContract.VerifierFees)
+		if err != nil {
+			log.Errorf("failed to get the verifier fees of a download contract in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		fileHosterFees, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.TotalFees)
+		if err != nil {
+			log.Errorf("failed to get the file hoster's fees of a download contract in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		total := big.NewInt(0)
+		total = total.Add(verifierFees, fileHosterFees)
+
+		if txValue.Cmp(total) < 0 {
+			log.Errorf("transaction value %s is less than the verifier + filehoster fees %s in handleIncomingFileTransfer: %v", txValue.String(), total.String(), err)
+			return
+		}
 	}
 
 	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterNodePublicKey)
