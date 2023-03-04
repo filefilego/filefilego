@@ -16,7 +16,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.21
 	github.com/multiformats/go-multiaddr v0.7.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/urfave/cli/v2 v2.23.5
 	golang.org/x/crypto v0.6.0
