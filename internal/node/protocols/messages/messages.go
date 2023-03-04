@@ -21,11 +21,12 @@ type DataQueryRequest struct {
 // DataQueryResponse represents a data query response.
 type DataQueryResponse struct {
 	FromPeerAddr          string
-	TotalFees             string
+	FeesPerByte           string
 	HashDataQueryRequest  []byte
 	PublicKey             []byte
 	Signature             []byte
 	FileHashes            [][]byte
+	FileHashesSizes       []uint64
 	UnavailableFileHashes [][]byte
 	Timestamp             int64
 }
@@ -83,11 +84,12 @@ func (dqr DataQueryRequest) Validate() error {
 func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	r := DataQueryResponse{
 		FromPeerAddr:          dqr.FromPeerAddr,
-		TotalFees:             dqr.TotalFees,
+		FeesPerByte:           dqr.FeesPerByte,
 		HashDataQueryRequest:  make([]byte, len(dqr.HashDataQueryRequest)),
 		PublicKey:             make([]byte, len(dqr.PublicKey)),
 		Signature:             make([]byte, len(dqr.Signature)),
 		FileHashes:            make([][]byte, len(dqr.FileHashes)),
+		FileHashesSizes:       make([]uint64, len(dqr.FileHashesSizes)),
 		UnavailableFileHashes: make([][]byte, len(dqr.UnavailableFileHashes)),
 		Timestamp:             dqr.Timestamp,
 	}
@@ -96,6 +98,7 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	copy(r.PublicKey, dqr.PublicKey)
 	copy(r.Signature, dqr.Signature)
 	copy(r.FileHashes, dqr.FileHashes)
+	copy(r.FileHashesSizes, dqr.FileHashesSizes)
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 
 	return r
@@ -105,11 +108,12 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	r := DataQueryResponseProto{
 		FromPeerAddr:          dqr.FromPeerAddr,
-		TotalFees:             dqr.TotalFees,
+		FeesPerByte:           dqr.FeesPerByte,
 		HashDataQueryRequest:  make([]byte, len(dqr.HashDataQueryRequest)),
 		PublicKey:             make([]byte, len(dqr.PublicKey)),
 		Signature:             make([]byte, len(dqr.Signature)),
 		FileHashes:            make([][]byte, len(dqr.FileHashes)),
+		FileHashesSizes:       make([]uint64, len(dqr.FileHashesSizes)),
 		UnavailableFileHashes: make([][]byte, len(dqr.UnavailableFileHashes)),
 		Timestamp:             dqr.Timestamp,
 	}
@@ -118,6 +122,7 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	copy(r.PublicKey, dqr.PublicKey)
 	copy(r.Signature, dqr.Signature)
 	copy(r.FileHashes, dqr.FileHashes)
+	copy(r.FileHashesSizes, dqr.FileHashesSizes)
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 
 	return &r
@@ -130,6 +135,12 @@ func GetDownloadContractHash(contract *DownloadContractProto) []byte {
 		fileHahes = append(fileHahes, v...)
 	}
 
+	fileSizes := []byte{}
+	for _, v := range contract.FileHashesNeededSizes {
+		intToByte := big.NewInt(0).SetUint64(v).Bytes()
+		fileSizes = append(fileSizes, intToByte...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(contract.VerifierFees),
@@ -138,6 +149,7 @@ func GetDownloadContractHash(contract *DownloadContractProto) []byte {
 			contract.FileHosterResponse.PublicKey,
 			contract.FileHosterResponse.Signature,
 			fileHahes,
+			fileSizes,
 		},
 		[]byte{},
 	)
@@ -153,6 +165,12 @@ func SignDownloadContractProto(privateKey crypto.PrivKey, contract *DownloadCont
 		fileHahes = append(fileHahes, v...)
 	}
 
+	fileSizes := []byte{}
+	for _, v := range contract.FileHashesNeededSizes {
+		intToByte := big.NewInt(0).SetUint64(v).Bytes()
+		fileSizes = append(fileSizes, intToByte...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(contract.VerifierFees),
@@ -162,6 +180,7 @@ func SignDownloadContractProto(privateKey crypto.PrivKey, contract *DownloadCont
 			contract.FileHosterResponse.PublicKey,
 			contract.FileHosterResponse.Signature,
 			fileHahes,
+			fileSizes,
 		},
 		[]byte{},
 	)
@@ -197,6 +216,12 @@ func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadCont
 		fileHahes = append(fileHahes, v...)
 	}
 
+	fileSizes := []byte{}
+	for _, v := range contract.FileHashesNeededSizes {
+		intToByte := big.NewInt(0).SetUint64(v).Bytes()
+		fileSizes = append(fileSizes, intToByte...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(contract.VerifierFees),
@@ -206,6 +231,7 @@ func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadCont
 			contract.FileHosterResponse.PublicKey,
 			contract.FileHosterResponse.Signature,
 			fileHahes,
+			fileSizes,
 		},
 		[]byte{},
 	)
@@ -226,6 +252,12 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 		fileHahes = append(fileHahes, v...)
 	}
 
+	fileSizes := []byte{}
+	for _, v := range response.FileHashesSizes {
+		intToByte := big.NewInt(0).SetUint64(v).Bytes()
+		fileSizes = append(fileSizes, intToByte...)
+	}
+
 	fileHahesNotFound := []byte{}
 	for _, v := range response.UnavailableFileHashes {
 		fileHahesNotFound = append(fileHahesNotFound, v...)
@@ -234,10 +266,11 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
-			[]byte(response.TotalFees),
+			[]byte(response.FeesPerByte),
 			response.HashDataQueryRequest,
 			response.PublicKey,
 			fileHahes,
+			fileSizes,
 			fileHahesNotFound,
 			timestampBytes,
 		},
@@ -259,6 +292,12 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 		fileHahes = append(fileHahes, v...)
 	}
 
+	fileSizes := []byte{}
+	for _, v := range response.FileHashesSizes {
+		intToByte := big.NewInt(0).SetUint64(v).Bytes()
+		fileSizes = append(fileSizes, intToByte...)
+	}
+
 	fileHahesNotFound := []byte{}
 	for _, v := range response.UnavailableFileHashes {
 		fileHahesNotFound = append(fileHahesNotFound, v...)
@@ -267,10 +306,11 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
-			[]byte(response.TotalFees),
+			[]byte(response.FeesPerByte),
 			response.HashDataQueryRequest,
 			response.PublicKey,
 			fileHahes,
+			fileSizes,
 			fileHahesNotFound,
 			timestampBytes,
 		},

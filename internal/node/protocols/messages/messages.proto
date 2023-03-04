@@ -31,14 +31,16 @@ message DataQueryRequestProto {
 // DataQueryResponseProto represents a data query response.
 message DataQueryResponseProto {
     string from_peer_addr = 1;
-    string total_fees = 2;
+    string fees_per_byte = 2;
     // hash_data_query_request must be same as the DataQueryRequestProto hash
     bytes hash_data_query_request = 3;
     bytes public_key = 4;
     bytes signature = 5;
     repeated bytes file_hashes = 6;
-    repeated bytes unavailable_file_hashes = 7;
-    int64 timestamp = 8;
+    // file_hashes_sizes contains the file sizes of each hash in file_hashes.
+    repeated uint64 file_hashes_sizes = 7;
+    repeated bytes unavailable_file_hashes = 8;
+    int64 timestamp = 9;
 }
 
 // DataQueryResponseTransferProto is used to request a data query response from a verifier.
@@ -76,10 +78,12 @@ message DownloadContractProto {
     DataQueryResponseProto file_hoster_response = 1;
     bytes file_requester_node_public_key = 2;
     repeated bytes file_hashes_needed = 3;
-    bytes verifier_public_key = 4;
-    string verifier_fees = 5;
-    bytes contract_hash = 6;
-    bytes verifier_signature = 7;
+    // file_hashes_sizes contains the file sizes of each hash in file_hashes.
+    repeated uint64 file_hashes_needed_sizes = 4;
+    bytes verifier_public_key = 5;
+    string verifier_fees = 6;
+    bytes contract_hash = 7;
+    bytes verifier_signature = 8;
 }
 
 // DownloadContractInTransactionDataProto is a contract metadata with the smallest fingerprint.
@@ -104,17 +108,27 @@ message MerkleTreeNodesOfFileContractProto {
     repeated bytes merkle_tree_nodes = 3;
 }
 
-// KeyIVRequestProto is a message that represents a data encryption payload to verifier node.
-message KeyIVRequestProto {
+// KeyIVProto is a message that represents a data encryption payload request to verifier node.
+message KeyIVProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
 }
 
-// KeyIVRandomizedFileSegmentsEnvelopeProto is a message which contains the private key, the iv, encryption type and randomized order of segments and the raw unencrypted data size.
+// KeyIVRequestProto is a message that represents a list of data encryption payloads to verifier node.
+message KeyIVRequestsProto {
+    repeated KeyIVProto key_ivs = 1;
+}
+
+// KeyIVRandomizedFileSegmentsEnvelopeProto is a list of KeyIVRandomizedFileSegmentsProto to be sent to the file requester all together.
+message KeyIVRandomizedFileSegmentsEnvelopeProto {
+    repeated KeyIVRandomizedFileSegmentsProto key_iv_randomized_file_segments = 1;
+}
+
+// KeyIVRandomizedFileSegmentsProto is a message which contains the private key, the iv, encryption type and randomized order of segments and the raw unencrypted data size.
 // this message is sent from the file hoster to the verifier.
 // this message should be written to the netowrk stream and after read
 // the total_size_raw_unencrypted_segments number of bytes
-message KeyIVRandomizedFileSegmentsEnvelopeProto {
+message KeyIVRandomizedFileSegmentsProto {
     uint64 file_size = 1;
     bytes contract_hash = 2;
     bytes file_hash = 3;

@@ -27,6 +27,7 @@ type Interface interface {
 	SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error
 	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
 	DeleteContract(contractHash string) error
+	GetContractFiles(contractHash string) ([]FileInfo, error)
 	LoadFromDB() error
 }
 
@@ -52,6 +53,11 @@ type Store struct {
 	mu            sync.RWMutex
 }
 
+type persistedData struct {
+	FileContracts map[string][]FileInfo
+	Contracts     map[string]*messages.DownloadContractProto
+}
+
 // New constructs a contract store.
 func New(db database.Database) (*Store, error) {
 	if db == nil {
@@ -65,60 +71,6 @@ func New(db database.Database) (*Store, error) {
 	}
 
 	return store, nil
-}
-
-type persistedData struct {
-	FileContracts map[string][]FileInfo
-	Contracts     map[string]*messages.DownloadContractProto
-}
-
-func (c *Store) persistToDB() error {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	data := persistedData{
-		FileContracts: c.fileContracts,
-		Contracts:     c.contracts,
-	}
-	err := enc.Encode(data)
-	if err != nil {
-		return fmt.Errorf("failed to encode gob data: %w", err)
-	}
-
-	err = c.db.Put([]byte(dataPrefix), buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("failed to persist data to db: %w", err)
-	}
-
-	return nil
-}
-
-// LoadFromDB loads the persisted data into memory.
-func (c *Store) LoadFromDB() error {
-	data, err := c.db.Get([]byte(dataPrefix))
-	if err != nil {
-		return fmt.Errorf("failed to load from database: %w", err)
-	}
-	var buf bytes.Buffer
-	n, err := buf.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write to buffer of gob decoder: %w", err)
-	}
-
-	if n != len(data) {
-		return errors.New("length of data written to the gob buffer don't match the loaded database content")
-	}
-
-	dec := gob.NewDecoder(&buf)
-	var pd persistedData
-	err = dec.Decode(&pd)
-	if err != nil {
-		return fmt.Errorf("failed to decode gob data: %w", err)
-	}
-
-	c.contracts = pd.Contracts
-	c.fileContracts = pd.FileContracts
-
-	return nil
 }
 
 // DeleteContract removes a contract.
@@ -188,6 +140,22 @@ func (c *Store) GetContractFileInfo(contractHash string, fileHash []byte) (FileI
 	}
 
 	return FileInfo{}, errors.New("file hash not found")
+}
+
+// GetContractFiles returns the files info given a contract hash
+func (c *Store) GetContractFiles(contractHash string) ([]FileInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	fileContracts, ok := c.fileContracts[contractHash]
+	if !ok {
+		return nil, errors.New("contract not found")
+	}
+
+	filesInfos := make([]FileInfo, len(fileContracts))
+	copy(filesInfos, fileContracts)
+
+	return filesInfos, nil
 }
 
 // SetMerkleTreeNodes sets a merkle tree nodes of the file.
@@ -340,4 +308,53 @@ func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fi
 	_ = c.persistToDB()
 
 	return errors.New("file hash not found")
+}
+
+func (c *Store) persistToDB() error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	data := persistedData{
+		FileContracts: c.fileContracts,
+		Contracts:     c.contracts,
+	}
+	err := enc.Encode(data)
+	if err != nil {
+		return fmt.Errorf("failed to encode gob data: %w", err)
+	}
+
+	err = c.db.Put([]byte(dataPrefix), buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to persist data to db: %w", err)
+	}
+
+	return nil
+}
+
+// LoadFromDB loads the persisted data into memory.
+func (c *Store) LoadFromDB() error {
+	data, err := c.db.Get([]byte(dataPrefix))
+	if err != nil {
+		return fmt.Errorf("failed to load from database: %w", err)
+	}
+	var buf bytes.Buffer
+	n, err := buf.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write to buffer of gob decoder: %w", err)
+	}
+
+	if n != len(data) {
+		return errors.New("length of data written to the gob buffer don't match the loaded database content")
+	}
+
+	dec := gob.NewDecoder(&buf)
+	var pd persistedData
+	err = dec.Decode(&pd)
+	if err != nil {
+		return fmt.Errorf("failed to decode gob data: %w", err)
+	}
+
+	c.contracts = pd.Contracts
+	c.fileContracts = pd.FileContracts
+
+	return nil
 }

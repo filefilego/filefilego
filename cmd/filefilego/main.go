@@ -191,12 +191,6 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup contract store: %w", err)
 	}
 
-	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees)
-	if err != nil {
-		return fmt.Errorf("failed to setup data verification protocol: %w", err)
-	}
-	log.Println(dataVerificationProtocol)
-
 	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
 	if err != nil {
 		return fmt.Errorf("failed to setup node: %w", err)
@@ -217,6 +211,13 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
 
+	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, node, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees)
+	if err != nil {
+		return fmt.Errorf("failed to setup data verification protocol: %w", err)
+	}
+
+	log.Info(dataVerificationProtocol)
+
 	// validator node
 	if conf.Global.Validator {
 		keyData, err := os.ReadFile(conf.Global.ValidatorKeypath)
@@ -236,8 +237,6 @@ func run(ctx *cli.Context) error {
 
 		go func(validator *validator.Validator) {
 			for {
-				// TODO: calculate the amount of time it needed to seal
-				// and recalculate the ticker
 				tickDuration := blockValidatorIntervalSeconds * time.Second
 				<-time.After(tickDuration)
 				sealedBlock, err := validator.SealBlock(time.Now().Unix())

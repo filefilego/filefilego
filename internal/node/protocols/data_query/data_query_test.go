@@ -62,7 +62,7 @@ func TestDataQueryProtocol(t *testing.T) {
 	pkbytes, err := pubkey1.Raw()
 	assert.NoError(t, err)
 	pmsg := messages.DataQueryResponseProto{
-		TotalFees:             "0x1",
+		FeesPerByte:           "0x1",
 		FileHashes:            [][]byte{{12}},
 		UnavailableFileHashes: [][]byte{},
 		Timestamp:             time.Now().Unix(),

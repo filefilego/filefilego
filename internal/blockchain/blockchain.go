@@ -24,17 +24,19 @@ import (
 )
 
 const (
-	addressPrefix            = "ad"
-	blockPrefix              = "bl"
-	lastBlockPrefix          = "last_block"
-	blockNumberPrefix        = "bn"
-	addressTransactionPrefix = "atx"
-	transactionPrefix        = "tx"
-	nodePrefix               = "nd"
-	contractPrefix           = "co"
-	nodeNodesPrefix          = "nn"
-	channelPrefix            = "ch"
-	channelsCountPrefix      = "channels_count"
+	addressPrefix             = "ad"
+	blockPrefix               = "bl"
+	lastBlockPrefix           = "last_block"
+	blockNumberPrefix         = "bn"
+	addressTransactionPrefix  = "atx"
+	transactionPrefix         = "tx"
+	nodePrefix                = "nd"
+	fileNodePrefix            = "fn"
+	contractPrefix            = "co"
+	contractFeesReleasePrefix = "rf"
+	nodeNodesPrefix           = "nn"
+	channelPrefix             = "ch"
+	channelsCountPrefix       = "channels_count"
 
 	channelCreationFeesFFG               = 20000
 	remainingChannelOperationFeesMiliFFG = 50
@@ -68,6 +70,7 @@ type Interface interface {
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
+	GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -613,16 +616,35 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 		return nil
 	}
 
+	// create a data download contract
 	if dataPayload.Type == transaction.DataType_DATA_CONTRACT {
-		downloadContracts := messages.DownloadContractInTransactionDataProto{}
+		downloadContracts := messages.DownloadContractsHashesProto{}
 		err := proto.Unmarshal(dataPayload.Payload, &downloadContracts)
 		if err != nil {
 			return nil
 		}
 
-		err = b.saveContractFromTransactionDataPayload(&downloadContracts, tx.Hash)
+		for _, v := range downloadContracts.Contracts {
+			err = b.saveContractFromTransactionDataPayload(v, tx.Hash)
+			if err != nil {
+				return fmt.Errorf("failed to save contract in db: %w", err)
+			}
+		}
+	}
+
+	// release fees to file hoster given the contract
+	if dataPayload.Type == transaction.DataType_DATA_CONTRACT_RELEASE_HOSTER_FEES {
+		downloadContracts := messages.DownloadContractsHashesProto{}
+		err := proto.Unmarshal(dataPayload.Payload, &downloadContracts)
 		if err != nil {
-			return fmt.Errorf("failed to save contract in db: %w", err)
+			return nil
+		}
+
+		for _, v := range downloadContracts.Contracts {
+			err = b.releaseFeesContractFromTransactionDataPayload(v, tx.Hash)
+			if err != nil {
+				return fmt.Errorf("failed to save release fees contract in db: %w", err)
+			}
 		}
 	}
 
@@ -1042,18 +1064,52 @@ func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
 	return nil
 }
 
+// GetNodeFileItemFromFileHash returns a file node item given the file's hash
+func (b *Blockchain) GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error) {
+	prefixWithFileHash := append([]byte(fileNodePrefix), fileHash...)
+
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithFileHash), nil)
+	nodeHashes := make([][]byte, 0)
+	for iter.Next() {
+		key := iter.Key()
+		nodeHash := key[len(prefixWithFileHash):]
+		nodeHashes = append(nodeHashes, nodeHash)
+	}
+
+	items := make([]*NodeItem, 0)
+	for _, v := range nodeHashes {
+		item, err := b.GetNodeItem(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get file node item from db: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
 func (b *Blockchain) saveNode(node *NodeItem) error {
 	nodeData, err := proto.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal node item: %w", err)
 	}
+
 	_, err = b.GetNodeItem(node.NodeHash)
 	if err == nil {
 		return fmt.Errorf("node with this hash already exists in db %s", hexutil.Encode(node.NodeHash))
 	}
+
 	err = b.db.Put(append([]byte(nodePrefix), node.NodeHash...), nodeData)
 	if err != nil {
 		return fmt.Errorf("failed to insert node item into db: %w", err)
+	}
+
+	if node.NodeType == NodeItemType_FILE {
+		prefixWithFileHash := append([]byte(fileNodePrefix), node.FileHash...)
+		err = b.db.Put(append(prefixWithFileHash, node.NodeHash...), []byte{})
+		if err != nil {
+			return fmt.Errorf("failed to insert file hash into db: %w", err)
+		}
 	}
 
 	return nil
@@ -1104,6 +1160,53 @@ func (b *Blockchain) saveContractFromTransactionDataPayload(contractInfo *messag
 	}
 
 	prefixWithContractHash := append([]byte(contractPrefix), contractInfo.ContractHash...)
+	err = b.db.Put(append(prefixWithContractHash, txHash...), contactInfoBytes)
+	if err != nil {
+		return fmt.Errorf("failed to insert contract into db: %w", err)
+	}
+
+	return nil
+}
+
+// GetReleasedFeesOfDownloadContractInTransactionData returns the contract which its fees are released to file hoster.
+func (b *Blockchain) GetReleasedFeesOfDownloadContractInTransactionData(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error) {
+	prefixWithContractHash := append([]byte(contractFeesReleasePrefix), contractHash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithContractHash), nil)
+	contractData := make([]DownloadContractInTransactionDataTxHash, 0)
+	for iter.Next() {
+		key := iter.Key()
+		txHash := key[len(prefixWithContractHash):]
+		m := messages.DownloadContractInTransactionDataProto{}
+		err := proto.Unmarshal(iter.Value(), &m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal the release fees download contract metadata: %w", err)
+		}
+
+		dc := DownloadContractInTransactionDataTxHash{
+			TxHash:                                 make([]byte, len(txHash)),
+			DownloadContractInTransactionDataProto: &m,
+		}
+		copy(dc.TxHash, txHash)
+
+		contractData = append(contractData, dc)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release get download contract fees releaser in transaction data iterator: %w", err)
+	}
+
+	return contractData, nil
+}
+
+// releaseFeesContractFromTransactionDataPayload releases the contract fees to the file hoster in the blockchain when a transaction is updating the blockchain state.
+func (b *Blockchain) releaseFeesContractFromTransactionDataPayload(contractInfo *messages.DownloadContractInTransactionDataProto, txHash []byte) error {
+	contactInfoBytes, err := proto.Marshal(contractInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal contract info: %w", err)
+	}
+
+	prefixWithContractHash := append([]byte(contractFeesReleasePrefix), contractInfo.ContractHash...)
 	err = b.db.Put(append(prefixWithContractHash, txHash...), contactInfoBytes)
 	if err != nil {
 		return fmt.Errorf("failed to insert contract into db: %w", err)

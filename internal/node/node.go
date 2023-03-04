@@ -410,11 +410,15 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			response.FileHashes = append(response.FileHashes, v)
 		}
 
-		finalAmount, err := calculateFileFees(n.config.Global.StorageFeesPerByte, totalSize)
+		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)
+		if !ok {
+			return errors.New("failed to parse storage fees per gb from config")
+		}
+
 		if err != nil {
 			return fmt.Errorf("failed to calculate files fees: %w", err)
 		}
-		response.TotalFees = hexutil.EncodeBig(finalAmount)
+		response.FeesPerByte = hexutil.EncodeBig(storageFeesPerByte)
 		copy(response.HashDataQueryRequest, dataQueryRequest.Hash)
 		copy(response.PublicKey, pubKeyBytes)
 		signature, err := messages.SignDataQueryResponse(n.host.Peerstore().PrivKey(n.GetPeerID()), response)

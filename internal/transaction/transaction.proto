@@ -36,6 +36,7 @@ enum DataType {
     CREATE_NODE = 2;
     UPDATE_NODE = 3;
     DATA_CONTRACT = 4;
+    DATA_CONTRACT_RELEASE_HOSTER_FEES = 5;
 }
 
 // DataPayload is the transaction data payload.

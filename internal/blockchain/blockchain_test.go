@@ -744,11 +744,13 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 			Description: proto.String("another subchan"),
 		},
 		{
-			Name:        "this is an entry under subchannel",
+			Name:        "this is a file under subchannel",
 			ParentHash:  subchannelHash,
 			Owner:       fromAddr,
 			Enabled:     true,
-			NodeType:    NodeItemType_ENTRY,
+			NodeType:    NodeItemType_FILE,
+			FileHash:    []byte{9},
+			Size:        proto.Uint64(1024),
 			Timestamp:   time.Now().Unix(),
 			Description: proto.String("welcome to ffg"),
 		},
@@ -780,7 +782,13 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[1].NodeHash)
 	assert.NoError(t, err)
 	assert.Len(t, childsOfSubchannelffg, 1)
-	assert.Equal(t, "this is an entry under subchannel", childsOfSubchannelffg[0].Name)
+	assert.Equal(t, "this is a file under subchannel", childsOfSubchannelffg[0].Name)
+
+	fileItem, err := blockchain.GetNodeFileItemFromFileHash([]byte{9})
+	assert.NoError(t, err)
+	assert.Len(t, fileItem, 1)
+	assert.Equal(t, NodeItemType_FILE, fileItem[0].NodeType)
+	assert.Equal(t, proto.Uint64(1024), fileItem[0].Size)
 
 	// check limit and offset
 	allChannels, err = blockchain.GetChannels(1, 0)
@@ -799,7 +807,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Len(t, allChannels, 0)
 
 	// check the search engine
-	searchResults, err := searchEngine.Search(context.TODO(), "entry", 100, 0, search.AnyTermRequired)
+	searchResults, err := searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired)
 	assert.NoError(t, err)
 	assert.Len(t, searchResults, 1)
 	assert.Equal(t, uint64(2), blockchain.GetChannelsCount())
@@ -952,7 +960,12 @@ func transactionWithContractPayload(t *testing.T) []byte {
 		VerifierFees:               "0x1",
 		FileHosterFees:             "0x5",
 	}
-	itemsBytes, err := proto.Marshal(&dc)
+
+	contractsEnvelope := &messages.DownloadContractsHashesProto{
+		Contracts: []*messages.DownloadContractInTransactionDataProto{&dc},
+	}
+
+	itemsBytes, err := proto.Marshal(contractsEnvelope)
 	assert.NoError(t, err)
 	txPayload := transaction.DataPayload{
 		Type:    transaction.DataType_DATA_CONTRACT,

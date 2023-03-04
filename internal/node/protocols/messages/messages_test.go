@@ -43,7 +43,7 @@ func TestDataQueryResponse(t *testing.T) {
 
 	dpresponseProto := &DataQueryResponseProto{
 		FromPeerAddr:         peerID.String(),
-		TotalFees:            "0x1",
+		FeesPerByte:          "0x1",
 		HashDataQueryRequest: []byte{12},
 		PublicKey:            pubKeyBytes,
 		FileHashes:           [][]byte{{1}},
@@ -52,7 +52,7 @@ func TestDataQueryResponse(t *testing.T) {
 
 	dqresponse := ToDataQueryResponse(dpresponseProto)
 	assert.Equal(t, dqresponse.FromPeerAddr, peerID.String())
-	assert.Equal(t, dqresponse.TotalFees, "0x1")
+	assert.Equal(t, dqresponse.FeesPerByte, "0x1")
 	assert.Equal(t, dqresponse.HashDataQueryRequest, []byte{12})
 	assert.Equal(t, dqresponse.PublicKey, pubKeyBytes)
 	assert.Equal(t, dqresponse.FileHashes, [][]byte{{1}})
@@ -60,7 +60,7 @@ func TestDataQueryResponse(t *testing.T) {
 
 	convertedToProto := ToDataQueryResponseProto(dqresponse)
 	assert.Equal(t, convertedToProto.FromPeerAddr, peerID.String())
-	assert.Equal(t, convertedToProto.TotalFees, "0x1")
+	assert.Equal(t, convertedToProto.FeesPerByte, "0x1")
 	assert.Equal(t, convertedToProto.HashDataQueryRequest, []byte{12})
 	assert.Equal(t, convertedToProto.PublicKey, pubKeyBytes)
 	assert.Equal(t, convertedToProto.FileHashes, [][]byte{{1}})
@@ -88,7 +88,7 @@ func TestDownloadContract(t *testing.T) {
 
 	dpresponseProto := &DataQueryResponseProto{
 		FromPeerAddr:         peerID.String(),
-		TotalFees:            "0x1",
+		FeesPerByte:          "0x1",
 		HashDataQueryRequest: []byte{12},
 		PublicKey:            pubKeyBytes,
 		FileHashes:           [][]byte{{1}},

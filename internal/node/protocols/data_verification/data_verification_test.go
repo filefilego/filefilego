@@ -46,6 +46,7 @@ func TestNew(t *testing.T) {
 		contractStore                contract.Interface
 		storage                      storage.Interface
 		blockchain                   blockchain.Interface
+		publisher                    NetworkMessagePublisher
 		merkleTreeTotalSegments      int
 		encryptionPercentage         int
 		downloadDirectory            string
@@ -71,11 +72,19 @@ func TestNew(t *testing.T) {
 			storage:       &storage.Storage{},
 			expErr:        "blockchain is nil",
 		},
+		"no publisher": {
+			host:          h,
+			contractStore: c,
+			storage:       &storage.Storage{},
+			blockchain:    &blockchain.Blockchain{},
+			expErr:        "publisher is nil",
+		},
 		"empty download directory": {
 			host:                    h,
 			contractStore:           c,
 			storage:                 &storage.Storage{},
 			blockchain:              &blockchain.Blockchain{},
+			publisher:               &networkMessagePublisherStub{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			expErr:                  "download directory is empty",
@@ -85,6 +94,7 @@ func TestNew(t *testing.T) {
 			contractStore:           c,
 			storage:                 &storage.Storage{},
 			blockchain:              &blockchain.Blockchain{},
+			publisher:               &networkMessagePublisherStub{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			downloadDirectory:       "./",
@@ -96,6 +106,7 @@ func TestNew(t *testing.T) {
 			contractStore:           c,
 			storage:                 &storage.Storage{},
 			blockchain:              &blockchain.Blockchain{},
+			publisher:               &networkMessagePublisherStub{},
 			merkleTreeTotalSegments: 1024,
 			encryptionPercentage:    5,
 			downloadDirectory:       "./",
@@ -106,7 +117,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -118,6 +129,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestDataVerificationMethods(t *testing.T) {
+	publisher := &networkMessagePublisherStub{}
 	totalDesiredFileSegments := 8
 	totalFileEncryptionPercentage := 1
 	currentDir, err := os.Getwd()
@@ -214,15 +226,15 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = blockchain3.InitOrLoad()
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, blockchain1, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
+	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
+	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7")
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -274,7 +286,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
 			FromPeerAddr:         h1.ID().Pretty(),
-			TotalFees:            "0x2",
+			FeesPerByte:          "0x2",
 			HashDataQueryRequest: []byte{12}, // this is just a placeholder
 			PublicKey:            h1PublicKeyBytes,
 			FileHashes:           [][]byte{fileHashBytes},
@@ -283,6 +295,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		},
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
 		FileHashesNeeded:           [][]byte{fileHashBytes},
+		FileHashesNeededSizes:      []uint64{3},
 		VerifierPublicKey:          verifier1PublicKeyBytes,
 		VerifierFees:               "",
 		ContractHash:               []byte{},
@@ -342,10 +355,10 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileHosterNodePublicKey:    signedContract.FileHosterResponse.PublicKey,
 		VerifierPublicKey:          signedContract.VerifierPublicKey,
 		VerifierFees:               signedContract.VerifierFees,
-		FileHosterFees:             signedContract.FileHosterResponse.TotalFees,
+		FileHosterFees:             signedContract.FileHosterResponse.FeesPerByte,
 	}
 
-	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0x9")
+	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0xd")
 	validBlock2.PreviousBlockHash = make([]byte, len(genesisblockValid.Hash))
 	copy(validBlock2.PreviousBlockHash, genesisblockValid.Hash)
 
@@ -367,7 +380,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	verifierBalance, err := verifierState.GetBalance()
 	assert.NoError(t, err)
-	assert.Equal(t, "9", verifierBalance.Text(10))
+	assert.Equal(t, "13", verifierBalance.Text(10))
 	time.Sleep(200 * time.Millisecond)
 
 	// this is to set the node 1's keys and iv and randoclices store contact store
@@ -410,9 +423,11 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.EqualValues(t, merkleRequest.MerkleTreeNodes, retrievedContractInfo.MerkleTreeNodes)
 
 	// try to get verification when key and file data havent been transfered yet
-	encRequest := &messages.KeyIVRequestProto{
-		ContractHash: contractHash,
-		FileHash:     fileHashBytes,
+	encRequest := &messages.KeyIVRequestsProto{
+		KeyIvs: []*messages.KeyIVProto{{
+			ContractHash: contractHash,
+			FileHash:     fileHashBytes,
+		}},
 	}
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
@@ -429,15 +444,16 @@ func TestDataVerificationMethods(t *testing.T) {
 	if keyData == nil {
 		t.Fatalf("keyData is nil")
 	}
+	assert.Len(t, keyData.KeyIvRandomizedFileSegments, 1)
 
-	assert.EqualValues(t, key, keyData.Key)
-	assert.EqualValues(t, iv, keyData.Iv)
-	randomizedSegsFromKey := make([]int, len(keyData.RandomizedSegments))
-	for i, v := range keyData.RandomizedSegments {
+	assert.EqualValues(t, key, keyData.KeyIvRandomizedFileSegments[0].Key)
+	assert.EqualValues(t, iv, keyData.KeyIvRandomizedFileSegments[0].Iv)
+	randomizedSegsFromKey := make([]int, len(keyData.KeyIvRandomizedFileSegments[0].RandomizedSegments))
+	for i, v := range keyData.KeyIvRandomizedFileSegments[0].RandomizedSegments {
 		randomizedSegsFromKey[i] = int(v)
 	}
 
-	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.Key, keyData.Iv, common.EncryptionType(keyData.EncryptionType), randomizedSegsFromKey)
+	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.KeyIvRandomizedFileSegments[0].Key, keyData.KeyIvRandomizedFileSegments[0].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[0].EncryptionType), randomizedSegsFromKey)
 	assert.NoError(t, err)
 	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
 	assert.NoError(t, err)
@@ -527,14 +543,24 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 }
 
 func validContractPayload(t *testing.T, dc *messages.DownloadContractInTransactionDataProto) []byte {
-	itemsBytes, err := proto.Marshal(dc)
+	contractsEnvelope := &messages.DownloadContractsHashesProto{
+		Contracts: []*messages.DownloadContractInTransactionDataProto{dc},
+	}
+	itemsBytes, err := proto.Marshal(contractsEnvelope)
 	assert.NoError(t, err)
 	txPayload := transaction.DataPayload{
 		Type:    transaction.DataType_DATA_CONTRACT,
 		Payload: itemsBytes,
 	}
-
 	txPayloadBytes, err := proto.Marshal(&txPayload)
 	assert.NoError(t, err)
 	return txPayloadBytes
+}
+
+type networkMessagePublisherStub struct {
+	err error
+}
+
+func (n *networkMessagePublisherStub) PublishMessageToNetwork(ctx context.Context, data []byte) error {
+	return n.err
 }

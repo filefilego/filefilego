@@ -36,7 +36,7 @@ message NodeItem {
     optional string description = 10;
     optional bytes merkle_root = 11;
     optional bytes file_hash = 12;
-    optional string size = 13;
+    optional uint64 size = 13;
     optional bytes parent_hash = 14;
     optional string content_type = 15;
 }
