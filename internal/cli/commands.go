@@ -61,10 +61,10 @@ var (
 			{
 				Name:   "create_node_key",
 				Usage:  "create_node_key <passphrase>",
-				Action: CreateNodeKey,
+				Action: CreateNodeIDKey,
 				Flags:  []cli.Flag{},
 				Description: `
-				Creates a a node key`,
+				Creates a new node identity key`,
 			},
 			{
 				Name:   "list",
@@ -72,7 +72,7 @@ var (
 				Action: ListAccounts,
 				Flags:  []cli.Flag{},
 				Description: `
-				lists all available accounts`,
+				Lists all available accounts`,
 			},
 		},
 	}
@@ -83,7 +83,7 @@ func ListAccounts(ctx *cli.Context) error {
 	return nil
 }
 
-// CreateAccount
+// CreateAccount creates a new keystore file.
 func CreateAccount(ctx *cli.Context) error {
 	conf := config.New(ctx)
 	store, err := keystore.New(conf.Global.KeystoreDir, []byte{1})
@@ -129,8 +129,8 @@ func GetAccountInfo(ctx *cli.Context) error {
 	return nil
 }
 
-// CreateNodeKeys
-func CreateNodeKey(ctx *cli.Context) error {
+// CreateNodeIDKey creates a node key identity file.
+func CreateNodeIDKey(ctx *cli.Context) error {
 	conf := config.New(ctx)
 	store, err := keystore.New(conf.Global.KeystoreDir, []byte{1})
 	if err != nil {
