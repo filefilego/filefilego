@@ -6,7 +6,7 @@ require (
 	github.com/blevesearch/bleve/v2 v2.3.6
 	github.com/cbergoon/merkletree v0.2.0
 	github.com/cespare/xxhash v1.1.0
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/rpc v1.2.0
