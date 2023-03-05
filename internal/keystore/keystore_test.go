@@ -103,12 +103,12 @@ func TestStore(t *testing.T) {
 	// invalid jwt
 	authorized, _, err := keystore.Authorized("wrong val")
 	assert.False(t, authorized)
-	assert.EqualError(t, err, "token contains an invalid number of segments")
+	assert.EqualError(t, err, "token is malformed: token contains an invalid number of segments")
 
 	// valid jwt, wrong key
 	authorized, _, err = keystore.Authorized(`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`)
 	assert.False(t, authorized)
-	assert.EqualError(t, err, "signature is invalid")
+	assert.EqualError(t, err, "token signature is invalid: signature is invalid")
 
 	// valid token
 	authorized, unlockedKeyFromAuth, err := keystore.Authorized(jwtToken)

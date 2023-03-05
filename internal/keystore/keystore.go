@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/filefilego/filefilego/internal/common"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 const jwtValidityHours = 2160
