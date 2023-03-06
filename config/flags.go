@@ -3,7 +3,7 @@ package config
 import (
 	"path/filepath"
 
-	"github.com/filefilego/filefilego/internal/common"
+	"github.com/filefilego/filefilego/common"
 	"github.com/urfave/cli/v2"
 )
 

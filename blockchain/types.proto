@@ -1,0 +1,47 @@
+syntax = "proto3";
+package blockchain;
+
+option go_package = "github.com/filefilego/filefilego/blockchain";
+
+// AddressStateProto represents the state of an address in a proto message.
+message AddressStateProto {
+    // balance represents the address balance.
+	bytes balance = 1;
+    // nounce represents the current nounce of the address.
+	bytes nounce  = 2;
+}
+
+// NodeItemType represents the type of each node.
+enum NodeItemType {
+    UNKNOWN = 0;
+    FILE = 1;
+    DIR = 2;
+    CHANNEL = 3;
+    SUBCHANNEL = 4;
+    ENTRY = 5;
+    OTHER = 6;
+}
+
+// NodeItem is used to represent a hierarchical struct of channels, subchannels directories etc.
+message NodeItem {
+    string name = 1;
+    bytes node_hash = 2;
+    bytes owner = 3;
+    bool enabled = 4;
+    NodeItemType node_type = 5;
+    repeated bytes attributes = 6;
+    repeated bytes admins = 7;
+    repeated bytes posters = 8;
+    int64 timestamp = 9;
+    optional string description = 10;
+    optional bytes merkle_root = 11;
+    optional bytes file_hash = 12;
+    optional uint64 size = 13;
+    optional bytes parent_hash = 14;
+    optional string content_type = 15;
+}
+
+// NodeItems is an envelope of nodes.
+message NodeItems {
+    repeated NodeItem nodes = 1;
+}

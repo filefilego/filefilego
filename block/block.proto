@@ -1,0 +1,27 @@
+syntax = "proto3";
+package block;
+
+import "transaction/transaction.proto";
+
+option go_package = "github.com/filefilego/filefilego/block";
+
+
+// ProtoBlock is the proto representation of a block.
+message ProtoBlock {
+    // hash represents the block hash.
+    bytes hash = 1;
+    // merkle_hash represents the block merkle hash.
+    bytes merkle_hash = 2;
+    // signature of the block.
+    bytes signature = 3;
+    // timestamp represents the block time.
+    int64 timestamp = 4;
+    // data includes arbitrary data from the sealer.
+    bytes data = 5;
+    // previous_block_hash is the hash of the previous block.
+    bytes previous_block_hash = 6;
+    // transactions contain a list of transactions in the block.
+    repeated transaction.ProtoTransaction transactions = 7;
+    // number represents the block number.
+    uint64 number = 8;
+}

@@ -1,0 +1,48 @@
+syntax = "proto3";
+package transaction;
+
+
+option go_package = "github.com/filefilego/filefilego/transaction";
+
+
+// ProtoTransaction is the proto representation of a transaction.
+message ProtoTransaction {
+    // hash represents the block hash.
+    bytes hash = 1;
+    // signature of the block.
+    bytes signature = 2;
+    // public_key is the sender's pubkey.
+    bytes public_key = 3;
+    // nounce of the transaction.
+    bytes nounce = 4;
+    // data attached to the transaction.
+    bytes data = 5;
+    // from sender
+    string from = 6;
+    // to receiver.
+    string to = 7;
+    // value of the transaction.
+    string value = 8;
+    // transaction_fees is the fees attached to a transaction.
+    string transaction_fees = 9;
+    // chain represents the network chain.
+    bytes chain = 10;
+}
+
+// DataType is the transaction data type.
+enum DataType {
+    UNKNOWN = 0;
+    UPDATE_BLOCKCHAIN_SETTINGS = 1;
+    CREATE_NODE = 2;
+    UPDATE_NODE = 3;
+    DATA_CONTRACT = 4;
+    DATA_CONTRACT_RELEASE_HOSTER_FEES = 5;
+}
+
+// DataPayload is the transaction data payload.
+message DataPayload {
+    // type defines the payload type inside a transaction.
+    DataType type = 1;
+    // payload contains the byte array of the transaction data.
+    bytes payload = 2;
+}

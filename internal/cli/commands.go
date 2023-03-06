@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/filefilego/filefilego/config"
-	"github.com/filefilego/filefilego/internal/crypto"
-	"github.com/filefilego/filefilego/internal/keystore"
+	"github.com/filefilego/filefilego/crypto"
+	"github.com/filefilego/filefilego/keystore"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
