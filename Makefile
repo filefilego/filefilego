@@ -12,4 +12,4 @@ genproto:
 	# protoc --go_out=internal/transaction internal/transaction/transaction.proto
 	# protoc --proto_path=internal --go_out=internal/block internal/block/block.proto transaction/transaction.proto
 	# protoc --go_out=internal/blockchain internal/blockchain/types.proto
-	protoc --proto_path=internal --go_out=internal/node internal/node/protocols/messages/messages.proto internal/block/block.proto transaction/transaction.proto
+	# protoc --proto_path=internal --go_out=internal/node internal/node/protocols/messages/messages.proto internal/block/block.proto transaction/transaction.proto
