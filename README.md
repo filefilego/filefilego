@@ -146,28 +146,27 @@ follow the instructions to install golang on your system
 
 ```
 git clone https://github.com/filefilego/filefilego.git
-cd filefilego/cli
-go build -o filefilego .
+make build
 ```
 
 2. Create Node Identity Key (Used for encryption and network identification)
    Replace **thisismynodespassword** with your own password
 
 ```
-./filefilego account create_node_key thisismynodespassword
+./cmd/filefilego/filefilego account create_node_key thisismynodespassword
 ```
 
 3. Create an account to send/receive coins.
    Replace **thisismypassword** with your own password
 
 ```
-./filefilego account create thisismypassword
+./cmd/filefilego/filefilego account create thisismypassword
 ```
 
 4. List the created accounts:
 
 ```
-./filefilego account list
+./cmd/filefilego/filefilego account list
 
 You will get json filenames that contain the address of your created account in step 3.
 0x--------------------------------.json
@@ -176,7 +175,7 @@ You will get json filenames that contain the address of your created account in 
 5. Run the full node:
 
 ```
-./filefilego --rpc --http --httpport=8090 --httpaddr=0.0.0.0 --bootstrapnodes="/ip4/77.247.178.110/tcp/10209/p2p/16Uiu2HAm1WKH57E4vku2rhLT3qMtP6GX5t5CxxoSmQnJWMHc6Lot"
+./cmd/filefilego/filefilego --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrap_nodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
 ```
 
 The above command runs a full node and starts the http rpc server. In this case, we listen on all interfaces `0.0.0.0` and port `8090` so we can build an application that can interact with this full node.
@@ -190,7 +189,7 @@ The above command runs a full node and starts the http rpc server. In this case,
 ```
 https://golang.org/dl/
 
-Download: go1.14.4.windows-amd64.msi
+Download: go1.19.x.windows-amd64.msi
 and install the package
 ```
 
@@ -227,8 +226,7 @@ Download:
 
 ```
 git clone https://github.com/filefilego/filefilego.git
-cd filefilego/cli
-go build -o filefilego.exe .
+make build
 ```
 
 2. Create Node Identity Key (Used for encryption and network identification)
@@ -257,7 +255,7 @@ You will get json filenames that contain the address of your created account in 
 5. Run the full node:
 
 ```
-filefilego.exe --rpc --http --httpport=8090 --httpaddr=0.0.0.0 --bootstrapnodes="/ip4/77.247.178.110/tcp/10209/p2p/16Uiu2HAm1WKH57E4vku2rhLT3qMtP6GX5t5CxxoSmQnJWMHc6Lot"
+filefilego.exe --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrapnodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
 ```
 
 
