@@ -1,4 +1,4 @@
-# FileFileGo Decentralized Network
+# FileFileGo v2 Decentralized Network
 
 A Peer-to-peer data-sharing network with indexing/tracking, storage, full-text search, and incentive mechanism form a decentralized network that allows users to share data without a single point of failure and censorship. The architecture is designed in a way to prevent censorship and privacy issues, improves data availability with an incentive system based on game-theory concepts, and achieves fault-tolerance. To solve these challenges we propose a Peer-to-peer and decentralized data sharing network (FileFileGo) for the web3 era.
 
