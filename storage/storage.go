@@ -324,18 +324,18 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newPath := path.Join(folderPath, nodeHash)
+	fHash, err := crypto.Sha1File(old)
+	if err != nil {
+		os.Remove(old)
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to hash contents of file"}`)
+		return
+	}
+
+	newPath := path.Join(folderPath, fHash)
 	err = os.Rename(old, newPath)
 	if err != nil {
 		os.Remove(old)
 		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to rename file to node hash"}`)
-		return
-	}
-
-	fHash, err := crypto.Sha1File(newPath)
-	if err != nil {
-		os.Remove(newPath)
-		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to hash contents of file"}`)
 		return
 	}
 
