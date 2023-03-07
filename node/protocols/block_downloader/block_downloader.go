@@ -9,6 +9,7 @@ import (
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -213,7 +214,13 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 		return
 	}
 
-	payloadEnvelope := make([]byte, 8+len(payload))
+	payloadBufferSize := 8 + len(payload)
+	if payloadBufferSize > 64*common.MB {
+		log.Errorf("response size is too large for a sending block ranges with size: %d", payloadBufferSize)
+		return
+	}
+
+	payloadEnvelope := make([]byte, payloadBufferSize)
 	binary.LittleEndian.PutUint64(payloadEnvelope, uint64(len(payload)))
 	copy(payloadEnvelope[8:], payload)
 	n, err := s.Write(payloadEnvelope)

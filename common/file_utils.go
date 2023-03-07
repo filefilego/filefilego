@@ -32,6 +32,12 @@ const (
 	// EncryptionTypeChacha20 key 32 bytes, iv(nounce) 32 bytes
 	EncryptionTypeChacha20 EncryptionType = 2
 
+	// KB represents 1024 bytes
+	KB = 1024
+
+	// MB represents 1024 KBytes
+	MB = 1024 * 1024
+
 	// 8KB
 	bufferSize = 8192
 )

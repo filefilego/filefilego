@@ -233,7 +233,14 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 		log.Errorf("failed to marshal protobuf download contract message: %v", err)
 		return
 	}
-	contractPayloadWithLength := make([]byte, 8+len(downloadContractBytes))
+
+	responseBufferSize := 8 + len(downloadContractBytes)
+	if responseBufferSize > 64*common.MB {
+		log.Errorf("request size is too large for a sending a signed download contract with size: %d", responseBufferSize)
+		return
+	}
+
+	contractPayloadWithLength := make([]byte, responseBufferSize)
 	binary.LittleEndian.PutUint64(contractPayloadWithLength, uint64(len(downloadContractBytes)))
 	copy(contractPayloadWithLength[8:], downloadContractBytes)
 	_, err = s.Write(contractPayloadWithLength)
@@ -262,7 +269,12 @@ func (d *Protocol) SendContractToVerifierForAcceptance(ctx context.Context, veri
 		return nil, fmt.Errorf("failed to marshal protobuf download contract message message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return nil, fmt.Errorf("request size is too large for a sending a download contract with size: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
@@ -371,7 +383,12 @@ func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request
 		return fmt.Errorf("failed to marshal protobuf transfer contract message message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return fmt.Errorf("request size is too large for a contract transfer request: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
@@ -442,7 +459,12 @@ func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID
 		return nil, fmt.Errorf("failed to marshal protobuf encryption data request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return nil, fmt.Errorf("request size is too large for a data encryption request: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
@@ -641,7 +663,13 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 		return
 	}
 
-	responseBytesPayloadWithLength := make([]byte, 8+len(responseBytes))
+	responseBufferSize := 8 + len(responseBytes)
+	if responseBufferSize > 64*common.MB {
+		log.Errorf("request size is too large for sending data encryption with size: %d", responseBufferSize)
+		return
+	}
+
+	responseBytesPayloadWithLength := make([]byte, responseBufferSize)
 	binary.LittleEndian.PutUint64(responseBytesPayloadWithLength, uint64(len(responseBytes)))
 	copy(responseBytesPayloadWithLength[8:], responseBytes)
 	_, err = s.Write(responseBytesPayloadWithLength)
@@ -670,7 +698,12 @@ func (d *Protocol) SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifi
 		return fmt.Errorf("failed to marshal protobuf merkle tree nodes request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return fmt.Errorf("request size is too large for a data encryption request: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
@@ -733,7 +766,12 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 		return fmt.Errorf("failed to marshal protobuf merkle tree nodes request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return fmt.Errorf("request size is too large for a key iv to verifierrequest: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
@@ -928,7 +966,12 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		return "", fmt.Errorf("failed to marshal protobuf file transfer request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 64*common.MB {
+		return "", fmt.Errorf("request size is too large for a file transfer equest: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)

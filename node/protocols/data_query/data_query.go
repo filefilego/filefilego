@@ -12,6 +12,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -164,7 +165,13 @@ func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
 		return
 	}
 
-	responsePayloadWithLength := make([]byte, 8+len(responseBytes))
+	responseBufferSize := 8 + len(responseBytes)
+	if responseBufferSize > 64*common.MB {
+		log.Errorf("response size is too large for a sending a data query transfer with size: %d", responseBufferSize)
+		return
+	}
+
+	responsePayloadWithLength := make([]byte, responseBufferSize)
 	binary.LittleEndian.PutUint64(responsePayloadWithLength, uint64(len(responseBytes)))
 	copy(responsePayloadWithLength[8:], responseBytes)
 	_, err = s.Write(responsePayloadWithLength)
@@ -193,7 +200,12 @@ func (d *Protocol) RequestDataQueryResponseTransfer(ctx context.Context, peerID 
 		return fmt.Errorf("failed to marshal protobuf request data query response transfer request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 2*common.KB {
+		return fmt.Errorf("request size is too large for a sending a data query transfer with size: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)

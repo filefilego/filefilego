@@ -9,13 +9,16 @@ import (
 	"io"
 	"time"
 
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 )
 
-const deadlineTimeInSecond = 10
+const (
+	deadlineTimeInSecond = 10
+)
 
 // RemotePeer represents a peer with blockchain height.
 type RemotePeer struct {
@@ -67,7 +70,12 @@ func (rp *RemotePeer) DownloadBlocksRange(ctx context.Context, request *messages
 		return nil, fmt.Errorf("failed to marshal protobuf block request message: %w", err)
 	}
 
-	requestPayloadWithLength := make([]byte, 8+len(requestBytes))
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 2*common.KB {
+		return nil, fmt.Errorf("request size is too large for a block request with size: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
