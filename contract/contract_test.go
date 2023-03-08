@@ -70,6 +70,10 @@ func TestStoreMethods(t *testing.T) {
 	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
 	assert.NoError(t, err)
 
+	fileHash2 := []byte{35}
+	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash2, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
+	assert.NoError(t, err)
+
 	fileInfo, err = store.GetContractFileInfo("0x0a", fileHash)
 	assert.NoError(t, err)
 	assert.Len(t, fileInfo.MerkleTreeNodes, 1)
@@ -79,6 +83,22 @@ func TestStoreMethods(t *testing.T) {
 	assert.Equal(t, fileInfo.MerkleRootHash, []byte{73})
 	assert.Equal(t, randomizedSegments, fileInfo.RandomSegments)
 	assert.Equal(t, fileInfo.EncryptionType, common.EncryptionTypeAES256)
+
+	fileInfo2, err := store.GetContractFileInfo("0x0a", fileHash2)
+	assert.NoError(t, err)
+	assert.Len(t, fileInfo2.MerkleTreeNodes, 0)
+	assert.Equal(t, fileInfo2.FileSize, uint64(14))
+	assert.Equal(t, fileInfo2.Key, key)
+	assert.Equal(t, fileInfo2.IV, iv)
+	assert.Equal(t, fileInfo2.MerkleRootHash, []byte{73})
+	assert.Equal(t, randomizedSegments, fileInfo2.RandomSegments)
+	assert.Equal(t, fileInfo2.EncryptionType, common.EncryptionTypeAES256)
+
+	err = store.SetMerkleTreeNodes("0x0a", fileHash2, [][]byte{{12}})
+	assert.NoError(t, err)
+	fileInfo2, err = store.GetContractFileInfo("0x0a", fileHash2)
+	assert.NoError(t, err)
+	assert.Len(t, fileInfo2.MerkleTreeNodes, 1)
 
 	err = store.SetProofOfTransferVerified("0x0a", fileHash, true)
 	assert.NoError(t, err)

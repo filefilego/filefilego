@@ -70,6 +70,7 @@ type Interface interface {
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
+	GetReleasedFeesOfDownloadContractInTransactionData(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error)
 }
 
@@ -430,7 +431,7 @@ func (b *Blockchain) PutBlockPool(block block.Block) error {
 			// remove old blocks from pool
 			if blck.Number < currentHeight {
 				if err := b.DeleteFromBlockPool(blck); err != nil {
-					log.Errorf("failed to delete block %s from blockpool: %s", hexutil.Encode(blck.Hash), err.Error())
+					log.Errorf("failed to delete block %s from blockpool: %v", hexutil.Encode(blck.Hash), err)
 				}
 				continue
 			}
@@ -438,11 +439,11 @@ func (b *Blockchain) PutBlockPool(block block.Block) error {
 			if bytes.Equal(blck.PreviousBlockHash, lastBlockHash) {
 				nextBlockFound = true
 				if err := b.PerformStateUpdateFromBlock(blck); err != nil {
-					log.Errorf("failed to perform blockchain update from block %s : %s", hexutil.Encode(blck.Hash), err.Error())
+					log.Errorf("failed to perform blockchain update from block %s : %v", hexutil.Encode(blck.Hash), err)
 				}
 
 				if err := b.DeleteFromBlockPool(blck); err != nil {
-					log.Errorf("failed to delete block %s from blockpool: %s", hexutil.Encode(blck.Hash), err.Error())
+					log.Errorf("failed to delete block %s from blockpool: %v", hexutil.Encode(blck.Hash), err)
 				}
 			}
 		}
@@ -599,7 +600,7 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 
 	err = b.performStateUpdateFromDataPayload(&transaction)
 	if err != nil {
-		log.Errorf("failed to perform state update from tx data payload: %s", err.Error())
+		log.Errorf("failed to perform state update from tx data payload: %v", err)
 	}
 
 	return nil
@@ -832,7 +833,7 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 
 		err = b.PerformAddressStateUpdate(tx, verifierAddr, isCoinbase)
 		if err != nil {
-			log.Errorf("failed to update the state of blockchain: %s", err.Error())
+			log.Errorf("failed to update the state of blockchain: %v", err)
 			_ = b.DeleteFromMemPool(tx)
 			continue
 		}
@@ -840,7 +841,7 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 		if !isCoinbase {
 			err = b.DeleteFromMemPool(tx)
 			if err != nil {
-				log.Warnf("failed to delete transaction from mempool: %s", err.Error())
+				log.Warnf("failed to delete transaction from mempool: %v", err)
 			}
 		}
 	}

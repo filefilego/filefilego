@@ -28,6 +28,8 @@ type Interface interface {
 	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
 	DeleteContract(contractHash string) error
 	GetContractFiles(contractHash string) ([]FileInfo, error)
+	ReleaseContractFees(contractHash string)
+	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
 }
 
@@ -47,15 +49,17 @@ type FileInfo struct {
 
 // Store represents the contract stores.
 type Store struct {
-	db            database.Database
-	fileContracts map[string][]FileInfo
-	contracts     map[string]*messages.DownloadContractProto
-	mu            sync.RWMutex
+	db                   database.Database
+	fileContracts        map[string][]FileInfo
+	contracts            map[string]*messages.DownloadContractProto
+	releasedContractFees map[string]struct{}
+	mu                   sync.RWMutex
 }
 
 type persistedData struct {
-	FileContracts map[string][]FileInfo
-	Contracts     map[string]*messages.DownloadContractProto
+	FileContracts        map[string][]FileInfo
+	Contracts            map[string]*messages.DownloadContractProto
+	ReleasedContractFees map[string]struct{}
 }
 
 // New constructs a contract store.
@@ -65,12 +69,30 @@ func New(db database.Database) (*Store, error) {
 	}
 
 	store := &Store{
-		db:            db,
-		fileContracts: make(map[string][]FileInfo),
-		contracts:     make(map[string]*messages.DownloadContractProto),
+		db:                   db,
+		fileContracts:        make(map[string][]FileInfo),
+		contracts:            make(map[string]*messages.DownloadContractProto),
+		releasedContractFees: make(map[string]struct{}),
 	}
 
 	return store, nil
+}
+
+// ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.
+func (c *Store) ReleaseContractFees(contractHash string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.releasedContractFees[contractHash] = struct{}{}
+}
+
+// GetReleaseContractFeesStatus returns true if contract fees were released.
+func (c *Store) GetReleaseContractFeesStatus(contractHash string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, ok := c.releasedContractFees[contractHash]
+	return ok
 }
 
 // DeleteContract removes a contract.
@@ -314,8 +336,9 @@ func (c *Store) persistToDB() error {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	data := persistedData{
-		FileContracts: c.fileContracts,
-		Contracts:     c.contracts,
+		FileContracts:        c.fileContracts,
+		Contracts:            c.contracts,
+		ReleasedContractFees: c.releasedContractFees,
 	}
 	err := enc.Encode(data)
 	if err != nil {
@@ -355,6 +378,7 @@ func (c *Store) LoadFromDB() error {
 
 	c.contracts = pd.Contracts
 	c.fileContracts = pd.FileContracts
+	c.releasedContractFees = pd.ReleasedContractFees
 
 	return nil
 }

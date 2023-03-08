@@ -100,6 +100,11 @@ var (
 		Usage: "Data verification fees",
 	}
 
+	DataVerifierTransactionFees = cli.StringFlag{
+		Name:  "data_verification_transaction_fees",
+		Usage: "Data verification transaction fees for releasing file hoster fees",
+	}
+
 	DataDownloadsPath = cli.StringFlag{
 		Name:  "data_downloads_path",
 		Usage: "Directory path for data downloads",
@@ -229,6 +234,7 @@ var AppFlags = []cli.Flag{
 	&StorageFileSegmentsEncryptionPercentage,
 	&DataVerifier,
 	&DataVerifierVerificationFees,
+	&DataVerifierTransactionFees,
 	&DataDownloadsPath,
 
 	&RPCServicesFlag,

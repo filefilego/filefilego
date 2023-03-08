@@ -3,6 +3,7 @@ package dataverification
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,6 +53,7 @@ func TestNew(t *testing.T) {
 		downloadDirectory            string
 		dataVerifier                 bool
 		dataVerifierVerificationFees string
+		dataVerifierTransactionFees  string
 		expErr                       string
 	}{
 		"no host": {
@@ -117,7 +119,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees, tt.dataVerifierTransactionFees)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -136,10 +138,17 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 
 	fileContent := "this is ffg network a decentralized data sharing network+"
+	fileContent2 := "Whoever would overthrow the liberty of a nation must begin by subduing the freeness of speech."
+
 	inputFile := "uploadedFile.txt"
+	inputFile2 := "uploadedFile2.txt"
 
 	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "datastorage", inputFile))
 	assert.NoError(t, err)
+
+	uploadedFile2path, err := common.WriteToFile([]byte(fileContent2), filepath.Join(currentDir, "datastorage", inputFile2))
+	assert.NoError(t, err)
+
 	h1, _, h1PubKey := newHost(t, "1175")
 	h2, _, h2PubKey := newHost(t, "1167")
 	verifier1, _, verifier1PubKey := newHost(t, "1181")
@@ -226,21 +235,26 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = blockchain3.InitOrLoad()
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "")
+	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "")
+	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "", "")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7")
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7", "0x1")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
 	input, err := os.Open(uploadedFilepath)
 	assert.NoError(t, err)
 	inputStats, err := input.Stat()
+	assert.NoError(t, err)
+
+	input2, err := os.Open(uploadedFile2path)
+	assert.NoError(t, err)
+	inputStats2, err := input2.Stat()
 	assert.NoError(t, err)
 
 	orderedSlice := make([]int, totalDesiredFileSegments)
@@ -251,11 +265,21 @@ func TestDataVerificationMethods(t *testing.T) {
 	merkleRootHash, err := common.GetFileMerkleRootHash(uploadedFilepath, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
 
+	merkleRootHash2, err := common.GetFileMerkleRootHash(uploadedFile2path, totalDesiredFileSegments, orderedSlice)
+	assert.NoError(t, err)
+
 	fileHash, err := ffgcrypto.Sha1File(uploadedFilepath)
+	assert.NoError(t, err)
+
+	file2Hash, err := ffgcrypto.Sha1File(uploadedFile2path)
 	assert.NoError(t, err)
 
 	fileSize := inputStats.Size()
 	err = input.Close()
+	assert.NoError(t, err)
+
+	fileSize2 := inputStats2.Size()
+	err = input2.Close()
 	assert.NoError(t, err)
 
 	metadata := storage.FileMetadata{
@@ -267,9 +291,22 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = strg.SaveFileMetadata("", fileHash, metadata)
 	assert.NoError(t, err)
 
+	metadata2 := storage.FileMetadata{
+		MerkleRootHash: hexutil.Encode(merkleRootHash2),
+		Hash:           file2Hash,
+		FilePath:       uploadedFile2path,
+		Size:           fileSize2,
+	}
+	err = strg.SaveFileMetadata("", file2Hash, metadata2)
+	assert.NoError(t, err)
+
 	retrievedMetadata, err := strg.GetFileMetadata(fileHash)
 	assert.NoError(t, err)
 	assert.Equal(t, metadata, retrievedMetadata)
+
+	retrievedMetadata2, err := strg.GetFileMetadata(file2Hash)
+	assert.NoError(t, err)
+	assert.Equal(t, metadata2, retrievedMetadata2)
 
 	h1PublicKeyBytes, err := h1PubKey.Raw()
 	assert.NoError(t, err)
@@ -283,19 +320,23 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileHashBytes, err := hexutil.DecodeNoPrefix(fileHash)
 	assert.NoError(t, err)
 
+	fileHash2Bytes, err := hexutil.DecodeNoPrefix(file2Hash)
+	assert.NoError(t, err)
+
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
 			FromPeerAddr:         h1.ID().Pretty(),
 			FeesPerByte:          "0x2",
 			HashDataQueryRequest: []byte{12}, // this is just a placeholder
 			PublicKey:            h1PublicKeyBytes,
-			FileHashes:           [][]byte{fileHashBytes},
+			FileHashes:           [][]byte{fileHashBytes, fileHash2Bytes},
+			FileHashesSizes:      []uint64{uint64(fileSize), uint64(fileSize2)},
 			Signature:            []byte{17}, // this is just a placeholder
 			Timestamp:            time.Now().Unix(),
 		},
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
-		FileHashesNeeded:           [][]byte{fileHashBytes},
-		FileHashesNeededSizes:      []uint64{3},
+		FileHashesNeeded:           [][]byte{fileHashBytes, fileHash2Bytes},
+		FileHashesNeededSizes:      []uint64{uint64(fileSize), uint64(fileSize2)},
 		VerifierPublicKey:          verifier1PublicKeyBytes,
 		VerifierFees:               "",
 		ContractHash:               []byte{},
@@ -307,12 +348,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	fileContract.FileHosterResponse.Signature = make([]byte, len(sigFileContractResponse))
 	copy(fileContract.FileHosterResponse.Signature, sigFileContractResponse)
-
-	key, err := ffgcrypto.RandomEntropy(32)
-	assert.NoError(t, err)
-	iv, err := ffgcrypto.RandomEntropy(16)
-	assert.NoError(t, err)
-	randomSlices := common.GenerateRandomIntSlice(totalDesiredFileSegments)
 
 	assert.Empty(t, fileContract.VerifierSignature)
 	signedContract, err := protocolH2.SendContractToVerifierForAcceptance(context.TODO(), verifier1.ID(), fileContract)
@@ -342,6 +377,11 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = protocolH2.TransferContract(context.TODO(), verifier1.ID(), signedContract)
 	assert.NoError(t, err)
 
+	time.Sleep(200 * time.Millisecond)
+
+	_, err = protocolH1.contractStore.GetContract(contractHashHex)
+	assert.NoError(t, err)
+
 	// create a transaction that contains the contract details and perform state update
 	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
 	assert.NoError(t, err)
@@ -358,7 +398,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileHosterFees:             signedContract.FileHosterResponse.FeesPerByte,
 	}
 
-	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0xd")
+	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0x135")
 	validBlock2.PreviousBlockHash = make([]byte, len(genesisblockValid.Hash))
 	copy(validBlock2.PreviousBlockHash, genesisblockValid.Hash)
 
@@ -380,12 +420,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	verifierBalance, err := verifierState.GetBalance()
 	assert.NoError(t, err)
-	assert.Equal(t, "13", verifierBalance.Text(10))
+	assert.Equal(t, "309", verifierBalance.Text(10))
 	time.Sleep(200 * time.Millisecond)
-
-	// this is to set the node 1's keys and iv and randoclices store contact store
-	err = contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHashHex, fileHashBytes, key, iv, merkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileSize))
-	assert.NoError(t, err)
 
 	err = contractStore2.CreateContract(signedContract)
 	assert.NoError(t, err)
@@ -398,7 +434,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	res, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
-	// assert.Contains(t, res, "/data_download2/0x21/0x61645c4d245f5f979904a55bffe76ef084541b85")
+	time.Sleep(200 * time.Millisecond)
 
 	merkleNodes, err := common.HashFileBlockSegments(res, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
@@ -417,18 +453,22 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = protocolH2.SendFileMerkleTreeNodesToVerifier(context.TODO(), verifier1.ID(), merkleRequest)
 	assert.NoError(t, err)
 	// sleep is required
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	retrievedContractInfo, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
 	assert.NoError(t, err)
 	assert.EqualValues(t, merkleRequest.MerkleTreeNodes, retrievedContractInfo.MerkleTreeNodes)
 
-	// try to get verification when key and file data havent been transfered yet
 	encRequest := &messages.KeyIVRequestsProto{
 		KeyIvs: []*messages.KeyIVProto{{
 			ContractHash: contractHash,
 			FileHash:     fileHashBytes,
+		}, {
+			ContractHash: contractHash,
+			FileHash:     fileHash2Bytes,
 		}},
 	}
+
+	// try to get verification when key and file data havent been transfered yet
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
 
@@ -440,17 +480,87 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.True(t, contractFilesSentData.ReceivedUnencryptedDataFromFileHoster)
 
 	keyData, err := protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
+	assert.Error(t, err)
+	assert.Nil(t, keyData)
+
+	// transfer second file and then ask again for the encryption data
+	request2 := &messages.FileTransferInfoProto{
+		ContractHash: contractHash,
+		FileHash:     fileHash2Bytes,
+		FileSize:     uint64(fileSize2),
+	}
+	res2, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request2)
 	assert.NoError(t, err)
+	assert.NotEmpty(t, res2)
+	time.Sleep(200 * time.Millisecond)
+
+	merkleNodes2, err := common.HashFileBlockSegments(res2, totalDesiredFileSegments, orderedSlice)
+	assert.NoError(t, err)
+	merkleRequest2 := &messages.MerkleTreeNodesOfFileContractProto{
+		ContractHash:    contractHash,
+		FileHash:        fileHash2Bytes,
+		MerkleTreeNodes: make([][]byte, len(merkleNodes2)),
+	}
+
+	for i, v := range merkleNodes2 {
+		merkleRequest2.MerkleTreeNodes[i] = make([]byte, len(v.X))
+		copy(merkleRequest2.MerkleTreeNodes[i], v.X)
+	}
+
+	// send merkle
+	err = protocolH2.SendFileMerkleTreeNodesToVerifier(context.TODO(), verifier1.ID(), merkleRequest2)
+	assert.NoError(t, err)
+	// sleep is required
+	time.Sleep(200 * time.Millisecond)
+	retrievedContractInfo2, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHash2Bytes)
+	assert.NoError(t, err)
+	assert.EqualValues(t, merkleRequest2.MerkleTreeNodes, retrievedContractInfo2.MerkleTreeNodes)
+
+	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFile2path, contractHashHex, fileHash2Bytes)
+	assert.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+	contractFilesSentData2, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHash2Bytes)
+	assert.NoError(t, err)
+	assert.True(t, contractFilesSentData2.ReceivedUnencryptedDataFromFileHoster)
+
+	keyData, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
+	assert.NoError(t, err)
+	time.Sleep(200 * time.Millisecond)
+
 	if keyData == nil {
 		t.Fatalf("keyData is nil")
 	}
-	assert.Len(t, keyData.KeyIvRandomizedFileSegments, 1)
 
-	assert.EqualValues(t, key, keyData.KeyIvRandomizedFileSegments[0].Key)
-	assert.EqualValues(t, iv, keyData.KeyIvRandomizedFileSegments[0].Iv)
+	verifierFileInfos, err := contractStoreVerifier1.GetContractFiles(contractHashHex)
+	assert.NoError(t, err)
+	assert.Len(t, verifierFileInfos, 2)
+
+	for _, v := range verifierFileInfos {
+		assert.True(t, v.ProofOfTransferVerified)
+	}
+
+	assert.Len(t, keyData.KeyIvRandomizedFileSegments, 2)
+
+	fileContractInfo, err := protocolH1.contractStore.GetContractFileInfo(contractHashHex, fileHashBytes)
+	assert.NoError(t, err)
+
+	fileContractInfo2, err := protocolH1.contractStore.GetContractFileInfo(contractHashHex, fileHash2Bytes)
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, fileContractInfo.Key, keyData.KeyIvRandomizedFileSegments[0].Key)
+	assert.EqualValues(t, fileContractInfo.IV, keyData.KeyIvRandomizedFileSegments[0].Iv)
+
+	assert.EqualValues(t, fileContractInfo2.Key, keyData.KeyIvRandomizedFileSegments[1].Key)
+	assert.EqualValues(t, fileContractInfo2.IV, keyData.KeyIvRandomizedFileSegments[1].Iv)
+
 	randomizedSegsFromKey := make([]int, len(keyData.KeyIvRandomizedFileSegments[0].RandomizedSegments))
 	for i, v := range keyData.KeyIvRandomizedFileSegments[0].RandomizedSegments {
 		randomizedSegsFromKey[i] = int(v)
+	}
+
+	randomizedSegsFromKey2 := make([]int, len(keyData.KeyIvRandomizedFileSegments[1].RandomizedSegments))
+	for i, v := range keyData.KeyIvRandomizedFileSegments[1].RandomizedSegments {
+		randomizedSegsFromKey2[i] = int(v)
 	}
 
 	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.KeyIvRandomizedFileSegments[0].Key, keyData.KeyIvRandomizedFileSegments[0].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[0].EncryptionType), randomizedSegsFromKey)
@@ -458,6 +568,28 @@ func TestDataVerificationMethods(t *testing.T) {
 	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
 	assert.NoError(t, err)
 	assert.Equal(t, fileHash, hashOfRestoredFile)
+
+	restoresPath2, err := protocolH2.DecryptFile(res2, filepath.Join(currentDir, "data_download2", "restoredfile2.txt"), keyData.KeyIvRandomizedFileSegments[1].Key, keyData.KeyIvRandomizedFileSegments[1].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[1].EncryptionType), randomizedSegsFromKey2)
+	assert.NoError(t, err)
+	hashOfRestoredFile2, err := ffgcrypto.Sha1File(restoresPath2)
+	assert.NoError(t, err)
+	assert.Equal(t, file2Hash, hashOfRestoredFile2)
+	time.Sleep(100 * time.Millisecond)
+
+	mempoolTxs := blockchain3.GetTransactionsFromPool()
+	assert.Len(t, mempoolTxs, 1)
+	ok, err := mempoolTxs[0].Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	totalSize := uint64(0)
+	for _, v := range signedContract.FileHashesNeededSizes {
+		totalSize += v
+	}
+
+	hosterFees := totalSize * 2
+	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value)
+	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {
@@ -469,7 +601,6 @@ func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKe
 		connmgr.WithGracePeriod(time.Minute),
 	)
 	assert.NoError(t, err)
-
 	host, err := libp2p.New(libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%s", port)),
 		libp2p.Ping(false),

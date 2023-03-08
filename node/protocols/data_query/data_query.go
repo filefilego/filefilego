@@ -126,7 +126,7 @@ func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleDataQueryResponseTransfer stream: %s", err.Error())
+		log.Errorf("failed to read from handleDataQueryResponseTransfer stream: %v", err)
 		return
 	}
 
@@ -137,13 +137,13 @@ func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleDataQueryResponseTransfer stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleDataQueryResponseTransfer stream to buffer: %v", err)
 		return
 	}
 
 	request := messages.DataQueryResponseTransferProto{}
 	if err := proto.Unmarshal(buf, &request); err != nil {
-		log.Errorf("failed to unmarshall data from handleDataQueryResponseTransfer stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleDataQueryResponseTransfer stream: %v", err)
 		return
 	}
 
@@ -161,7 +161,7 @@ func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
 
 	responseBytes, err := proto.Marshal(&response)
 	if err != nil {
-		log.Errorf("failed to marshal protobuf file transfer request message: %s", err.Error())
+		log.Errorf("failed to marshal protobuf file transfer request message: %v", err)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (d *Protocol) handleDataQueryResponseTransfer(s network.Stream) {
 	copy(responsePayloadWithLength[8:], responseBytes)
 	_, err = s.Write(responsePayloadWithLength)
 	if err != nil {
-		log.Errorf("failed to write file transfer request to stream: %s", err.Error())
+		log.Errorf("failed to write file transfer request to stream: %v", err)
 		return
 	}
 }

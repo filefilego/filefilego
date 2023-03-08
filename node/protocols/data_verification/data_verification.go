@@ -84,10 +84,11 @@ type Protocol struct {
 	downloadDirectory            string
 	dataVerifier                 bool
 	dataVerifierVerificationFees string
+	dataVerifierTransactionFees  string
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, publisher NetworkMessagePublisher, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees string) (*Protocol, error) {
+func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, publisher NetworkMessagePublisher, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees, dataVerifierTransactionFees string) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -123,6 +124,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		downloadDirectory:            downloadDirectory,
 		dataVerifier:                 dataVerifier,
 		dataVerifierVerificationFees: dataVerifierVerificationFees,
+		dataVerifierTransactionFees:  dataVerifierTransactionFees,
 	}
 
 	// the following protocols are hanlded by verifier
@@ -134,6 +136,10 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 
 		if p.dataVerifierVerificationFees == "" {
 			return nil, errors.New("data verification fees is empty")
+		}
+
+		if p.dataVerifierTransactionFees == "" {
+			return nil, errors.New("data verification transaction fees is empty")
 		}
 	}
 
@@ -153,7 +159,7 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream: %v", err)
 		return
 	}
 
@@ -164,19 +170,19 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingContractVerifierAcceptance stream to buffer: %v", err)
 		return
 	}
 
 	downloadContract := messages.DownloadContractProto{}
 	if err := proto.Unmarshal(buf, &downloadContract); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingContractVerifierAcceptance stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingContractVerifierAcceptance stream: %v", err)
 		return
 	}
 
 	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterNodePublicKey)
 	if err != nil {
-		log.Errorf("failed to get the public key of the file hoster: %s", err.Error())
+		log.Errorf("failed to get the public key of the file hoster: %v", err)
 		return
 	}
 
@@ -189,26 +195,26 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	dataQueryResponse := messages.ToDataQueryResponse(downloadContract.FileHosterResponse)
 	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
 	if err != nil {
-		log.Errorf("failed to get the public key of the file hoster in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		log.Errorf("failed to get the public key of the file hoster in handleIncomingContractVerifierAcceptance: %v", err)
 		return
 	}
 
 	ok, err := messages.VerifyDataQueryResponse(publicKeyFileHoster, dataQueryResponse)
 	if !ok || err != nil {
-		log.Errorf("failed to verify data query response from file hoster in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		log.Errorf("failed to verify data query response from file hoster in handleIncomingContractVerifierAcceptance: %v", err)
 		return
 	}
 
 	verificationAmount, ok := big.NewInt(0).SetString(d.dataVerifierVerificationFees, 10)
 	if !ok {
-		log.Errorf("failed to parse verification fees in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		log.Errorf("failed to parse verification fees in handleIncomingContractVerifierAcceptance: %v", err)
 		return
 	}
 	downloadContract.VerifierFees = hexutil.EncodeBig(verificationAmount)
 	publicKey := d.host.Peerstore().PubKey(d.host.ID())
 	publicKeyBytes, err := publicKey.Raw()
 	if err != nil {
-		log.Errorf("failed to get the public key of the verifier in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		log.Errorf("failed to get the public key of the verifier in handleIncomingContractVerifierAcceptance: %v", err)
 		return
 	}
 
@@ -221,7 +227,7 @@ func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 
 	sig, err := messages.SignDownloadContractProto(d.host.Peerstore().PrivKey(d.host.ID()), &downloadContract)
 	if err != nil {
-		log.Errorf("failed to get the sign download contract in handleIncomingContractVerifierAcceptance: %s", err.Error())
+		log.Errorf("failed to get the sign download contract in handleIncomingContractVerifierAcceptance: %v", err)
 		return
 	}
 
@@ -316,7 +322,7 @@ func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingContractTransfer stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingContractTransfer stream: %v", err)
 		return
 	}
 
@@ -327,24 +333,24 @@ func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingContractTransfer stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingContractTransfer stream to buffer: %v", err)
 		return
 	}
 
 	downloadContract := messages.DownloadContractProto{}
 	if err := proto.Unmarshal(buf, &downloadContract); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingContractTransfer stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingContractTransfer stream: %v", err)
 		return
 	}
 	verifierPubKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
 	if err != nil {
-		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %s", err.Error())
+		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %v", err)
 		return
 	}
 
 	ok, err := messages.VerifyDownloadContractProto(verifierPubKey, &downloadContract)
 	if !ok || err != nil {
-		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %s", err.Error())
+		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %v", err)
 		return
 	}
 
@@ -497,38 +503,129 @@ func (d *Protocol) RequestEncryptionData(ctx context.Context, verifierID peer.ID
 	return &keyData, nil
 }
 
-// TODO:
-func (d *Protocol) releaseFees(fileHosterFees *big.Int) {
-	// check if file hoster was paid
-	// check local verifiers store through additional field
-	// check blockchain
-	// if both are false, then create a new transaction that pays the filehoster
+// release fees to file hoster by creating a tx with the correct value.
+func (d *Protocol) releaseFees(contractHash []byte) error {
+	contractHashHex := hexutil.Encode(contractHash)
+	downloadContract, err := d.contractStore.GetContract(contractHashHex)
+	if err != nil {
+		return fmt.Errorf("failed to find contract: %w", err)
+	}
+
+	chainID, err := hexutil.Decode(transaction.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed decode chain id value: %w", err)
+	}
+
+	publicKeyBytes, err := d.host.Peerstore().PubKey(d.host.ID()).Raw()
+	if err != nil {
+		return fmt.Errorf("failed get public key of verifier: %w", err)
+	}
+	verifierAddr, err := ffgcrypto.RawPublicToAddressBytes(publicKeyBytes)
+	if err != nil {
+		return fmt.Errorf("failed get address of verifier from its public key bytes: %w", err)
+	}
+
+	fileHosterFees, err := d.checkValidateContractCreationInTX(contractHash, downloadContract)
+	if err != nil {
+		return fmt.Errorf("failed to check and validate contract before releasing file hoster fees: %w", err)
+	}
+
+	fileHosterAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.FileRequesterNodePublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get file hosters address from contract: %w", err)
+	}
+
+	// get the biggest nounce from mempool or blockchain
+	mempoolNounce := d.blockchain.GetNounceFromMemPool(verifierAddr)
+	addrState, err := d.blockchain.GetAddressState(verifierAddr)
+	if err != nil {
+		return fmt.Errorf("failed get address state of verifier: %w", err)
+	}
+	nounce, _ := addrState.GetNounce()
+	if mempoolNounce > nounce {
+		nounce = mempoolNounce
+	}
+
+	// increment the nounce and use its bytes
+	nounce++
+	addrState.SetNounce(nounce)
+
+	releasedContractTx := &messages.DownloadContractInTransactionDataProto{
+		ContractHash:               downloadContract.ContractHash,
+		FileRequesterNodePublicKey: downloadContract.FileRequesterNodePublicKey,
+		FileHosterNodePublicKey:    downloadContract.FileHosterResponse.PublicKey,
+		VerifierPublicKey:          downloadContract.VerifierPublicKey,
+		VerifierFees:               downloadContract.VerifierFees,
+		FileHosterFees:             downloadContract.FileHosterResponse.FeesPerByte,
+	}
+
+	contractsEnvelope := &messages.DownloadContractsHashesProto{
+		Contracts: []*messages.DownloadContractInTransactionDataProto{releasedContractTx},
+	}
+
+	contractsEnvelopeBytes, err := proto.Marshal(contractsEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed marshal contract envelope message: %w", err)
+	}
+
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_DATA_CONTRACT_RELEASE_HOSTER_FEES,
+		Payload: contractsEnvelopeBytes,
+	}
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	if err != nil {
+		return fmt.Errorf("failed marshal contract envelope with contract fees releaser type message: %w", err)
+	}
+
+	transactionFees, err := hexutil.DecodeBig(d.dataVerifierTransactionFees)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction fees for contract fees releaser: %w", err)
+	}
 
 	tx := transaction.Transaction{
-		Value: fileHosterFees.String(),
+		PublicKey:       publicKeyBytes,
+		Nounce:          addrState.Nounce,
+		Data:            txPayloadBytes,
+		From:            hexutil.Encode(verifierAddr),
+		To:              fileHosterAddr,
+		Value:           hexutil.EncodeBig(fileHosterFees),
+		TransactionFees: hexutil.EncodeBig(transactionFees),
+		Chain:           chainID,
+	}
+
+	err = tx.Sign(d.host.Peerstore().PrivKey(d.host.ID()))
+	if err != nil {
+		return fmt.Errorf("failed to sign file hoster fees release transaction: %w", err)
+	}
+
+	// extra check to see if contract fees hasnt been released from another thread
+	contractReleased := d.contractStore.GetReleaseContractFeesStatus(contractHashHex)
+	if contractReleased {
+		return errors.New("contract fees already released")
 	}
 
 	if err := d.blockchain.PutMemPool(tx); err != nil {
-		log.Errorf("failed to insert transaction to mempool in handleIncomingEncryptionDataTransfer: %v", err)
-		return
+		return fmt.Errorf("failed to insert transaction to mempool in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
-	payload := messages.GossipPayload{
+	d.contractStore.ReleaseContractFees(hexutil.Encode(downloadContract.ContractHash))
+
+	gossipPayload := messages.GossipPayload{
 		Message: &messages.GossipPayload_Transaction{
 			Transaction: transaction.ToProtoTransaction(tx),
 		},
 	}
 
-	txBytes, err := proto.Marshal(&payload)
+	txBytes, err := proto.Marshal(&gossipPayload)
 	if err != nil {
-		log.Errorf("failed to marshal gossip payload in handleIncomingEncryptionDataTransfer: %v", err)
-		return
+		return fmt.Errorf("failed to marshal gossip payload in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
 	if err := d.publisher.PublishMessageToNetwork(context.Background(), txBytes); err != nil {
-		log.Errorf("failed to public transaction to network in handleIncomingEncryptionDataTransfer: %v", err)
-		return
+		return fmt.Errorf("failed to public transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
 	}
+
+	return nil
 }
 
 // handleIncomingEncryptionDataTransfer handles incoming encryption data request.
@@ -540,7 +637,7 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream: %v", err)
 		return
 	}
 
@@ -551,24 +648,34 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingEncryptionDataTransfer stream to buffer: %v", err)
 		return
 	}
 
 	keyIVrequests := messages.KeyIVRequestsProto{}
 	if err := proto.Unmarshal(buf, &keyIVrequests); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingEncryptionDataTransfer stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingEncryptionDataTransfer stream: %v", err)
 		return
 	}
 
-	responses := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{}
-	responses.KeyIvRandomizedFileSegments = make([]*messages.KeyIVRandomizedFileSegmentsProto, 0)
+	if len(keyIVrequests.KeyIvs) == 0 {
+		log.Errorf("key iv request is empty in handleIncomingEncryptionDataTransfer stream: %v", err)
+		return
+	}
+
+	tmpContractHash := make([]byte, len(keyIVrequests.KeyIvs[0].ContractHash))
+	copy(tmpContractHash, keyIVrequests.KeyIvs[0].ContractHash)
 
 	for _, keyIVrequest := range keyIVrequests.KeyIvs {
+		if !bytes.Equal(tmpContractHash, keyIVrequest.ContractHash) {
+			log.Errorf("key iv request contains different contract hash in the request in handleIncomingEncryptionDataTransfer: %v", err)
+			return
+		}
+
 		contractHashHex := hexutil.Encode(keyIVrequest.ContractHash)
 		downloadContract, err := d.contractStore.GetContract(contractHashHex)
 		if err != nil {
-			log.Errorf("failed to get contract in handleIncomingEncryptionDataTransfer: %s", err.Error())
+			log.Errorf("failed to get contract in handleIncomingEncryptionDataTransfer: %v", err)
 			return
 		}
 
@@ -580,7 +687,7 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 
 		fileInfo, err := d.contractStore.GetContractFileInfo(contractHashHex, keyIVrequest.FileHash)
 		if err != nil {
-			log.Errorf("failed to get contract file info in handleIncomingEncryptionDataTransfer: %s", err.Error())
+			log.Errorf("failed to get contract file info in handleIncomingEncryptionDataTransfer: %v", err)
 			return
 		}
 
@@ -608,58 +715,87 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 
 			merkleOfRawSegmentsBeforeEncryption, err := common.HashFileBlockSegments(destinationFilePath, totalSegmentsToEncrypt, orderedSliceForRawfile)
 			if err != nil {
-				log.Errorf("failed to get file block hashes in handleIncomingEncryptionDataTransfer: %s", err.Error())
+				log.Errorf("failed to get file block hashes in handleIncomingEncryptionDataTransfer: %v", err)
 				return
 			}
 			reorderedMerkle, err := common.RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment, fileInfo.RandomSegments, merkleTreeRandomizedSegments, merkleOfRawSegmentsBeforeEncryption)
 			if err != nil {
-				log.Errorf("failed to retrieve the original order of merkle tree nodes in handleIncomingEncryptionDataTransfer: %s", err.Error())
+				log.Errorf("failed to retrieve the original order of merkle tree nodes in handleIncomingEncryptionDataTransfer: %v", err)
 				return
 			}
 			merkleOfReorderedMerkle, err := common.GetFileMerkleRootHashFromNodes(reorderedMerkle)
 			if err != nil {
-				log.Errorf("failed get merkle root hash in handleIncomingEncryptionDataTransfer: %s", err.Error())
+				log.Errorf("failed get merkle root hash in handleIncomingEncryptionDataTransfer: %v", err)
 				return
 			}
 
 			if bytes.Equal(merkleOfReorderedMerkle, fileInfo.MerkleRootHash) {
 				err = d.contractStore.SetProofOfTransferVerified(contractHashHex, fileInfo.FileHash, true)
 				if err != nil {
-					log.Errorf("failed to set proof of transfer verified: %s", err.Error())
+					log.Errorf("failed to set proof of transfer verified: %v", err)
 					return
 				}
 			}
 		}
+	}
 
-		// read again the file info
-		fileInfo, _ = d.contractStore.GetContractFileInfo(contractHashHex, keyIVrequest.FileHash)
-		if !fileInfo.ProofOfTransferVerified {
-			log.Errorf("proof of transfer failed")
+	// check if all file requests are within the download contract
+	responses := messages.KeyIVRandomizedFileSegmentsEnvelopeProto{}
+	responses.KeyIvRandomizedFileSegments = make([]*messages.KeyIVRandomizedFileSegmentsProto, 0)
+
+	for _, keyIVrequest := range keyIVrequests.KeyIvs {
+		contractHashHex := hexutil.Encode(keyIVrequest.ContractHash)
+		downloadContract, _ := d.contractStore.GetContract(contractHashHex)
+
+		if len(downloadContract.FileHashesNeeded) != len(keyIVrequests.KeyIvs) {
+			log.Error("encryption data request items doesn't match the contract size in handleIncomingEncryptionDataTransfer message")
 			return
 		}
 
-		randomizedSegments := make([]int32, len(fileInfo.RandomSegments))
-		for i, v := range fileInfo.RandomSegments {
+		found := false
+		for _, v := range downloadContract.FileHashesNeeded {
+			if bytes.Equal(v, keyIVrequest.FileHash) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			log.Error("encryption data request doesn't include all the file hashes in handleIncomingEncryptionDataTransfer message")
+			return
+		}
+
+		fInfo, err := d.contractStore.GetContractFileInfo(contractHashHex, keyIVrequest.FileHash)
+		if err != nil {
+			log.Error("failed to get the contract file information to check for verification in handleIncomingEncryptionDataTransfer message")
+			return
+		}
+
+		if !fInfo.ProofOfTransferVerified {
+			log.Errorf("file hash: %s is not verified in handleIncomingEncryptionDataTransfer message", hexutil.Encode(keyIVrequest.FileHash))
+			return
+		}
+
+		randomizedSegments := make([]int32, len(fInfo.RandomSegments))
+		for i, v := range fInfo.RandomSegments {
 			randomizedSegments[i] = int32(v)
 		}
 
 		response := messages.KeyIVRandomizedFileSegmentsProto{
 			ContractHash:       keyIVrequest.ContractHash,
-			FileHash:           fileInfo.FileHash,
-			Key:                fileInfo.Key,
-			Iv:                 fileInfo.IV,
-			EncryptionType:     int32(fileInfo.EncryptionType),
+			FileHash:           fInfo.FileHash,
+			Key:                fInfo.Key,
+			Iv:                 fInfo.IV,
+			EncryptionType:     int32(fInfo.EncryptionType),
 			RandomizedSegments: randomizedSegments,
 		}
 
 		responses.KeyIvRandomizedFileSegments = append(responses.KeyIvRandomizedFileSegments, &response)
 	}
 
-	// TODO: check if all the files has been verified, then proceed sending the key and ivs
-
 	responseBytes, err := proto.Marshal(&responses)
 	if err != nil {
-		log.Errorf("failed to marshal protobuf encryption data in handleIncomingEncryptionDataTransfer message: %s", err.Error())
+		log.Errorf("failed to marshal protobuf encryption data in handleIncomingEncryptionDataTransfer message: %v", err)
 		return
 	}
 
@@ -674,8 +810,25 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 	copy(responseBytesPayloadWithLength[8:], responseBytes)
 	_, err = s.Write(responseBytesPayloadWithLength)
 	if err != nil {
-		log.Errorf("failed to write encryption key data in handleIncomingEncryptionDataTransfer to stream: %s", err.Error())
+		log.Errorf("failed to write encryption key data in handleIncomingEncryptionDataTransfer to stream: %v", err)
 		return
+	}
+
+	contractReleases, err := d.blockchain.GetReleasedFeesOfDownloadContractInTransactionData(tmpContractHash)
+	if err != nil {
+		log.Errorf("failed to check for released contract fees handleIncomingEncryptionDataTransfer to stream: %v", err)
+		return
+	}
+
+	contractReleased := d.contractStore.GetReleaseContractFeesStatus(hexutil.Encode(tmpContractHash))
+	if len(contractReleases) == 0 && !contractReleased {
+		err := d.releaseFees(tmpContractHash)
+		if err != nil {
+			log.Errorf("failed release file hoster fees in handleIncomingEncryptionDataTransfer to stream: %v", err)
+			return
+		}
+	} else {
+		log.Warnf("contract %s is already released", hexutil.Encode(tmpContractHash))
 	}
 }
 
@@ -797,7 +950,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %v", err)
 		return
 	}
 
@@ -808,13 +961,13 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingKeyIVRandomizedFileSegmentsAndData stream to buffer: %v", err)
 		return
 	}
 
 	keyIVRandomizedFileSegmentsEnvelope := messages.KeyIVRandomizedFileSegmentsProto{}
 	if err := proto.Unmarshal(buf, &keyIVRandomizedFileSegmentsEnvelope); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingKeyIVRandomizedFileSegmentsAndData stream: %v", err)
 		return
 	}
 
@@ -822,13 +975,13 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 
 	fileContract, err := d.contractStore.GetContract(contractHash)
 	if err != nil {
-		log.Errorf("failed to get contract in handleIncomingKeyIVRandomizedFileSegmentsAndData: %s", err.Error())
+		log.Errorf("failed to get contract in handleIncomingKeyIVRandomizedFileSegmentsAndData: %v", err)
 		return
 	}
 
 	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(fileContract.FileHosterResponse.PublicKey)
 	if err != nil {
-		log.Errorf("failed to get the public key of the file hoster: %s", err.Error())
+		log.Errorf("failed to get the public key of the file hoster: %v", err)
 		return
 	}
 
@@ -844,14 +997,14 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 
 	err = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, keyIVRandomizedFileSegmentsEnvelope.Key, keyIVRandomizedFileSegmentsEnvelope.Iv, keyIVRandomizedFileSegmentsEnvelope.MerkleRootHash, common.EncryptionType(keyIVRandomizedFileSegmentsEnvelope.EncryptionType), randomizedSegments, keyIVRandomizedFileSegmentsEnvelope.FileSize)
 	if err != nil {
-		log.Errorf("failed to update key, iv and random segments of file contract: %s", err.Error())
+		log.Errorf("failed to update key, iv and random segments of file contract: %v", err)
 		return
 	}
 
 	contractHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.ContractHash)
 	err = common.CreateDirectory(filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex))
 	if err != nil {
-		log.Errorf("failed to created contract directory: %s", err.Error())
+		log.Errorf("failed to created contract directory: %v", err)
 		return
 	}
 
@@ -859,7 +1012,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
 	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
-		log.Errorf("failed to open a file for downloading its content from hoster: %s", err.Error())
+		log.Errorf("failed to open a file for downloading its content from hoster: %v", err)
 		return
 	}
 	defer destinationFile.Close()
@@ -871,7 +1024,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])
 			if wroteN != n || err != nil {
-				log.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %s", n, wroteN, err.Error())
+				log.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %v", n, wroteN, err)
 				return
 			}
 			totalFileBytesReceived += uint64(wroteN)
@@ -882,14 +1035,14 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 		}
 
 		if err != nil {
-			log.Errorf("fialed to read file content to buffer: %s", err.Error())
+			log.Errorf("fialed to read file content to buffer: %v", err)
 			return
 		}
 	}
 
 	err = d.contractStore.SetReceivedUnencryptedDataFromFileHoster(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, true)
 	if err != nil {
-		log.Errorf("failed to set received unencrypted data from file hoster: %s", err.Error())
+		log.Errorf("failed to set received unencrypted data from file hoster: %v", err)
 		return
 	}
 }
@@ -904,7 +1057,7 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream: %v", err)
 		return
 	}
 
@@ -915,13 +1068,13 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingMerkleTreeNodes stream to buffer: %v", err)
 		return
 	}
 
 	merkleTreeNodesOfFileMessage := messages.MerkleTreeNodesOfFileContractProto{}
 	if err := proto.Unmarshal(buf, &merkleTreeNodesOfFileMessage); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingMerkleTreeNodes stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingMerkleTreeNodes stream: %v", err)
 		return
 	}
 
@@ -929,13 +1082,13 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 
 	fileContract, err := d.contractStore.GetContract(contractHash)
 	if err != nil {
-		log.Errorf("failed to get contract in handleIncomingMerkleTreeNodes: %s", err.Error())
+		log.Errorf("failed to get contract in handleIncomingMerkleTreeNodes: %v", err)
 		return
 	}
 
 	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(fileContract.FileRequesterNodePublicKey)
 	if err != nil {
-		log.Errorf("failed to get the public key of the file requester: %s", err.Error())
+		log.Errorf("failed to get the public key of the file requester: %v", err)
 		return
 	}
 
@@ -946,7 +1099,7 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 
 	err = d.contractStore.SetMerkleTreeNodes(contractHash, merkleTreeNodesOfFileMessage.FileHash, merkleTreeNodesOfFileMessage.MerkleTreeNodes)
 	if err != nil {
-		log.Errorf("failed to update merkle tree nodes for a file contract: %s", err.Error())
+		log.Errorf("failed to update merkle tree nodes for a file contract: %v", err)
 		return
 	}
 }
@@ -1105,7 +1258,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingFileTransfer stream: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingFileTransfer stream: %v", err)
 		return
 	}
 
@@ -1116,26 +1269,35 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from handleIncomingFileTransfer stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from handleIncomingFileTransfer stream to buffer: %v", err)
 		return
 	}
 
 	fileTransferRequest := messages.FileTransferInfoProto{}
 	if err := proto.Unmarshal(buf, &fileTransferRequest); err != nil {
-		log.Errorf("failed to unmarshall data from handleIncomingFileTransfer stream: %s", err.Error())
+		log.Errorf("failed to unmarshall data from handleIncomingFileTransfer stream: %v", err)
 		return
 	}
 
 	contractHash := hexutil.Encode(fileTransferRequest.ContractHash)
-	fileContractInfo, err := d.contractStore.GetContractFileInfo(contractHash, fileTransferRequest.FileHash)
-	if err != nil {
-		log.Errorf("failed to get contract and file info in handleIncomingFileTransfer: %s", err.Error())
-		return
-	}
 
 	downloadContract, err := d.contractStore.GetContract(contractHash)
 	if err != nil {
-		log.Errorf("failed to get contract in handleIncomingFileTransfer: %s", err.Error())
+		log.Errorf("failed to get contract in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	// file found
+	requestFilePartOfContract := false
+	for _, v := range downloadContract.FileHashesNeeded {
+		if bytes.Equal(v, fileTransferRequest.FileHash) {
+			requestFilePartOfContract = true
+			break
+		}
+	}
+
+	if !requestFilePartOfContract {
+		log.Errorf("requested file is not included in the download contract in handleIncomingFileTransfer: %v", err)
 		return
 	}
 
@@ -1147,7 +1309,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 
 	publicKeyFileRequester, err := ffgcrypto.PublicKeyFromBytes(downloadContract.FileRequesterNodePublicKey)
 	if err != nil {
-		log.Errorf("failed to get the public key of the file requester: %s", err.Error())
+		log.Errorf("failed to get the public key of the file requester: %v", err)
 		return
 	}
 
@@ -1159,26 +1321,63 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	fileHashHex := hexutil.EncodeNoPrefix(fileTransferRequest.FileHash)
 	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex)
 	if err != nil {
-		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %s", err.Error())
+		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %v", err)
 		return
+	}
+
+	fileContractInfo, err := d.contractStore.GetContractFileInfo(contractHash, fileTransferRequest.FileHash)
+	if err != nil {
+		key, err := ffgcrypto.RandomEntropy(32)
+		if err != nil {
+			log.Errorf("failed to create random key in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		iv, err := ffgcrypto.RandomEntropy(16)
+		if err != nil {
+			log.Errorf("failed to create random iv in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		fileMerkleRootHash, err := hexutil.Decode(fileMetadata.MerkleRootHash)
+		if err != nil {
+			log.Errorf("failed to decode file merkle root hash in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage)
+		randomSlices := common.GenerateRandomIntSlice(howManySegments)
+
+		err = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, fileTransferRequest.FileHash, key, iv, fileMerkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileMetadata.Size))
+		if err != nil {
+			log.Errorf("failed set the key encryption data of file in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		// reload fileContractInfo
+		fileContractInfo, err = d.contractStore.GetContractFileInfo(contractHash, fileTransferRequest.FileHash)
+		if err != nil {
+			log.Errorf("failed to reload fileContractInfo handleIncomingFileTransfer: %v", err)
+			return
+		}
 	}
 
 	input, err := os.Open(fileMetadata.FilePath)
 	if err != nil {
-		log.Errorf("failed to open file for encryption and streaming in handleIncomingFileTransfer: %s", err.Error())
+		log.Errorf("failed to open file for encryption and streaming in handleIncomingFileTransfer: %v", err)
 		return
 	}
 
 	encryptor, err := common.NewEncryptor(fileContractInfo.EncryptionType, fileContractInfo.Key, fileContractInfo.IV)
 	if err != nil {
-		log.Errorf("failed to setup encryptor in handleIncomingFileTransfer: %s", err.Error())
+		log.Errorf("failed to setup encryptor in handleIncomingFileTransfer: %v", err)
 		return
 	}
 
 	// write to the stream the content of the input file while encrypting and shuffling its segments.
 	err = common.EncryptWriteOutput(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
 	if err != nil {
-		log.Errorf("failed to encryptWriteOutput in handleIncomingFileTransfer: %s", err.Error())
+		log.Errorf("failed to encryptWriteOutput in handleIncomingFileTransfer: %v", err)
 		return
 	}
 

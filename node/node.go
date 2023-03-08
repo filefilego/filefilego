@@ -173,13 +173,13 @@ func (n *Node) Sync(ctx context.Context) error {
 			defer wg.Done()
 			remotePeer, err := blockdownloader.NewRemotePeer(n.host, p)
 			if err != nil {
-				log.Warnf("failed to create remote peer: %s", err.Error())
+				log.Warnf("failed to create remote peer: %v", err)
 				return
 			}
 
 			_, err = remotePeer.GetHeight(ctx)
 			if err != nil {
-				log.Warnf("failed to get height of remote peer: %s", err.Error())
+				log.Warnf("failed to get height of remote peer: %v", err)
 				return
 			}
 
@@ -484,7 +484,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 						defer wg.Done()
 						err := n.dataQueryProtocol.SendDataQueryResponse(ctx, peerID, messages.ToDataQueryResponseProto(response))
 						if err != nil {
-							log.Warnf("failed to sent data query response to verifiers: %s", err.Error())
+							log.Warnf("failed to sent data query response to verifiers: %v", err)
 						}
 					}(addInfo.ID)
 				}

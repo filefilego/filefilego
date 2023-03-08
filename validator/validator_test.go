@@ -109,7 +109,7 @@ func TestValidatorMethods(t *testing.T) {
 	transactions := miner.prepareMempoolTransactions()
 	assert.Len(t, transactions, 0)
 
-	chainID, err := hexutil.Decode("0x01")
+	chainID, err := hexutil.Decode(transaction.ChainID)
 	assert.NoError(t, err)
 	txCoinbase := transaction.Transaction{
 		PublicKey:       pubKeyBytes,

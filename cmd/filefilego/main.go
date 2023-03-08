@@ -211,7 +211,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
 
-	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, node, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees)
+	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, node, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees, conf.Global.DataVerifierTransactionFees)
 	if err != nil {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
 	}
@@ -241,7 +241,7 @@ func run(ctx *cli.Context) error {
 				<-time.After(tickDuration)
 				sealedBlock, err := validator.SealBlock(time.Now().Unix())
 				if err != nil {
-					log.Errorf("sealing block failed: %s", err.Error())
+					log.Errorf("sealing block failed: %v", err)
 					continue
 				}
 				log.Infof("block %d sealed from verifier %s", sealedBlock.Number, key.Address)
@@ -249,7 +249,7 @@ func run(ctx *cli.Context) error {
 				go func() {
 					log.Infof("broadcasting block %d to %d peers", sealedBlock.Number, node.Peers().Len()-1)
 					if err := validator.BroadcastBlock(ctx.Context, sealedBlock); err != nil {
-						log.Errorf("failed to publish block to the network: %s", err.Error())
+						log.Errorf("failed to publish block to the network: %v", err)
 					}
 				}()
 			}
@@ -263,7 +263,7 @@ func run(ctx *cli.Context) error {
 			if time.Now().Unix()-bchain.GetLastBlockUpdatedAt() >= triggerSyncSinceLastUpdateSeconds {
 				err := node.Sync(ctx.Context)
 				if err != nil {
-					log.Errorf("failed to sync: %s", err.Error())
+					log.Errorf("failed to sync: %v", err)
 					return
 				}
 				log.Infof("blockchain syncing finished with current blockchain height at %d", bchain.GetHeight())
@@ -353,7 +353,7 @@ func run(ctx *cli.Context) error {
 
 		go func() {
 			if err := unixserver.Serve(unixListener); err != nil {
-				log.Fatalf("failed to start unix socket: %s", err.Error())
+				log.Fatalf("failed to start unix socket: %v", err)
 			}
 		}()
 	}

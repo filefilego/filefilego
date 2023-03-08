@@ -163,7 +163,7 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
-		log.Errorf("failed to read from block downloader stream: %s", err.Error())
+		log.Errorf("failed to read from block downloader stream: %v", err)
 		return
 	}
 
@@ -174,13 +174,13 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
-		log.Errorf("failed to read from stream to buffer: %s", err.Error())
+		log.Errorf("failed to read from stream to buffer: %v", err)
 		return
 	}
 
 	downloadRequest := messages.BlockDownloadRequestProto{}
 	if err := proto.Unmarshal(buf, &downloadRequest); err != nil {
-		log.Error("failed to unmarshall data from stream: " + err.Error())
+		log.Errorf("failed to unmarshall data from stream: %v", err)
 		return
 	}
 
@@ -225,7 +225,7 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 	copy(payloadEnvelope[8:], payload)
 	n, err := s.Write(payloadEnvelope)
 	if err != nil {
-		log.Errorf("failed to write envelope data to stream: %s", err.Error())
+		log.Errorf("failed to write envelope data to stream: %v", err)
 	}
 	if n != len(payloadEnvelope) {
 		log.Errorf("failed to write the envelope size %d to stream, wrote: %d ", len(payloadEnvelope), n)
@@ -240,7 +240,7 @@ func (bd *Protocol) onBlockchainHeightRequest(s network.Stream) {
 	data, _ := proto.Marshal(&response)
 	n, err := s.Write(data)
 	if err != nil || n != len(data) {
-		log.Errorf("failed to write to block height stream: %s", err.Error())
+		log.Errorf("failed to write to block height stream: %v", err)
 	}
 	s.Close()
 }

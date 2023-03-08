@@ -86,7 +86,7 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 	for _, tx := range mempoolTransactions {
 		fromBytes, err := hexutil.Decode(tx.From)
 		if err != nil {
-			log.Errorf("failed to decode from field from transaction: %s", err.Error())
+			log.Errorf("failed to decode from field from transaction: %v", err)
 			continue
 		}
 
@@ -98,19 +98,19 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 		state, err := m.blockchain.GetAddressState(fromBytes)
 		if err != nil {
 			// TODO: remove them from mempool, also handle for the below cases
-			log.Errorf("failed to get address state of %s : %s", tx.From, err.Error())
+			log.Errorf("failed to get address state of %s : %v", tx.From, err)
 			continue
 		}
 
 		balanceFrom, err := state.GetBalance()
 		if err != nil {
-			log.Errorf("failed to get address balance of %s : %s", tx.From, err.Error())
+			log.Errorf("failed to get address balance of %s : %v", tx.From, err)
 			continue
 		}
 
 		nounceFrom, err := state.GetNounce()
 		if err != nil {
-			log.Errorf("failed to get address nounce of %s : %s", tx.From, err.Error())
+			log.Errorf("failed to get address nounce of %s : %v", tx.From, err)
 			continue
 		}
 

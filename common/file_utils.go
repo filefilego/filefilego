@@ -588,6 +588,10 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 
 	fileSize := int(fileStats.Size())
 
+	if fileSize == 0 {
+		return nil, errors.New("file size is zero")
+	}
+
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 0)
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomSegments)
 	if !ok {

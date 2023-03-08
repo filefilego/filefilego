@@ -531,15 +531,13 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 }
 
 func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair) {
-	const chainID = "0x01"
-
 	keypair, err := ffgcrypto.GenerateKeyPair()
 	assert.NoError(t, err)
 
 	pkyData, err := keypair.PublicKey.Raw()
 	assert.NoError(t, err)
 
-	mainChain, err := hexutil.Decode(chainID)
+	mainChain, err := hexutil.Decode(transaction.ChainID)
 	assert.NoError(t, err)
 
 	addr, err := ffgcrypto.RawPublicToAddress(pkyData)
