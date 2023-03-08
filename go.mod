@@ -13,7 +13,7 @@ require (
 	github.com/libp2p/go-libp2p v0.26.2
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
 	github.com/libp2p/go-libp2p-pubsub v0.9.2
-	github.com/microcosm-cc/bluemonday v1.0.22
+	github.com/microcosm-cc/bluemonday v1.0.23
 	github.com/multiformats/go-multiaddr v0.8.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
