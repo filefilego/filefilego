@@ -1156,6 +1156,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 			}
 			totalFileBytesTransfered += uint64(wroteN)
+			d.contractStore.IncrementTransferedBytes(contractHashHex, request.FileHash, uint64(wroteN))
 		}
 
 		if err == io.EOF {
