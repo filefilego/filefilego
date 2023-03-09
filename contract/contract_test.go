@@ -145,4 +145,13 @@ func TestStoreMethods(t *testing.T) {
 
 	fileInfo, err = store2.GetContractFileInfo("0x0a", fileHash)
 	assert.EqualError(t, err, "contract not found")
+
+	transfered := store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(0), transfered)
+	store2.IncrementTransferedBytes("0x0a", []byte{75}, 10)
+	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(10), transfered)
+	store2.IncrementTransferedBytes("0x0a", []byte{75}, 10)
+	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(20), transfered)
 }

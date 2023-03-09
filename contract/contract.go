@@ -31,6 +31,8 @@ type Interface interface {
 	ReleaseContractFees(contractHash string)
 	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
+	IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
+	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 }
 
 // FileInfo represents a contract with the file information.
@@ -53,7 +55,9 @@ type Store struct {
 	fileContracts        map[string][]FileInfo
 	contracts            map[string]*messages.DownloadContractProto
 	releasedContractFees map[string]struct{}
+	bytesTransfered      map[string]map[string]uint64
 	mu                   sync.RWMutex
+	muRC                 sync.RWMutex
 }
 
 type persistedData struct {
@@ -73,23 +77,44 @@ func New(db database.Database) (*Store, error) {
 		fileContracts:        make(map[string][]FileInfo),
 		contracts:            make(map[string]*messages.DownloadContractProto),
 		releasedContractFees: make(map[string]struct{}),
+		bytesTransfered:      make(map[string]map[string]uint64),
 	}
 
 	return store, nil
 }
 
-// ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.
-func (c *Store) ReleaseContractFees(contractHash string) {
+// IncrementTransferedBytes increments the number of bytes transfered for a file.
+func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	transfered, ok := c.bytesTransfered[contractHash][string(fileHash)]
+	if !ok {
+		c.bytesTransfered[contractHash] = make(map[string]uint64)
+	}
+	transfered += count
+	c.bytesTransfered[contractHash][string(fileHash)] = transfered
+}
+
+// GetTransferedBytes gets the transfered bytes for a file.
+func (c *Store) GetTransferedBytes(contractHash string, fileHash []byte) uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.bytesTransfered[contractHash][string(fileHash)]
+}
+
+// ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.
+func (c *Store) ReleaseContractFees(contractHash string) {
+	c.muRC.Lock()
+	defer c.muRC.Unlock()
 
 	c.releasedContractFees[contractHash] = struct{}{}
 }
 
 // GetReleaseContractFeesStatus returns true if contract fees were released.
 func (c *Store) GetReleaseContractFeesStatus(contractHash string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muRC.RLock()
+	defer c.muRC.RUnlock()
 
 	_, ok := c.releasedContractFees[contractHash]
 	return ok
@@ -107,6 +132,8 @@ func (c *Store) DeleteContract(contractHash string) error {
 
 	delete(c.contracts, contractHash)
 	delete(c.fileContracts, contractHash)
+	delete(c.bytesTransfered, contractHash)
+	delete(c.releasedContractFees, contractHash)
 
 	_ = c.persistToDB()
 
