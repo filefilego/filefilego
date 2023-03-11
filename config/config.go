@@ -35,6 +35,7 @@ type global struct {
 	DataVerifierVerificationFees            string
 	DataVerifierTransactionFees             string
 	DataDownloadsPath                       string
+	SuperLightNode                          bool
 }
 
 type p2p struct {
@@ -187,6 +188,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(DataDownloadsPath.Name) {
 		conf.Global.DataDownloadsPath = ctx.String(DataDownloadsPath.Name)
+	}
+
+	if ctx.IsSet(SuperLightNode.Name) {
+		conf.Global.SuperLightNode = ctx.Bool(SuperLightNode.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {

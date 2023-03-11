@@ -63,6 +63,7 @@ type Interface interface {
 	GetPeerID() peer.ID
 	Bootstrap(ctx context.Context, bootstrapPeers []string) error
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
+	JoinPubSubNetwork(ctx context.Context, topicName string) error
 }
 
 // Node represents all the node functionalities
@@ -288,8 +289,8 @@ func (n *Node) PublishMessageToNetwork(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// HandleIncomingMessages gets the messages from gossip network.
-func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) error {
+// JoinPubSubNetwork joins the gossip network.
+func (n *Node) JoinPubSubNetwork(ctx context.Context, topicName string) error {
 	if n.gossipTopic != nil {
 		return errors.New("already subscribed to topic")
 	}
@@ -300,8 +301,16 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 	}
 
 	n.gossipTopic = topic
+	return nil
+}
 
-	sub, err := topic.Subscribe()
+// HandleIncomingMessages gets the messages from gossip network.
+func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) error {
+	if n.gossipTopic == nil {
+		return errors.New("not subscribed to to topic")
+	}
+
+	sub, err := n.gossipTopic.Subscribe()
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to topic %s: %w", topicName, err)
 	}
