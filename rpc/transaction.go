@@ -167,7 +167,7 @@ func (api *TransactionAPI) validateBroadcastTxSetResponse(ctx context.Context, t
 	response.Transaction = toJSONTransaction(*tx)
 
 	if err := api.publisher.PublishMessageToNetwork(ctx, txBytes); err != nil {
-		return fmt.Errorf("failed to public transaction to network: %w", err)
+		return fmt.Errorf("failed to publish transaction to network: %w", err)
 	}
 	return nil
 }

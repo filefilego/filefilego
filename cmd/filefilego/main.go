@@ -216,8 +216,6 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
 	}
 
-	log.Info(dataVerificationProtocol)
-
 	// validator node
 	if conf.Global.Validator {
 		keyData, err := os.ReadFile(conf.Global.ValidatorKeypath)
@@ -327,6 +325,28 @@ func run(ctx *cli.Context) error {
 		err = s.RegisterService(transactionAPI, internalrpc.TransactionServiceNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to register transaction rpc api service: %w", err)
+		}
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
+		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine, storageEngine)
+		if err != nil {
+			return fmt.Errorf("failed to setup channel rpc api: %w", err)
+		}
+		err = s.RegisterService(channelAPI, internalrpc.ChannelServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register channel rpc api service: %w", err)
+		}
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, node)
+		if err != nil {
+			return fmt.Errorf("failed to setup data transfer rpc api: %w", err)
+		}
+		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register data transfer rpc api service: %w", err)
 		}
 	}
 

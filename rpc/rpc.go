@@ -11,3 +11,9 @@ const FilefilegoServiceNamespace = "filefilego"
 
 // TransactionServiceNamespace is the namespace for transaction service rpc.
 const TransactionServiceNamespace = "transaction"
+
+// ChannelServiceNamespace is the namespace for channel service rpc.
+const ChannelServiceNamespace = "channel"
+
+// DataTransferServiceNamespace is the namespace for data transfer service rpc.
+const DataTransferServiceNamespace = "data_transfer"

@@ -46,6 +46,21 @@ func ToDataQueryRequest(dqr *DataQueryRequestProto) DataQueryRequest {
 	return r
 }
 
+// ToDataQueryRequestProto returns a protobuf message of DataQueryRequest object.
+func ToDataQueryRequestProto(dqr DataQueryRequest) *DataQueryRequestProto {
+	r := DataQueryRequestProto{
+		FileHashes:   make([][]byte, len(dqr.FileHashes)),
+		FromPeerAddr: dqr.FromPeerAddr,
+		Hash:         make([]byte, len(dqr.Hash)),
+		Timestamp:    dqr.Timestamp,
+	}
+
+	copy(r.FileHashes, dqr.FileHashes)
+	copy(r.Hash, dqr.Hash)
+
+	return &r
+}
+
 // GetHash gets the hash of data query request.
 func (dqr DataQueryRequest) GetHash() []byte {
 	fileHahes := []byte{}

@@ -58,7 +58,7 @@ const (
 
 // Interface specifies the data verification functionalities.
 type Interface interface {
-	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error
+	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) (*messages.DownloadContractProto, error)
 	TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error
 	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error)
 	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestsProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
@@ -622,7 +622,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 	}
 
 	if err := d.publisher.PublishMessageToNetwork(context.Background(), txBytes); err != nil {
-		return fmt.Errorf("failed to public transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
+		return fmt.Errorf("failed to publish transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
 	return nil
