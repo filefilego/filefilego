@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/filefilego/filefilego/contract"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -19,6 +20,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		dataQueryProtocol        dataquery.Interface
 		dataVerificationProtocol dataverification.Interface
 		publisherNodesFinder     PublisherNodesFinder
+		contractStore            contract.Interface
 		expErr                   string
 	}{
 		"no host": {
@@ -39,11 +41,19 @@ func TestNewDataTransferAPI(t *testing.T) {
 			dataVerificationProtocol: &dataverification.Protocol{},
 			expErr:                   "publisherNodeFinder is nil",
 		},
+		"no contractStore": {
+			host:                     h,
+			dataQueryProtocol:        &dataquery.Protocol{},
+			dataVerificationProtocol: &dataverification.Protocol{},
+			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
+			expErr:                   "contractStore is nil",
+		},
 		"success": {
 			host:                     h,
 			dataQueryProtocol:        &dataquery.Protocol{},
 			dataVerificationProtocol: &dataverification.Protocol{},
 			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
+			contractStore:            &contract.Store{},
 		},
 	}
 
@@ -51,7 +61,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder)
+			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder, tt.contractStore)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)

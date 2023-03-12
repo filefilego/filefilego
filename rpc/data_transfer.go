@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/filefilego/filefilego/block"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
+	"github.com/filefilego/filefilego/contract"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
@@ -32,10 +35,11 @@ type DataTransferAPI struct {
 	dataQueryProtocol        dataquery.Interface
 	dataVerificationProtocol dataverification.Interface
 	publisherNodesFinder     PublisherNodesFinder
+	contractStore            contract.Interface
 }
 
 // NewDataTransferAPI creates a new data transfer API to be served using JSONRPC.
-func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder) (*DataTransferAPI, error) {
+func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder, contractStore contract.Interface) (*DataTransferAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -52,11 +56,16 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 		return nil, errors.New("publisherNodeFinder is nil")
 	}
 
+	if contractStore == nil {
+		return nil, errors.New("contractStore is nil")
+	}
+
 	return &DataTransferAPI{
 		host:                     host,
 		dataQueryProtocol:        dataQueryProtocol,
 		dataVerificationProtocol: dataVerificationProtocol,
 		publisherNodesFinder:     publisherNodeFinder,
+		contractStore:            contractStore,
 	}, nil
 }
 
@@ -258,6 +267,163 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 		}
 
 		response.Responses = append(response.Responses, dqrJSON)
+	}
+
+	return nil
+}
+
+// DownloadFileArgs represent args.
+type DownloadFileArgs struct {
+	ContractHash string `json:"contract_hash"`
+	FileHash     string `json:"file_hash"`
+	FileSize     uint64 `json:"file_size"`
+}
+
+// DownloadFileArgs represents a response.
+type DownloadFileResponse struct{}
+
+// DownloadFile downloads a file from a contract.
+func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs, response *DownloadFileResponse) error {
+	downloadContract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode file hash: %w", err)
+	}
+
+	fileHoster, err := peer.Decode(downloadContract.FileHosterResponse.FromPeerAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode file hoster's peer id: %w", err)
+	}
+
+	request := &messages.FileTransferInfoProto{
+		ContractHash: downloadContract.ContractHash,
+		FileHash:     fileHash,
+		FileSize:     args.FileSize,
+	}
+
+	go func() {
+		_, err := api.dataVerificationProtocol.RequestFileTransfer(r.Context(), fileHoster, request)
+		if err != nil {
+			api.contractStore.SetError(args.ContractHash, fileHash, err.Error())
+		}
+	}()
+
+	return nil
+}
+
+// DownloadFileProgressArgs represent args.
+type DownloadFileProgressArgs struct {
+	ContractHash string `json:"contract_hash"`
+	FileHash     string `json:"file_hash"`
+}
+
+// DownloadFileProgressResponse represents the response of a download file progress.
+type DownloadFileProgressResponse struct {
+	Error           string `json:"error"`
+	BytesTransfered uint64 `json:"bytes_transfered"`
+}
+
+// DownloadFileProgress returns the download progress of a file.
+func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *DownloadFileProgressArgs, response *DownloadFileProgressResponse) error {
+	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode file hash: %w", err)
+	}
+
+	fileInfo, err := api.contractStore.GetContractFileInfo(args.ContractHash, fileHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	response.BytesTransfered = api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	response.Error = fileInfo.Error
+
+	return nil
+}
+
+// SendFileMerkleTreeNodesToVerifierArgs represents args.
+type SendFileMerkleTreeNodesToVerifierArgs struct {
+	ContractHash string `json:"contract_hash"`
+	FileHash     string `json:"file_hash"`
+}
+
+// SendFileMerkleTreeNodesToVerifierResponse represents a struct.
+type SendFileMerkleTreeNodesToVerifierResponse struct{}
+
+// SendFileMerkleTreeNodesToVerifier sends the merkle tree nodes of a downloaded encrypted file to verifier.
+func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, args *SendFileMerkleTreeNodesToVerifierArgs, response *SendFileMerkleTreeNodesToVerifierResponse) error {
+	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode file hash: %w", err)
+	}
+
+	downloadContract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	fileInfo, err := api.contractStore.GetContractFileInfo(args.ContractHash, fileHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	if fileInfo.Error != "" {
+		return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
+	}
+
+	if fileInfo.FileSize != transferedBytes {
+		return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+	}
+
+	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
+	downloadDir := api.dataVerificationProtocol.GetDownloadDirectory()
+	fileHashWithPrefix := hexutil.Encode(fileHash)
+	destinationFilePath := filepath.Join(downloadDir, args.ContractHash, fileHashWithPrefix)
+
+	orderedSlice := make([]int, totalDesiredSegments)
+	for i := 0; i < totalDesiredSegments; i++ {
+		orderedSlice[i] = i
+	}
+
+	merkleNodes, err := common.HashFileBlockSegments(destinationFilePath, totalDesiredSegments, orderedSlice)
+	if err != nil {
+		return fmt.Errorf("failed to hash downloaded file block segments: %w", err)
+	}
+
+	contractHash, err := hexutil.Decode(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode contract hash: %w", err)
+	}
+
+	merkleRequest := &messages.MerkleTreeNodesOfFileContractProto{
+		ContractHash:    contractHash,
+		FileHash:        fileHash,
+		MerkleTreeNodes: make([][]byte, len(merkleNodes)),
+	}
+
+	for i, v := range merkleNodes {
+		merkleRequest.MerkleTreeNodes[i] = make([]byte, len(v.X))
+		copy(merkleRequest.MerkleTreeNodes[i], v.X)
+	}
+
+	publicKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get verifier's public key: %w", err)
+	}
+
+	verifierID, err := peer.IDFromPublicKey(publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get verifier's peer id: %w", err)
+	}
+
+	err = api.dataVerificationProtocol.SendFileMerkleTreeNodesToVerifier(r.Context(), verifierID, merkleRequest)
+	if err != nil {
+		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
 	}
 
 	return nil

@@ -65,6 +65,8 @@ type Interface interface {
 	SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error
 	SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error
 	RequestFileTransfer(ctx context.Context, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
+	GetDownloadDirectory() string
+	GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int)
 }
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -147,6 +149,16 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 	p.host.SetStreamHandler(ContractTransferProtocolID, p.handleIncomingContractTransfer)
 
 	return p, nil
+}
+
+// GetMerkleTreeFileSegmentsEncryptionPercentage returns the total merkle tree nodes and percentage encryption.
+func (d *Protocol) GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int) {
+	return d.merkleTreeTotalSegments, d.encryptionPercentage
+}
+
+// GetDownloadDirectory returns the download directory.
+func (d *Protocol) GetDownloadDirectory() string {
+	return d.downloadDirectory
 }
 
 // handleIncomingContractVerifierAcceptance handles incoming contracts to verifier nodes for acceptance.
@@ -1153,6 +1165,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])
 			if wroteN != n || err != nil {
+				d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err).Error())
 				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 			}
 			totalFileBytesTransfered += uint64(wroteN)
@@ -1164,6 +1177,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		}
 
 		if err != nil {
+			d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("fialed to read file content to buffer: %w", err).Error())
 			return "", fmt.Errorf("fialed to read file content to buffer: %w", err)
 		}
 	}
