@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -280,7 +281,9 @@ type DownloadFileArgs struct {
 }
 
 // DownloadFileArgs represents a response.
-type DownloadFileResponse struct{}
+type DownloadFileResponse struct {
+	Status string `json:"status"`
+}
 
 // DownloadFile downloads a file from a contract.
 func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs, response *DownloadFileResponse) error {
@@ -311,6 +314,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 			api.contractStore.SetError(args.ContractHash, fileHash, err.Error())
 		}
 	}()
+
+	response.Status = "started"
 
 	return nil
 }
@@ -352,7 +357,9 @@ type SendFileMerkleTreeNodesToVerifierArgs struct {
 }
 
 // SendFileMerkleTreeNodesToVerifierResponse represents a struct.
-type SendFileMerkleTreeNodesToVerifierResponse struct{}
+type SendFileMerkleTreeNodesToVerifierResponse struct {
+	Success bool `json:"success"`
+}
 
 // SendFileMerkleTreeNodesToVerifier sends the merkle tree nodes of a downloaded encrypted file to verifier.
 func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, args *SendFileMerkleTreeNodesToVerifierArgs, response *SendFileMerkleTreeNodesToVerifierResponse) error {
@@ -424,6 +431,110 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 	err = api.dataVerificationProtocol.SendFileMerkleTreeNodesToVerifier(r.Context(), verifierID, merkleRequest)
 	if err != nil {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
+	}
+
+	response.Success = true
+
+	return nil
+}
+
+// RequestEncryptionDataFromVerifierArgs represents args.
+type RequestEncryptionDataFromVerifierArgs struct {
+	ContractHash      string   `json:"contract_hash"`
+	FileHashes        []string `json:"file_hashes"`
+	RestoredFilePaths []string `json:"restored_file_paths"`
+}
+
+// RequestEncryptionDataFromVerifierResponse represents the response.
+type RequestEncryptionDataFromVerifierResponse struct {
+	DecryptedFilePaths []string `json:"decrypted_file_paths"`
+}
+
+// RequestEncryptionDataFromVerifierAndDecrypt requires encryption data from verifier and decrypts.
+func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.Request, args *RequestEncryptionDataFromVerifierArgs, response *RequestEncryptionDataFromVerifierResponse) error {
+	downloadContract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	encRequest := &messages.KeyIVRequestsProto{
+		KeyIvs: make([]*messages.KeyIVProto, 0),
+	}
+
+	for _, v := range args.FileHashes {
+		fileHash, err := hexutil.DecodeNoPrefix(v)
+		if err != nil {
+			return fmt.Errorf("failed to decode file hash: %w", err)
+		}
+
+		fileInfo, err := api.contractStore.GetContractFileInfo(args.ContractHash, fileHash)
+		if err != nil {
+			return fmt.Errorf("contract not found: %w", err)
+		}
+
+		transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		if fileInfo.Error != "" {
+			return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
+		}
+
+		if fileInfo.FileSize != transferedBytes {
+			return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+		}
+
+		contractHashBytes, err := hexutil.Decode(args.ContractHash)
+		if err != nil {
+			return fmt.Errorf("failed to decode contract hash: %w", err)
+		}
+		encRequest.KeyIvs = append(encRequest.KeyIvs, &messages.KeyIVProto{
+			ContractHash: contractHashBytes,
+			FileHash:     fileHash,
+		})
+	}
+
+	publicKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get verifier's public key: %w", err)
+	}
+
+	verifierID, err := peer.IDFromPublicKey(publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get verifier's peer id: %w", err)
+	}
+
+	encryptionData, err := api.dataVerificationProtocol.RequestEncryptionData(context.Background(), verifierID, encRequest)
+	if err != nil {
+		return fmt.Errorf("failed to request decryption data from verifier: %w", err)
+	}
+
+	response.DecryptedFilePaths = make([]string, 0)
+	for i, v := range encryptionData.KeyIvRandomizedFileSegments {
+		foundIdx := -1
+		for j, w := range encRequest.KeyIvs {
+			if bytes.Equal(v.FileHash, w.FileHash) {
+				foundIdx = j
+				break
+			}
+		}
+
+		if foundIdx == -1 {
+			return fmt.Errorf("decryption data doesn't contain the requested file hash: %s", hexutil.Encode(v.FileHash))
+		}
+
+		randomizedSegsFromKey := make([]int, len(encryptionData.KeyIvRandomizedFileSegments[i].RandomizedSegments))
+		for i, v := range encryptionData.KeyIvRandomizedFileSegments[i].RandomizedSegments {
+			randomizedSegsFromKey[i] = int(v)
+		}
+
+		outputPathOfFile := args.RestoredFilePaths[foundIdx]
+
+		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.Encode(v.FileHash))
+
+		decryptedPath, err := api.dataVerificationProtocol.DecryptFile(inputEncryptedFilePath, outputPathOfFile, encryptionData.KeyIvRandomizedFileSegments[i].Key, encryptionData.KeyIvRandomizedFileSegments[i].Iv, common.EncryptionType(encryptionData.KeyIvRandomizedFileSegments[i].EncryptionType), randomizedSegsFromKey)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.Encode(v.FileHash), err)
+		}
+
+		response.DecryptedFilePaths = append(response.DecryptedFilePaths, decryptedPath)
 	}
 
 	return nil

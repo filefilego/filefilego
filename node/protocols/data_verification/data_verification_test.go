@@ -472,8 +472,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
 
-	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
-	assert.NoError(t, err)
+	// err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
+	// assert.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
 	contractFilesSentData, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
 	assert.NoError(t, err)
@@ -516,8 +516,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, merkleRequest2.MerkleTreeNodes, retrievedContractInfo2.MerkleTreeNodes)
 
-	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFile2path, contractHashHex, fileHash2Bytes)
-	assert.NoError(t, err)
+	// err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFile2path, contractHashHex, fileHash2Bytes)
+	// assert.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
 	contractFilesSentData2, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHash2Bytes)
 	assert.NoError(t, err)

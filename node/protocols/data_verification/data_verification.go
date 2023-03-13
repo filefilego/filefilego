@@ -1389,6 +1389,27 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 		return
 	}
 
+	publicKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
+	if err != nil {
+		log.Errorf("failed to get verifier's public key in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	verifierID, err := peer.IDFromPublicKey(publicKey)
+	if err != nil {
+		log.Errorf("failed to get verifier's peer id in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	// send the data to verifier
+	// TODO: handle a way to prevent concurrent sent of data to verifier.
+	go func() {
+		err := d.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.Background(), verifierID, fileMetadata.FilePath, contractHash, fileTransferRequest.FileHash)
+		if err != nil {
+			log.Errorf("failed to send key iv and unencrypted data to verifier: %v", err)
+		}
+	}()
+
 	// write to the stream the content of the input file while encrypting and shuffling its segments.
 	err = common.EncryptWriteOutput(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
 	if err != nil {
