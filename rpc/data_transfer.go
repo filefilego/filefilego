@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PublisherNodesFinder is an interface that specifies finding nodes and publishing a message to the netwoek functionalities.
+// PublisherNodesFinder is an interface that specifies finding nodes and publishing a message to the network functionalities.
 type PublisherNodesFinder interface {
 	NetworkMessagePublisher
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
