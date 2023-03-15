@@ -403,20 +403,24 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			FromPeerAddr:          n.GetID(),
 			UnavailableFileHashes: make([][]byte, 0),
 			FileHashes:            make([][]byte, 0),
+			FileHashesSizes:       make([]uint64, 0),
 			HashDataQueryRequest:  make([]byte, len(dataQueryRequest.Hash)),
 			PublicKey:             make([]byte, len(pubKeyBytes)),
 			Timestamp:             time.Now().Unix(),
 		}
 
-		totalSize := int64(0)
 		for _, v := range dataQueryRequest.FileHashes {
 			fileMetaData, err := n.storage.GetFileMetadata(hexutil.Encode(v))
 			if err != nil {
 				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
 				continue
 			}
-			totalSize += fileMetaData.Size
 			response.FileHashes = append(response.FileHashes, v)
+			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
+		}
+
+		if len(response.FileHashes) == 0 {
+			return nil
 		}
 
 		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)

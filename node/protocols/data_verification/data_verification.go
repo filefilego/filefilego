@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -166,6 +167,11 @@ func (d *Protocol) GetDownloadDirectory() string {
 func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
+
+	if !d.dataVerifier {
+		log.Error("got a contract to be verified but this node is not a verifier handleIncomingContractVerifierAcceptance stream")
+		return
+	}
 
 	// read the first 8 bytes to determine the size of the message
 	msgLengthBuffer := make([]byte, 8)
@@ -357,6 +363,25 @@ func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
 	verifierPubKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
 	if err != nil {
 		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %v", err)
+		return
+	}
+
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.VerifierPublicKey)
+	if err != nil {
+		log.Errorf("failed to get address of verifier from its public key in handleIncomingContractTransfer stream: %v", err)
+		return
+	}
+
+	verifiers := block.GetBlockVerifiers()
+	foundVerifier := false
+	for _, v := range verifiers {
+		if v.Address == verifierAddr {
+			foundVerifier = true
+			break
+		}
+	}
+	if !foundVerifier {
+		log.Errorf("contract verifier is not a data verifier: %s", verifierAddr)
 		return
 	}
 

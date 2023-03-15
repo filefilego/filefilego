@@ -365,6 +365,17 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	contractHashHex := hexutil.Encode(contractHash)
 
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
+	assert.NoError(t, err)
+
+	// create a transaction that contains the contract details and perform state update
+	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
+	assert.NoError(t, err)
+	block.SetBlockVerifiers(block.Verifier{
+		Address:   verifierAddr,
+		PublicKey: hexutil.Encode(verifier1PublicKeyBytes),
+	})
+
 	// send a contract to a node which is not supposed to receive this contract
 	err = protocolVerifier1.TransferContract(context.TODO(), h2.ID(), signedContract)
 	assert.EqualError(t, err, "failed to read confirmation byte: EOF")
@@ -382,13 +393,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	_, err = protocolH1.contractStore.GetContract(contractHashHex)
 	assert.NoError(t, err)
 
-	// create a transaction that contains the contract details and perform state update
-	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
-	assert.NoError(t, err)
-
-	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
-	assert.NoError(t, err)
-
 	dcinTX := &messages.DownloadContractInTransactionDataProto{
 		ContractHash:               signedContract.ContractHash,
 		FileRequesterNodePublicKey: signedContract.FileRequesterNodePublicKey,
@@ -404,10 +408,6 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	err = validBlock2.Sign(h2.Peerstore().PrivKey(h2.ID()))
 	assert.NoError(t, err)
-	block.SetBlockVerifiers(block.Verifier{
-		Address:   fromaddr,
-		PublicKey: hexutil.Encode(h2PublicKeyBytes),
-	})
 
 	err = blockchain1.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)

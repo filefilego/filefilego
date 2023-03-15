@@ -209,7 +209,7 @@ func SignDownloadContractProto(privateKey crypto.PrivKey, contract *DownloadCont
 }
 
 // VerifyDownloadContractProto verifies a download contract.
-func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadContractProto) (bool, error) {
+func VerifyDownloadContractProto(publicKeyVerifier crypto.PubKey, contract *DownloadContractProto) (bool, error) {
 	dataQueryResponse := ToDataQueryResponse(contract.FileHosterResponse)
 	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
 	if err != nil {
@@ -251,7 +251,7 @@ func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadCont
 		[]byte{},
 	)
 
-	ok, err = publicKey.Verify(data, contract.VerifierSignature)
+	ok, err = publicKeyVerifier.Verify(data, contract.VerifierSignature)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify download contract signature using public key: %w", err)
 	}
