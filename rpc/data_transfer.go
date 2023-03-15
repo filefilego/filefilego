@@ -609,10 +609,14 @@ type filesNeededInDataQueryResponse struct {
 
 // CreateContractsFromDataQueryResponses creates contracts from the available data query responses.
 func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Request, args *CreateContractsFromDataQueryResponsesArgs, response *CreateContractsFromDataQueryResponsesResponse) error {
+	response.ContractHashes = make([]string, 0)
 	requests, ok := api.dataQueryProtocol.GetQueryHistory(args.DataQueryRequestHash)
 	if !ok {
 		return fmt.Errorf("data query request not found %s", args.DataQueryRequestHash)
 	}
+
+	// TODO: data query responses validation of available files hashes and unavailable files hashes
+	// they should sum to the total files requested from the data query
 
 	responses, ok := api.dataQueryProtocol.GetQueryResponse(args.DataQueryRequestHash)
 	if !ok {
@@ -623,7 +627,8 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 	if err != nil {
 		return fmt.Errorf("failed to get files needed from responses: %w", err)
 	}
-	// TODO check which one to send and how many contracts from filesNeeded
+
+	// TODO: check which one to send and how many contracts from filesNeeded
 
 	requesterPubKeyBytes, err := api.host.Peerstore().PubKey(api.host.ID()).Raw()
 	if err != nil {
@@ -725,6 +730,11 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 
 	if len(selectedSignedDownloadContracts) != len(downloadContracts) {
 		return errors.New("incomplete number of contracts returned from verifiers")
+	}
+
+	for _, v := range selectedSignedDownloadContracts {
+		_ = api.contractStore.CreateContract(v)
+		response.ContractHashes = append(response.ContractHashes, hexutil.Encode(v.ContractHash))
 	}
 
 	return nil
@@ -851,6 +861,15 @@ func getFilesNeededFromDataQueryResponses(requests messages.DataQueryRequest, re
 				unavailableFileHashes = append(unavailableFileHashes[:remove], unavailableFileHashes[remove+1:]...)
 			}
 		}
+	}
+
+	flattenFilesNeeded := make([][]byte, 0)
+	for _, v := range wantedResponses {
+		flattenFilesNeeded = append(flattenFilesNeeded, v.fileHashesNeeded...)
+	}
+
+	if len(flattenFilesNeeded) != len(requests.FileHashes) {
+		return nil, errors.New("failed to coordinate the responses into multiple contracts, found files aren't equal to the requested files")
 	}
 
 	return wantedResponses, nil

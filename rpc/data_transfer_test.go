@@ -284,9 +284,10 @@ func TestGetFilesNeededFromDataQueryResponses(t *testing.T) {
 
 	foundNumbers := 0
 	filesList := [][]byte{}
-	for _, v := range request.FileHashes {
-		for _, j := range needed2 {
-			for _, k := range j.fileHashesNeeded {
+
+	for _, j := range needed2 {
+		for _, k := range j.fileHashesNeeded {
+			for _, v := range request.FileHashes {
 				if bytes.Equal(k, v) {
 					filesList = append(filesList, k)
 					foundNumbers++
@@ -294,6 +295,7 @@ func TestGetFilesNeededFromDataQueryResponses(t *testing.T) {
 			}
 		}
 	}
+
 	assert.Equal(t, 3, foundNumbers)
 	assert.ElementsMatch(t, filesList, request.FileHashes)
 }
