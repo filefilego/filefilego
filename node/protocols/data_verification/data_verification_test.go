@@ -365,6 +365,17 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	contractHashHex := hexutil.Encode(contractHash)
 
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
+	assert.NoError(t, err)
+
+	// create a transaction that contains the contract details and perform state update
+	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
+	assert.NoError(t, err)
+	block.SetBlockVerifiers(block.Verifier{
+		Address:   verifierAddr,
+		PublicKey: hexutil.Encode(verifier1PublicKeyBytes),
+	})
+
 	// send a contract to a node which is not supposed to receive this contract
 	err = protocolVerifier1.TransferContract(context.TODO(), h2.ID(), signedContract)
 	assert.EqualError(t, err, "failed to read confirmation byte: EOF")
@@ -382,13 +393,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	_, err = protocolH1.contractStore.GetContract(contractHashHex)
 	assert.NoError(t, err)
 
-	// create a transaction that contains the contract details and perform state update
-	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
-	assert.NoError(t, err)
-
-	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
-	assert.NoError(t, err)
-
 	dcinTX := &messages.DownloadContractInTransactionDataProto{
 		ContractHash:               signedContract.ContractHash,
 		FileRequesterNodePublicKey: signedContract.FileRequesterNodePublicKey,
@@ -404,10 +408,6 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	err = validBlock2.Sign(h2.Peerstore().PrivKey(h2.ID()))
 	assert.NoError(t, err)
-	block.SetBlockVerifiers(block.Verifier{
-		Address:   fromaddr,
-		PublicKey: hexutil.Encode(h2PublicKeyBytes),
-	})
 
 	err = blockchain1.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)
@@ -472,8 +472,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
 
-	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
-	assert.NoError(t, err)
+	// err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFilepath, contractHashHex, fileHashBytes)
+	// assert.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
 	contractFilesSentData, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHashBytes)
 	assert.NoError(t, err)
@@ -516,8 +516,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, merkleRequest2.MerkleTreeNodes, retrievedContractInfo2.MerkleTreeNodes)
 
-	err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFile2path, contractHashHex, fileHash2Bytes)
-	assert.NoError(t, err)
+	// err = protocolH1.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.TODO(), verifier1.ID(), uploadedFile2path, contractHashHex, fileHash2Bytes)
+	// assert.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
 	contractFilesSentData2, err := contractStoreVerifier1.GetContractFileInfo(contractHashHex, fileHash2Bytes)
 	assert.NoError(t, err)

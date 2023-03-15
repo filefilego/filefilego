@@ -42,6 +42,7 @@ type Interface interface {
 	PutQueryResponse(key string, val messages.DataQueryResponse)
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
 	SendDataQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.DataQueryResponseProto) error
+	RequestDataQueryResponseTransfer(ctx context.Context, peerID peer.ID, request *messages.DataQueryResponseTransferProto) error
 }
 
 // Protocol wraps the data query protocols and handlers
@@ -94,6 +95,7 @@ func (d *Protocol) GetQueryHistory(key string) (messages.DataQueryRequest, bool)
 func (d *Protocol) PutQueryResponse(key string, val messages.DataQueryResponse) {
 	d.queryResponseMux.Lock()
 	defer d.queryResponseMux.Unlock()
+
 	tmp := d.queryResponse[key]
 	idx := -1
 	for i, v := range tmp {
@@ -260,7 +262,6 @@ func (d *Protocol) handleIncomingDataQueryResponse(s network.Stream) {
 	}
 
 	dqr := messages.ToDataQueryResponse(&tmp)
-	// dqr.PublicKey
 	publicKeyHoster, err := crypto.PublicKeyFromBytes(dqr.PublicKey)
 	if err != nil {
 		log.Warnf("failed to get public key from data query response: %v", err)

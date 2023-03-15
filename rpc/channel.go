@@ -7,21 +7,20 @@ import (
 
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
-	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 )
 
 // ChannelAPI represents the channel rpc service.
 type ChannelAPI struct {
-	blockchain        blockchain.Interface
-	search            search.IndexSearcher
-	storage           storage.Interface
-	dataQueryProtocol dataquery.Interface
+	blockchain blockchain.Interface
+	search     search.IndexSearcher
+	storage    storage.Interface
+	// dataQueryProtocol dataquery.Interface
 }
 
 // NewChannelAPI creates a new channel API to be served using JSONRPC.
-func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher, storage storage.Interface, dataQueryProtocol dataquery.Interface) (*ChannelAPI, error) {
+func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher, storage storage.Interface) (*ChannelAPI, error) {
 	if bchain == nil {
 		return nil, errors.New("blockchain is nil")
 	}
@@ -34,15 +33,15 @@ func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher, sto
 		return nil, errors.New("storage is nil")
 	}
 
-	if dataQueryProtocol == nil {
-		return nil, errors.New("data query protocol is nil")
-	}
+	// if dataQueryProtocol == nil {
+	// 	return nil, errors.New("data query protocol is nil")
+	// }
 
 	return &ChannelAPI{
-		blockchain:        bchain,
-		search:            search,
-		storage:           storage,
-		dataQueryProtocol: dataQueryProtocol,
+		blockchain: bchain,
+		search:     search,
+		storage:    storage,
+		// dataQueryProtocol: dataQueryProtocol,
 	}, nil
 }
 

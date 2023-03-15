@@ -33,6 +33,7 @@ type Interface interface {
 	LoadFromDB() error
 	IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
+	SetError(contractHash string, fileHash []byte, errorMessage string)
 }
 
 // FileInfo represents a contract with the file information.
@@ -47,6 +48,7 @@ type FileInfo struct {
 	EncryptionType                        common.EncryptionType
 	ProofOfTransferVerified               bool
 	ReceivedUnencryptedDataFromFileHoster bool
+	Error                                 string
 }
 
 // Store represents the contract stores.
@@ -205,6 +207,44 @@ func (c *Store) GetContractFiles(contractHash string) ([]FileInfo, error) {
 	copy(filesInfos, fileContracts)
 
 	return filesInfos, nil
+}
+
+// SetError sets an error indication for a filehash
+func (c *Store) SetError(contractHash string, fileHash []byte, errorMessage string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fileContracts, ok := c.fileContracts[contractHash]
+	if !ok {
+		return
+	}
+
+	foundFileContractIndex := -1
+	for idx, v := range fileContracts {
+		if bytes.Equal(v.FileHash, fileHash) {
+			foundFileContractIndex = idx
+		}
+	}
+
+	// if file info item isn't there create it
+	if foundFileContractIndex == -1 {
+		fileInfo := FileInfo{
+			FileHash: make([]byte, len(fileHash)),
+			Error:    errorMessage,
+		}
+		copy(fileInfo.FileHash, fileHash)
+
+		fileInfoSlice := c.fileContracts[contractHash]
+		fileInfoSlice = append(fileInfoSlice, fileInfo)
+		c.fileContracts[contractHash] = fileInfoSlice
+		return
+	}
+
+	v := c.fileContracts[contractHash][foundFileContractIndex]
+	v.Error = errorMessage
+	c.fileContracts[contractHash][foundFileContractIndex] = v
+
+	_ = c.persistToDB()
 }
 
 // SetMerkleTreeNodes sets a merkle tree nodes of the file.

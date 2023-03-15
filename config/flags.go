@@ -110,6 +110,11 @@ var (
 		Usage: "Directory path for data downloads",
 	}
 
+	SuperLightNode = cli.BoolFlag{
+		Name:  "super_light_node",
+		Usage: "Runs a super light node",
+	}
+
 	RPCWhitelistFlag = cli.StringFlag{
 		Name:  "rpc_whitelist",
 		Usage: "Allow IP addresses to access the RPC servers",
@@ -236,6 +241,7 @@ var AppFlags = []cli.Flag{
 	&DataVerifierVerificationFees,
 	&DataVerifierTransactionFees,
 	&DataDownloadsPath,
+	&SuperLightNode,
 
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,

@@ -60,6 +60,7 @@ func main() {
 	app.Flags = config.AppFlags
 	app.Commands = []*cli.Command{
 		ffgcli.AccountCommand,
+		ffgcli.StorageCommand,
 	}
 	app.Suggest = true
 
@@ -79,6 +80,7 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to read node identity file: %w", err)
 	}
+
 	nodeIdentityPassphrase := conf.Global.NodeIdentityKeyPassphrase
 	if nodeIdentityPassphrase == "" {
 		fmt.Println("Node identity passphrase:")
@@ -88,16 +90,13 @@ func run(ctx *cli.Context) error {
 		}
 		nodeIdentityPassphrase = string(bytepw)
 	}
+
 	key, err := keystore.UnmarshalKey(nodeIdentityData, nodeIdentityPassphrase)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal node identity key file: %w", err)
 	}
 
-	connManager, err := connmgr.NewConnManager(
-		conf.P2P.MinPeers,
-		conf.P2P.MaxPeers,
-		connmgr.WithGracePeriod(time.Minute),
-	)
+	connManager, err := connmgr.NewConnManager(conf.P2P.MinPeers, conf.P2P.MaxPeers, connmgr.WithGracePeriod(time.Minute))
 	if err != nil {
 		return fmt.Errorf("failed to setup connection manager: %w", err)
 	}
@@ -120,16 +119,12 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup dht: %w", err)
 	}
-
 	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
 
-	blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
+	optsPS := []pubsub.Option{pubsub.WithMessageSigning(true), pubsub.WithMaxMessageSize(conf.P2P.GossipMaxMessageSize)} // 10 MB
+	gossip, err := pubsub.NewGossipSub(ctx.Context, host, optsPS...)
 	if err != nil {
-		return fmt.Errorf("failed to setup bleve search: %w", err)
-	}
-	searchEngine, err := search.New(blv)
-	if err != nil {
-		return fmt.Errorf("failed to setup search engine: %w", err)
+		return fmt.Errorf("failed to setup pub sub: %w", err)
 	}
 
 	db, err := leveldb.OpenFile(filepath.Join(conf.Global.DataDir, "blockchain.db"), nil)
@@ -137,24 +132,22 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to open leveldb database file: %w", err)
 	}
 	defer db.Close()
-
-	blockchainDB, err := database.New(db)
+	globalDB, err := database.New(db)
 	if err != nil {
-		return fmt.Errorf("failed to setup blockchain database: %w", err)
-	}
-	storageEngine, err := storage.New(blockchainDB, filepath.Join(conf.Global.DataDir, "storage"), true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
-	if err != nil {
-		return fmt.Errorf("failed to setup storage engine: %w", err)
+		return fmt.Errorf("failed to setup global database: %w", err)
 	}
 
-	optsPS := []pubsub.Option{
-		pubsub.WithMessageSigning(true),
-		pubsub.WithMaxMessageSize(conf.P2P.GossipMaxMessageSize), // 10 MB
-	}
+	// setup JSONRPC services
+	s := rpc.NewServer()
+	s.RegisterCodec(json.NewCodec(), "application/json")
 
-	gossip, err := pubsub.NewGossipSub(ctx.Context, host, optsPS...)
+	ffgNode := &node.Node{}
+	bchain := &blockchain.Blockchain{}
+	storageEngine := &storage.Storage{}
+	searchEngine := &search.Search{}
+	dataQueryProtocol, err := dataquery.New(host)
 	if err != nil {
-		return fmt.Errorf("failed to setup pub sub: %w", err)
+		return fmt.Errorf("failed to setup data query protocol: %w", err)
 	}
 
 	genesisblockValid, err := block.GetGenesisBlock()
@@ -162,114 +155,135 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
-	bchain, err := blockchain.New(blockchainDB, searchEngine, genesisblockValid.Hash)
-	if err != nil {
-		return fmt.Errorf("failed to setup blockchain: %w", err)
-	}
+	// super light node dependencies setup
+	if conf.Global.SuperLightNode {
+		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
+		if err != nil {
+			return fmt.Errorf("failed to setup super light blockchain: %w", err)
+		}
 
-	log.Info("verifying local blockchain")
-	start := time.Now()
-	err = bchain.InitOrLoad()
-	elapsed := time.Since(start)
-	log.Infof("finished verifying local blockchain in %s", elapsed)
-	if err != nil {
-		return fmt.Errorf("failed to start up blockchain: %w", err)
-	}
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{})
+		if err != nil {
+			return fmt.Errorf("failed to setup super light node node: %w", err)
+		}
+	} else {
+		// full node dependencies setup
+		if conf.Global.Storage {
+			storageEngine, err = storage.New(globalDB, filepath.Join(conf.Global.DataDir, "storage"), true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
+			if err != nil {
+				return fmt.Errorf("failed to setup storage engine: %w", err)
+			}
+		}
 
-	dataQueryProtocol, err := dataquery.New(host)
-	if err != nil {
-		return fmt.Errorf("failed to setup data query protocol: %w", err)
-	}
+		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
+		if err != nil {
+			return fmt.Errorf("failed to setup bleve search: %w", err)
+		}
 
-	blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
-	if err != nil {
-		return fmt.Errorf("failed to setup block downloader protocol: %w", err)
-	}
+		searchEngine, err = search.New(blv)
+		if err != nil {
+			return fmt.Errorf("failed to setup search engine: %w", err)
+		}
 
-	contractStore, err := contract.New(blockchainDB)
-	if err != nil {
-		return fmt.Errorf("failed to setup contract store: %w", err)
-	}
+		bchain, err = blockchain.New(globalDB, searchEngine, genesisblockValid.Hash)
+		if err != nil {
+			return fmt.Errorf("failed to setup blockchain: %w", err)
+		}
 
-	node, err := node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
-	if err != nil {
-		return fmt.Errorf("failed to setup node: %w", err)
+		log.Info("verifying local blockchain")
+		start := time.Now()
+		err = bchain.InitOrLoad()
+		if err != nil {
+			return fmt.Errorf("failed to start up blockchain: %w", err)
+		}
+		elapsed := time.Since(start)
+		log.Infof("finished verifying local blockchain in %s", elapsed)
+
+		blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
+		if err != nil {
+			return fmt.Errorf("failed to setup block downloader protocol: %w", err)
+		}
+
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+		if err != nil {
+			return fmt.Errorf("failed to setup full node: %w", err)
+		}
+
+		// validator node
+		if conf.Global.Validator && !conf.Global.SuperLightNode {
+			keyData, err := os.ReadFile(conf.Global.ValidatorKeypath)
+			if err != nil {
+				return fmt.Errorf("failed to read validator key file: %w", err)
+			}
+
+			key, err := keystore.UnmarshalKey(keyData, conf.Global.ValidatorPass)
+			if err != nil {
+				return fmt.Errorf("failed to restore validator private key file: %w", err)
+			}
+
+			blockValidator, err := validator.New(ffgNode, bchain, key.PrivateKey)
+			if err != nil {
+				return fmt.Errorf("failed to setup validator: %w", err)
+			}
+
+			go func(validator *validator.Validator) {
+				for {
+					tickDuration := blockValidatorIntervalSeconds * time.Second
+					<-time.After(tickDuration)
+					sealedBlock, err := validator.SealBlock(time.Now().Unix())
+					if err != nil {
+						log.Errorf("sealing block failed: %v", err)
+						continue
+					}
+					log.Infof("block %d sealed from verifier %s", sealedBlock.Number, key.Address)
+					// broadcast
+					go func() {
+						log.Infof("broadcasting block %d to %d peers", sealedBlock.Number, ffgNode.Peers().Len()-1)
+						if err := validator.BroadcastBlock(ctx.Context, sealedBlock); err != nil {
+							log.Errorf("failed to publish block to the network: %v", err)
+						}
+					}()
+				}
+			}(blockValidator)
+		}
+
+		// periodically sync
+		go func() {
+			for {
+				<-time.After(syncIntervalSeconds * time.Second)
+				if time.Now().Unix()-bchain.GetLastBlockUpdatedAt() >= triggerSyncSinceLastUpdateSeconds {
+					err := ffgNode.Sync(ctx.Context)
+					if err != nil {
+						log.Errorf("failed to sync: %v", err)
+						return
+					}
+					log.Infof("blockchain syncing finished with current blockchain height at %d", bchain.GetHeight())
+				}
+			}
+		}()
 	}
 
 	// advertise
-	node.Advertise(ctx.Context, "ffgnet")
-
+	ffgNode.Advertise(ctx.Context, "ffgnet")
 	// listen for pubsub messages
-	err = node.HandleIncomingMessages(ctx.Context, "ffgnet_pubsub")
+	err = ffgNode.JoinPubSubNetwork(ctx.Context, "ffgnet_pubsub")
 	if err != nil {
-		return fmt.Errorf("failed to start handling incoming pub sub messages: %w", err)
+		return fmt.Errorf("failed to listen for handling incoming pub sub messages: %w", err)
+	}
+
+	// if full node, then hanlde incoming block, transactions, and data queries
+	if !conf.Global.SuperLightNode {
+		err = ffgNode.HandleIncomingMessages(ctx.Context, "ffgnet_pubsub")
+		if err != nil {
+			return fmt.Errorf("failed to start handling incoming pub sub messages: %w", err)
+		}
 	}
 
 	// bootstrap
-	err = node.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
+	err = ffgNode.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
 	if err != nil {
 		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
-
-	dataVerificationProtocol, err := dataverification.New(host, contractStore, storageEngine, bchain, node, conf.Global.StorageFileMerkleTreeTotalSegments, conf.Global.StorageFileSegmentsEncryptionPercentage, conf.Global.DataDownloadsPath, conf.Global.DataVerifier, conf.Global.DataVerifierVerificationFees, conf.Global.DataVerifierTransactionFees)
-	if err != nil {
-		return fmt.Errorf("failed to setup data verification protocol: %w", err)
-	}
-
-	log.Info(dataVerificationProtocol)
-
-	// validator node
-	if conf.Global.Validator {
-		keyData, err := os.ReadFile(conf.Global.ValidatorKeypath)
-		if err != nil {
-			return fmt.Errorf("failed to read validator key file: %w", err)
-		}
-
-		key, err := keystore.UnmarshalKey(keyData, conf.Global.ValidatorPass)
-		if err != nil {
-			return fmt.Errorf("failed to restore validator private key file: %w", err)
-		}
-
-		blockValidator, err := validator.New(node, bchain, key.PrivateKey)
-		if err != nil {
-			return fmt.Errorf("failed to setup validator: %w", err)
-		}
-
-		go func(validator *validator.Validator) {
-			for {
-				tickDuration := blockValidatorIntervalSeconds * time.Second
-				<-time.After(tickDuration)
-				sealedBlock, err := validator.SealBlock(time.Now().Unix())
-				if err != nil {
-					log.Errorf("sealing block failed: %v", err)
-					continue
-				}
-				log.Infof("block %d sealed from verifier %s", sealedBlock.Number, key.Address)
-				// broadcast
-				go func() {
-					log.Infof("broadcasting block %d to %d peers", sealedBlock.Number, node.Peers().Len()-1)
-					if err := validator.BroadcastBlock(ctx.Context, sealedBlock); err != nil {
-						log.Errorf("failed to publish block to the network: %v", err)
-					}
-				}()
-			}
-		}(blockValidator)
-	}
-
-	// periodically sync
-	go func() {
-		for {
-			<-time.After(syncIntervalSeconds * time.Second)
-			if time.Now().Unix()-bchain.GetLastBlockUpdatedAt() >= triggerSyncSinceLastUpdateSeconds {
-				err := node.Sync(ctx.Context)
-				if err != nil {
-					log.Errorf("failed to sync: %v", err)
-					return
-				}
-				log.Infof("blockchain syncing finished with current blockchain height at %d", bchain.GetHeight())
-			}
-		}
-	}()
 
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
 	if err != nil {
@@ -281,10 +295,6 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
-
-	// setup JSONRPC services
-	s := rpc.NewServer()
-	s.RegisterCodec(json.NewCodec(), "application/json")
 
 	if contains(conf.RPC.EnabledServices, internalrpc.AccountServiceNamespace) {
 		accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
@@ -309,7 +319,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
-		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(node, bchain)
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(ffgNode, bchain)
 		if err != nil {
 			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
 		}
@@ -320,7 +330,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
-		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, node, bchain)
+		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain)
 		if err != nil {
 			return fmt.Errorf("failed to setup transaction rpc api: %w", err)
 		}
@@ -330,14 +340,61 @@ func run(ctx *cli.Context) error {
 		}
 	}
 
-	peers := node.Peers()
-	log.Infof("node id: %s", node.GetID())
+	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
+		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine, storageEngine)
+		if err != nil {
+			return fmt.Errorf("failed to setup channel rpc api: %w", err)
+		}
+		err = s.RegisterService(channelAPI, internalrpc.ChannelServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register channel rpc api service: %w", err)
+		}
+	}
+
+	contractStore, err := contract.New(globalDB)
+	if err != nil {
+		return fmt.Errorf("failed to setup contract store: %w", err)
+	}
+
+	dataVerificationProtocol, err := dataverification.New(
+		host,
+		contractStore,
+		storageEngine,
+		bchain,
+		ffgNode,
+		conf.Global.StorageFileMerkleTreeTotalSegments,
+		conf.Global.StorageFileSegmentsEncryptionPercentage,
+		conf.Global.DataDownloadsPath,
+		conf.Global.DataVerifier,
+		conf.Global.DataVerifierVerificationFees,
+		conf.Global.DataVerifierTransactionFees)
+	if err != nil {
+		return fmt.Errorf("failed to setup data verification protocol: %w", err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore)
+		if err != nil {
+			return fmt.Errorf("failed to setup data transfer rpc api: %w", err)
+		}
+		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register data transfer rpc api service: %w", err)
+		}
+	}
+
+	peers := ffgNode.Peers()
+	log.Infof("node id: %s", ffgNode.GetID())
 	log.Infof("peerstore content: %v ", peers)
 
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
-	r.Handle("/uploads", storageEngine)
-	r.HandleFunc("/auth", storageEngine.Authenticate)
+
+	// storage is allowed only in full node mode
+	if conf.Global.Storage && !conf.Global.SuperLightNode {
+		r.Handle("/uploads", storageEngine)
+		r.HandleFunc("/auth", storageEngine.Authenticate)
+	}
 
 	// unix socket
 	unixserver := &http.Server{

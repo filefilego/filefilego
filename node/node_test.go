@@ -346,13 +346,17 @@ func TestNodeMethods(t *testing.T) {
 	assert.EqualError(t, err, "pubsub topic is not available")
 
 	// HandleIncomingMessages
+	err = n1.JoinPubSubNetwork(ctx, "randevouz")
+	assert.NoError(t, err)
 	err = n1.HandleIncomingMessages(ctx, "randevouz")
 	assert.NoError(t, err)
-	// second time
-	err = n1.HandleIncomingMessages(ctx, "randevouz")
-	assert.EqualError(t, err, "already subscribed to topic")
 
+	err = n2.JoinPubSubNetwork(ctx, "randevouz")
+	assert.NoError(t, err)
 	err = n2.HandleIncomingMessages(ctx, "randevouz")
+	assert.NoError(t, err)
+
+	err = n3.JoinPubSubNetwork(ctx, "randevouz")
 	assert.NoError(t, err)
 	err = n3.HandleIncomingMessages(ctx, "randevouz")
 	assert.NoError(t, err)

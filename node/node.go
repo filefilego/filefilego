@@ -63,6 +63,7 @@ type Interface interface {
 	GetPeerID() peer.ID
 	Bootstrap(ctx context.Context, bootstrapPeers []string) error
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
+	JoinPubSubNetwork(ctx context.Context, topicName string) error
 }
 
 // Node represents all the node functionalities
@@ -288,8 +289,8 @@ func (n *Node) PublishMessageToNetwork(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// HandleIncomingMessages gets the messages from gossip network.
-func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) error {
+// JoinPubSubNetwork joins the gossip network.
+func (n *Node) JoinPubSubNetwork(ctx context.Context, topicName string) error {
 	if n.gossipTopic != nil {
 		return errors.New("already subscribed to topic")
 	}
@@ -300,8 +301,16 @@ func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) err
 	}
 
 	n.gossipTopic = topic
+	return nil
+}
 
-	sub, err := topic.Subscribe()
+// HandleIncomingMessages gets the messages from gossip network.
+func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) error {
+	if n.gossipTopic == nil {
+		return errors.New("not subscribed to to topic")
+	}
+
+	sub, err := n.gossipTopic.Subscribe()
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to topic %s: %w", topicName, err)
 	}
@@ -394,20 +403,24 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			FromPeerAddr:          n.GetID(),
 			UnavailableFileHashes: make([][]byte, 0),
 			FileHashes:            make([][]byte, 0),
+			FileHashesSizes:       make([]uint64, 0),
 			HashDataQueryRequest:  make([]byte, len(dataQueryRequest.Hash)),
 			PublicKey:             make([]byte, len(pubKeyBytes)),
 			Timestamp:             time.Now().Unix(),
 		}
 
-		totalSize := int64(0)
 		for _, v := range dataQueryRequest.FileHashes {
 			fileMetaData, err := n.storage.GetFileMetadata(hexutil.Encode(v))
 			if err != nil {
 				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
 				continue
 			}
-			totalSize += fileMetaData.Size
 			response.FileHashes = append(response.FileHashes, v)
+			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
+		}
+
+		if len(response.FileHashes) == 0 {
+			return nil
 		}
 
 		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)

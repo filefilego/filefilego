@@ -46,6 +46,21 @@ func ToDataQueryRequest(dqr *DataQueryRequestProto) DataQueryRequest {
 	return r
 }
 
+// ToDataQueryRequestProto returns a protobuf message of DataQueryRequest object.
+func ToDataQueryRequestProto(dqr DataQueryRequest) *DataQueryRequestProto {
+	r := DataQueryRequestProto{
+		FileHashes:   make([][]byte, len(dqr.FileHashes)),
+		FromPeerAddr: dqr.FromPeerAddr,
+		Hash:         make([]byte, len(dqr.Hash)),
+		Timestamp:    dqr.Timestamp,
+	}
+
+	copy(r.FileHashes, dqr.FileHashes)
+	copy(r.Hash, dqr.Hash)
+
+	return &r
+}
+
 // GetHash gets the hash of data query request.
 func (dqr DataQueryRequest) GetHash() []byte {
 	fileHahes := []byte{}
@@ -194,7 +209,7 @@ func SignDownloadContractProto(privateKey crypto.PrivKey, contract *DownloadCont
 }
 
 // VerifyDownloadContractProto verifies a download contract.
-func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadContractProto) (bool, error) {
+func VerifyDownloadContractProto(publicKeyVerifier crypto.PubKey, contract *DownloadContractProto) (bool, error) {
 	dataQueryResponse := ToDataQueryResponse(contract.FileHosterResponse)
 	publicKeyFileHoster, err := ffgcrypto.PublicKeyFromBytes(dataQueryResponse.PublicKey)
 	if err != nil {
@@ -236,7 +251,7 @@ func VerifyDownloadContractProto(publicKey crypto.PubKey, contract *DownloadCont
 		[]byte{},
 	)
 
-	ok, err = publicKey.Verify(data, contract.VerifierSignature)
+	ok, err = publicKeyVerifier.Verify(data, contract.VerifierSignature)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify download contract signature using public key: %w", err)
 	}

@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -58,13 +59,15 @@ const (
 
 // Interface specifies the data verification functionalities.
 type Interface interface {
-	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) error
+	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) (*messages.DownloadContractProto, error)
 	TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error
 	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error)
 	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestsProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
 	SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error
 	SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error
 	RequestFileTransfer(ctx context.Context, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
+	GetDownloadDirectory() string
+	GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int)
 }
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -149,11 +152,26 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 	return p, nil
 }
 
+// GetMerkleTreeFileSegmentsEncryptionPercentage returns the total merkle tree nodes and percentage encryption.
+func (d *Protocol) GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int) {
+	return d.merkleTreeTotalSegments, d.encryptionPercentage
+}
+
+// GetDownloadDirectory returns the download directory.
+func (d *Protocol) GetDownloadDirectory() string {
+	return d.downloadDirectory
+}
+
 // handleIncomingContractVerifierAcceptance handles incoming contracts to verifier nodes for acceptance.
 // verifier signs the contract and sends it back.
 func (d *Protocol) handleIncomingContractVerifierAcceptance(s network.Stream) {
 	c := bufio.NewReader(s)
 	defer s.Close()
+
+	if !d.dataVerifier {
+		log.Error("got a contract to be verified but this node is not a verifier handleIncomingContractVerifierAcceptance stream")
+		return
+	}
 
 	// read the first 8 bytes to determine the size of the message
 	msgLengthBuffer := make([]byte, 8)
@@ -345,6 +363,25 @@ func (d *Protocol) handleIncomingContractTransfer(s network.Stream) {
 	verifierPubKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
 	if err != nil {
 		log.Errorf("failed to get public key of verifier in download contract in handleIncomingContractTransfer stream: %v", err)
+		return
+	}
+
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.VerifierPublicKey)
+	if err != nil {
+		log.Errorf("failed to get address of verifier from its public key in handleIncomingContractTransfer stream: %v", err)
+		return
+	}
+
+	verifiers := block.GetBlockVerifiers()
+	foundVerifier := false
+	for _, v := range verifiers {
+		if v.Address == verifierAddr {
+			foundVerifier = true
+			break
+		}
+	}
+	if !foundVerifier {
+		log.Errorf("contract verifier is not a data verifier: %s", verifierAddr)
 		return
 	}
 
@@ -622,7 +659,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 	}
 
 	if err := d.publisher.PublishMessageToNetwork(context.Background(), txBytes); err != nil {
-		return fmt.Errorf("failed to public transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
+		return fmt.Errorf("failed to publish transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
 	return nil
@@ -1153,6 +1190,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])
 			if wroteN != n || err != nil {
+				d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err).Error())
 				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 			}
 			totalFileBytesTransfered += uint64(wroteN)
@@ -1164,6 +1202,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		}
 
 		if err != nil {
+			d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("fialed to read file content to buffer: %w", err).Error())
 			return "", fmt.Errorf("fialed to read file content to buffer: %w", err)
 		}
 	}
@@ -1374,6 +1413,27 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 		log.Errorf("failed to setup encryptor in handleIncomingFileTransfer: %v", err)
 		return
 	}
+
+	publicKey, err := ffgcrypto.PublicKeyFromBytes(downloadContract.VerifierPublicKey)
+	if err != nil {
+		log.Errorf("failed to get verifier's public key in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	verifierID, err := peer.IDFromPublicKey(publicKey)
+	if err != nil {
+		log.Errorf("failed to get verifier's peer id in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	// send the data to verifier
+	// TODO: handle a way to prevent concurrent sent of data to verifier.
+	go func() {
+		err := d.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.Background(), verifierID, fileMetadata.FilePath, contractHash, fileTransferRequest.FileHash)
+		if err != nil {
+			log.Errorf("failed to send key iv and unencrypted data to verifier: %v", err)
+		}
+	}()
 
 	// write to the stream the content of the input file while encrypting and shuffling its segments.
 	err = common.EncryptWriteOutput(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
