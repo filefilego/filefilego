@@ -36,7 +36,7 @@ func (cli *Client) UnlockAddress(ctx context.Context, address, passphrase string
 		return "", fmt.Errorf("failed to encode body to json: %w", err)
 	}
 
-	req, err := cli.buildRequest(http.MethodPost, cli.url, bodyBuf, nil)
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to build request: %w", err)
 	}
@@ -97,7 +97,7 @@ func (cli *Client) LockAddress(ctx context.Context, address, token string) (bool
 		return false, fmt.Errorf("failed to encode body to json: %w", err)
 	}
 
-	req, err := cli.buildRequest(http.MethodPost, cli.url, bodyBuf, nil)
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to build request: %w", err)
 	}
@@ -157,7 +157,7 @@ func (cli *Client) Balance(ctx context.Context, address string) (BalanceOfAddres
 		return BalanceOfAddress{}, fmt.Errorf("failed to encode body to json: %w", err)
 	}
 
-	req, err := cli.buildRequest(http.MethodPost, cli.url, bodyBuf, nil)
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
 	if err != nil {
 		return BalanceOfAddress{}, fmt.Errorf("failed to build request: %w", err)
 	}

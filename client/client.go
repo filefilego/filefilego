@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,13 +66,14 @@ func (cli *Client) OverrideHTTPHeaders(headers map[string]string) {
 	}
 }
 
-func (cli *Client) buildRequest(method, path string, body io.Reader, headers map[string]string) (*http.Request, error) {
+// nolint:unparam
+func (cli *Client) buildRequest(ctx context.Context, method, path string, body io.Reader, headers map[string]string) (*http.Request, error) {
 	mustHaveBody := method == http.MethodPost || method == http.MethodPut
 	if mustHaveBody && body == nil {
 		body = bytes.NewReader([]byte{})
 	}
 
-	req, err := http.NewRequest(method, path, body)
+	req, err := http.NewRequestWithContext(ctx, method, path, body)
 	if err != nil {
 		return nil, err
 	}

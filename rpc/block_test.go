@@ -43,11 +43,7 @@ func TestBlockAPIMethods(t *testing.T) {
 	// GetByNumber
 	args := &GetByNumberArgs{}
 	response := &JSONBlock{}
-	// empty payload
-	err = api.GetByNumber(&http.Request{}, args, response)
-	assert.EqualError(t, err, "empty hex string")
-
-	args.Number = "0x0"
+	args.Number = 0
 	err = api.GetByNumber(&http.Request{}, args, response)
 	assert.NoError(t, err)
 	assert.Equal(t, hexutil.Encode(genesisblockValid.Hash), response.Hash)
