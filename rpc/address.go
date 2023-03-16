@@ -14,49 +14,49 @@ const zeroHex = "0x0"
 
 const oneHex = "0x1"
 
-// UnlockAccountArgs arguments required for unlocking a key.
-type UnlockAccountArgs struct {
+// UnlockAddressArgs arguments required for unlocking a key.
+type UnlockAddressArgs struct {
 	Address    string `json:"address"`
 	Passphrase string `json:"passphrase"`
 }
 
-// UnlockAccountResponse is a key unlock response.
-type UnlockAccountResponse struct {
+// UnlockAddressResponse is a key unlock response.
+type UnlockAddressResponse struct {
 	Token string `json:"token"`
 }
 
-// LockAccountArgs arguments required for locking a key.
-type LockAccountArgs struct {
+// LockAddressArgs arguments required for locking a key.
+type LockAddressArgs struct {
 	Address string `json:"address"`
 	Token   string `json:"token"`
 }
 
-// LockAccountResponse is a key unlock response.
-type LockAccountResponse struct {
+// LockAddressResponse is a key unlock response.
+type LockAddressResponse struct {
 	Success bool `json:"success"`
 }
 
-// BalanceOfAccountArgs arguments required for balance of an address.
-type BalanceOfAccountArgs struct {
+// BalanceOfAddressArgs arguments required for balance of an address.
+type BalanceOfAddressArgs struct {
 	Address string `json:"address"`
 }
 
-// BalanceOfAccountResponse represents the balance response of an address.
-type BalanceOfAccountResponse struct {
+// BalanceOfAddressResponse represents the balance response of an address.
+type BalanceOfAddressResponse struct {
 	Balance    string `json:"balance"`
 	BalanceHex string `json:"balance_hex"`
 	Nounce     string `json:"nounce"`
 	NextNounce string `json:"next_nounce"`
 }
 
-// AccountAPI represents account service
-type AccountAPI struct {
+// AddressAPI represents address service
+type AddressAPI struct {
 	keystore   keystore.KeyLockUnlocker
 	blockchain blockchain.Interface
 }
 
-// NewAccountAPI creates a new accounts API to be served using JSONRPC.
-func NewAccountAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interface) (*AccountAPI, error) {
+// NewAddressAPI creates a new address API to be served using JSONRPC.
+func NewAddressAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interface) (*AddressAPI, error) {
 	if keystore == nil {
 		return nil, errors.New("keystore is nil")
 	}
@@ -65,14 +65,14 @@ func NewAccountAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interfac
 		return nil, errors.New("blockchain is nil")
 	}
 
-	return &AccountAPI{
+	return &AddressAPI{
 		keystore:   keystore,
 		blockchain: bchain,
 	}, nil
 }
 
 // Unlock a key given an address and a passphrase.
-func (api *AccountAPI) Unlock(r *http.Request, args *UnlockAccountArgs, response *UnlockAccountResponse) error {
+func (api *AddressAPI) Unlock(r *http.Request, args *UnlockAddressArgs, response *UnlockAddressResponse) error {
 	jwtToken, err := api.keystore.UnlockKey(args.Address, args.Passphrase)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (api *AccountAPI) Unlock(r *http.Request, args *UnlockAccountArgs, response
 }
 
 // Lock a key given an access token and the address.
-func (api *AccountAPI) Lock(r *http.Request, args *LockAccountArgs, response *LockAccountResponse) error {
+func (api *AddressAPI) Lock(r *http.Request, args *LockAddressArgs, response *LockAddressResponse) error {
 	locked, err := api.keystore.LockKey(args.Address, args.Token)
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (api *AccountAPI) Lock(r *http.Request, args *LockAccountArgs, response *Lo
 }
 
 // Balance of an address.
-func (api *AccountAPI) Balance(r *http.Request, args *BalanceOfAccountArgs, response *BalanceOfAccountResponse) error {
+func (api *AddressAPI) Balance(r *http.Request, args *BalanceOfAddressArgs, response *BalanceOfAddressResponse) error {
 	addressBytes, err := hexutil.Decode(args.Address)
 	if err != nil {
 		return err

@@ -14,7 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/rpc"
+	"github.com/gorilla/rpc/v2"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/block"
@@ -33,7 +33,7 @@ import (
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 	"github.com/filefilego/filefilego/validator"
-	"github.com/gorilla/rpc/json"
+	"github.com/gorilla/rpc/v2/json"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -296,14 +296,14 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.AccountServiceNamespace) {
-		accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
+	if contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
+		addressAPI, err := internalrpc.NewAddressAPI(keystore, bchain)
 		if err != nil {
-			return fmt.Errorf("failed to setup account rpc api: %w", err)
+			return fmt.Errorf("failed to setup address rpc api: %w", err)
 		}
-		err = s.RegisterService(accountAPI, internalrpc.AccountServiceNamespace)
+		err = s.RegisterService(addressAPI, internalrpc.AddressServiceNamespace)
 		if err != nil {
-			return fmt.Errorf("failed to register account rpc api service: %w", err)
+			return fmt.Errorf("failed to register address rpc api service: %w", err)
 		}
 	}
 

@@ -39,7 +39,7 @@ func TestNewAccountAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewAccountAPI(tt.keystore, tt.blockchain)
+			api, err := NewAddressAPI(tt.keystore, tt.blockchain)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -78,7 +78,7 @@ func TestAccountAPIMethods(t *testing.T) {
 	err = blockchain.InitOrLoad()
 	assert.NoError(t, err)
 
-	api, err := NewAccountAPI(store, blockchain)
+	api, err := NewAddressAPI(store, blockchain)
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 
@@ -87,8 +87,8 @@ func TestAccountAPIMethods(t *testing.T) {
 	key, err := keystore.UnmarshalKey(keydata, "123")
 	assert.NoError(t, err)
 
-	unlockArg := &UnlockAccountArgs{Address: "wrong", Passphrase: "ddf"}
-	unlockResp := &UnlockAccountResponse{}
+	unlockArg := &UnlockAddressArgs{Address: "wrong", Passphrase: "ddf"}
+	unlockResp := &UnlockAddressResponse{}
 	// Unlock
 	// empty addr
 	err = api.Unlock(&http.Request{}, unlockArg, unlockResp)
@@ -101,8 +101,8 @@ func TestAccountAPIMethods(t *testing.T) {
 
 	// Lock
 	// empty args
-	lockAccountArgs := &LockAccountArgs{}
-	lockAccountResponse := &LockAccountResponse{}
+	lockAccountArgs := &LockAddressArgs{}
+	lockAccountResponse := &LockAddressResponse{}
 	err = api.Lock(&http.Request{}, lockAccountArgs, lockAccountResponse)
 	assert.EqualError(t, err, "address  not found")
 
@@ -114,8 +114,8 @@ func TestAccountAPIMethods(t *testing.T) {
 	assert.True(t, lockAccountResponse.Success)
 
 	// Balance
-	balanceArgs := &BalanceOfAccountArgs{}
-	balanceResponse := &BalanceOfAccountResponse{}
+	balanceArgs := &BalanceOfAddressArgs{}
+	balanceResponse := &BalanceOfAddressResponse{}
 	err = api.Balance(&http.Request{}, balanceArgs, balanceResponse)
 	assert.EqualError(t, err, "input is empty")
 
@@ -123,13 +123,13 @@ func TestAccountAPIMethods(t *testing.T) {
 	balanceArgs.Address = "0x01"
 	err = api.Balance(&http.Request{}, balanceArgs, balanceResponse)
 	assert.NoError(t, err)
-	assert.Equal(t, BalanceOfAccountResponse{Balance: "0", BalanceHex: "0x0", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)
+	assert.Equal(t, BalanceOfAddressResponse{Balance: "0", BalanceHex: "0x0", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)
 
 	// valid address of genesis validator
-	balanceArgs = &BalanceOfAccountArgs{}
-	balanceResponse = &BalanceOfAccountResponse{}
+	balanceArgs = &BalanceOfAddressArgs{}
+	balanceResponse = &BalanceOfAddressResponse{}
 	balanceArgs.Address = genesisblockValid.Transactions[0].From
 	err = api.Balance(&http.Request{}, balanceArgs, balanceResponse)
 	assert.NoError(t, err)
-	assert.Equal(t, BalanceOfAccountResponse{Balance: "40.000000000000000000", BalanceHex: "0x22b1c8c1227a00000", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)
+	assert.Equal(t, BalanceOfAddressResponse{Balance: "40.000000000000000000", BalanceHex: "0x22b1c8c1227a00000", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)
 }
