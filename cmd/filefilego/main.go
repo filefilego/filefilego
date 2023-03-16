@@ -59,7 +59,7 @@ func main() {
 	app.Copyright = "Copyright 2023 The FileFileGo Authors"
 	app.Flags = config.AppFlags
 	app.Commands = []*cli.Command{
-		ffgcli.AccountCommand,
+		ffgcli.AddressCommand,
 		ffgcli.StorageCommand,
 	}
 	app.Suggest = true
