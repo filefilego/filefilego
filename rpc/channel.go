@@ -80,6 +80,8 @@ func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *Searc
 		return fmt.Errorf("failed to perform search: %w", err)
 	}
 
+	response.Nodes = make([]*blockchain.NodeItem, 0)
+
 	for _, v := range nodeHashes {
 		nodeHash, err := hexutil.Decode(v)
 		if err != nil {
@@ -127,9 +129,17 @@ type FilesFromEntryOrFolderArgs struct {
 	NodeHash string `json:"node_hash"`
 }
 
+// FileMetadata represents a file metadata
+type FileMetadata struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+	Size uint64 `json:"size"`
+	Path string `json:"path"`
+}
+
 // FilesFromEntryOrFolderResponse is a response.
 type FilesFromEntryOrFolderResponse struct {
-	Files []blockchain.FileMetadata `json:"files"`
+	Files []FileMetadata `json:"files"`
 }
 
 // FilesFromEntryOrFolder all the files of a node which is a dir or an entry recursvely.
@@ -144,8 +154,15 @@ func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEn
 		return fmt.Errorf("failed to find files in the requested node: %w", err)
 	}
 
-	response.Files = make([]blockchain.FileMetadata, len(files))
-	copy(response.Files, files)
+	response.Files = make([]FileMetadata, len(files))
+	for i, v := range files {
+		response.Files[i] = FileMetadata{
+			Name: v.Name,
+			Hash: v.Hash,
+			Size: v.Size,
+			Path: v.Path,
+		}
+	}
 
 	return nil
 }
