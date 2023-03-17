@@ -8,19 +8,16 @@ import (
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/search"
-	"github.com/filefilego/filefilego/storage"
 )
 
 // ChannelAPI represents the channel rpc service.
 type ChannelAPI struct {
 	blockchain blockchain.Interface
 	search     search.IndexSearcher
-	storage    storage.Interface
-	// dataQueryProtocol dataquery.Interface
 }
 
 // NewChannelAPI creates a new channel API to be served using JSONRPC.
-func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher, storage storage.Interface) (*ChannelAPI, error) {
+func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher) (*ChannelAPI, error) {
 	if bchain == nil {
 		return nil, errors.New("blockchain is nil")
 	}
@@ -29,19 +26,9 @@ func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher, sto
 		return nil, errors.New("search is nil")
 	}
 
-	if storage == nil {
-		return nil, errors.New("storage is nil")
-	}
-
-	// if dataQueryProtocol == nil {
-	// 	return nil, errors.New("data query protocol is nil")
-	// }
-
 	return &ChannelAPI{
 		blockchain: bchain,
 		search:     search,
-		storage:    storage,
-		// dataQueryProtocol: dataQueryProtocol,
 	}, nil
 }
 
@@ -104,6 +91,61 @@ func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *Searc
 		}
 		response.Nodes = append(response.Nodes, node)
 	}
+
+	return nil
+}
+
+// GetNodeItemArgs is a response.
+type GetNodeItemArgs struct {
+	NodeHash string `json:"node_hash"`
+}
+
+// GetNodeItemResponse is a response.
+type GetNodeItemResponse struct {
+	Node *blockchain.NodeItem `json:"node"`
+}
+
+// GetNodeItem gets a node item.
+func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, response *GetNodeItemResponse) error {
+	nodeHashBytes, err := hexutil.Decode(args.NodeHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode node hash: %w", err)
+	}
+
+	item, err := api.blockchain.GetNodeItem(nodeHashBytes)
+	if err != nil {
+		return fmt.Errorf("failed to find node: %w", err)
+	}
+
+	response.Node = item
+
+	return nil
+}
+
+// FilesFromEntryOrFolderArgs is a request.
+type FilesFromEntryOrFolderArgs struct {
+	NodeHash string `json:"node_hash"`
+}
+
+// FilesFromEntryOrFolderResponse is a response.
+type FilesFromEntryOrFolderResponse struct {
+	Files []blockchain.FileMetadata `json:"files"`
+}
+
+// FilesFromEntryOrFolder all the files of a node which is a dir or an entry recursvely.
+func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEntryOrFolderArgs, response *FilesFromEntryOrFolderResponse) error {
+	nodeHashBytes, err := hexutil.Decode(args.NodeHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode node hash: %w", err)
+	}
+
+	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes)
+	if err != nil {
+		return fmt.Errorf("failed to find files in the requested node: %w", err)
+	}
+
+	response.Files = make([]blockchain.FileMetadata, len(files))
+	copy(response.Files, files)
 
 	return nil
 }

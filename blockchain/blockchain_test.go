@@ -716,6 +716,15 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 		},
 		[]byte{},
 	))
+
+	folderUnderSubchannelHash := crypto.Sha256(bytes.Join(
+		[][]byte{
+			subchannelHash,
+			[]byte("subchannel of ffg 2 folder"),
+		},
+		[]byte{},
+	))
+
 	nodes3 := []*NodeItem{
 		{
 			Name:        "channel FFG",
@@ -735,17 +744,17 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 			Description: proto.String("this is ffgs sub channel"),
 		},
 		{
-			Name:        "subchannel of ffg 2",
-			ParentHash:  channelHash,
+			Name:        "subchannel of ffg 2 folder",
+			ParentHash:  subchannelHash,
 			Owner:       fromAddr,
 			Enabled:     true,
-			NodeType:    NodeItemType_SUBCHANNEL,
+			NodeType:    NodeItemType_DIR,
 			Timestamp:   time.Now().Unix(),
-			Description: proto.String("another subchan"),
+			Description: proto.String("another folder"),
 		},
 		{
 			Name:        "this is a file under subchannel",
-			ParentHash:  subchannelHash,
+			ParentHash:  folderUnderSubchannelHash,
 			Owner:       fromAddr,
 			Enabled:     true,
 			NodeType:    NodeItemType_FILE,
@@ -775,14 +784,20 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 
 	secondSubChannelChilds, err := blockchain.GetChildNodeItems(allChannels[0].NodeHash)
 	assert.NoError(t, err)
-	assert.Len(t, secondSubChannelChilds, 2)
-	assert.Equal(t, "subchannel of ffg", secondSubChannelChilds[1].Name)
-	assert.Equal(t, "subchannel of ffg 2", secondSubChannelChilds[0].Name)
+	assert.Len(t, secondSubChannelChilds, 1)
+	assert.Equal(t, "subchannel of ffg", secondSubChannelChilds[0].Name)
 
-	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[1].NodeHash)
+	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[0].NodeHash)
 	assert.NoError(t, err)
 	assert.Len(t, childsOfSubchannelffg, 1)
-	assert.Equal(t, "this is a file under subchannel", childsOfSubchannelffg[0].Name)
+	assert.Equal(t, "subchannel of ffg 2 folder", childsOfSubchannelffg[0].Name)
+
+	files, err := blockchain.GetFilesFromEntryOrFolderRecursively(childsOfSubchannelffg[0].NodeHash)
+	assert.NoError(t, err)
+	assert.Len(t, files, 1)
+	assert.Equal(t, "this is a file under subchannel", files[0].Name)
+	assert.Equal(t, "subchannel of ffg 2 folder/this is a file under subchannel", files[0].Path)
+	assert.Equal(t, uint64(1024), files[0].Size)
 
 	fileItem, err := blockchain.GetNodeFileItemFromFileHash([]byte{9})
 	assert.NoError(t, err)

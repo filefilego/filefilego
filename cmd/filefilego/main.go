@@ -341,7 +341,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
-		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine, storageEngine)
+		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine)
 		if err != nil {
 			return fmt.Errorf("failed to setup channel rpc api: %w", err)
 		}

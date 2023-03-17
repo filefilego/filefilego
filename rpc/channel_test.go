@@ -24,11 +24,6 @@ func TestNewChannelAPI(t *testing.T) {
 			blockchain: &blockchain.Blockchain{},
 			expErr:     "search is nil",
 		},
-		"no storage": {
-			blockchain: &blockchain.Blockchain{},
-			search:     &search.BleveSearch{},
-			expErr:     "storage is nil",
-		},
 		"success": {
 			blockchain: &blockchain.Blockchain{},
 			search:     &search.BleveSearch{},
@@ -40,7 +35,7 @@ func TestNewChannelAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewChannelAPI(tt.blockchain, tt.search, tt.storage)
+			api, err := NewChannelAPI(tt.blockchain, tt.search)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
