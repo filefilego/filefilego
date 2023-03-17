@@ -31,8 +31,8 @@ func NewFilefilegoAPI(node node.Interface, blockchain blockchain.Interface) (*Fi
 	}, nil
 }
 
-// SyncingResponse represents a syncing status
-type StatusResponse struct {
+// StatsResponse represents a syncing status
+type StatsResponse struct {
 	Syncing          bool       `json:"syncing"`
 	BlockchainHeight uint64     `json:"blockchain_height"`
 	PeerCount        int        `json:"peer_count"`
@@ -45,8 +45,8 @@ type verifier struct {
 	PublicKey string `json:"public_key"`
 }
 
-// Status reports the status of the node.
-func (api *FilefilegoAPI) Status(r *http.Request, args *EmptyArgs, response *StatusResponse) error {
+// Stats reports the stats of the node.
+func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *StatsResponse) error {
 	response.Syncing = api.node.GetSyncing()
 	response.BlockchainHeight = api.blockchain.GetHeight()
 	response.PeerCount = api.node.Peers().Len()

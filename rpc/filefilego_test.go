@@ -143,16 +143,16 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, api2)
 
-	response := &StatusResponse{}
-	err = api.Status(&http.Request{}, &EmptyArgs{}, response)
+	response := &StatsResponse{}
+	err = api.Stats(&http.Request{}, &EmptyArgs{}, response)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), response.BlockchainHeight)
 	assert.Equal(t, 2, response.PeerCount)
 	assert.Equal(t, n1.GetID(), response.PeerID)
 	assert.NotEmpty(t, response.Verifiers)
 
-	response2 := &StatusResponse{}
-	err = api2.Status(&http.Request{}, &EmptyArgs{}, response2)
+	response2 := &StatsResponse{}
+	err = api2.Stats(&http.Request{}, &EmptyArgs{}, response2)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), response2.BlockchainHeight)
 	assert.Equal(t, 2, response2.PeerCount)
