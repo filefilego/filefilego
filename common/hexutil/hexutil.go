@@ -132,6 +132,20 @@ func DecodeBigFromBytesToUint64(data []byte) uint64 {
 	return zeroBig.SetBytes(data).Uint64()
 }
 
+// EncodeUint64ToBytes encodes a uint64 number to bytes.
+func EncodeUint64ToBytes(number uint64) []byte {
+	if number == 0 {
+		return []byte{0}
+	}
+
+	return big.NewInt(0).SetUint64(number).Bytes()
+}
+
+// EncodeUint64ToBytes encodes a uint64 number to bytes.
+func EncodeUint64BytesToHexString(number []byte) string {
+	return EncodeBig(big.NewInt(0).SetBytes(number))
+}
+
 // DecodeBig decodes a hex string with 0x prefix as a quantity.
 // Numbers larger than 256 bits are not accepted.
 func DecodeBig(input string) (*big.Int, error) {

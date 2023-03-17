@@ -122,3 +122,9 @@ func TestBigNumberConversion(t *testing.T) {
 	assert.Len(t, bNum3.Bytes(), 1)
 	assert.Len(t, bNum3.Text(16), 2)
 }
+
+func TestXxx(t *testing.T) {
+	bytesTwo := EncodeUint64ToBytes(2)
+	hexRepresentation := EncodeUint64BytesToHexString(bytesTwo)
+	assert.Equal(t, "0x2", hexRepresentation)
+}
