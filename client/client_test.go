@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -44,6 +45,16 @@ func TestNew(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOverrideHTTPHeaders(t *testing.T) {
+	c, err := New("https://filefilego.com/rpc", http.DefaultClient)
+	assert.NoError(t, err)
+	c.OverrideHTTPHeaders(map[string]string{"Authorization": "123"})
+	assert.Equal(t, map[string]string{"Authorization": "123"}, c.headers)
+	req, err := c.buildRequest(context.TODO(), http.MethodPost, c.url, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "123", req.Header.Get("Authorization"))
 }
 
 type httpClientStub struct {
