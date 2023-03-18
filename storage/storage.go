@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/filefilego/filefilego/common"
@@ -319,6 +321,13 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		part.Close()
 	}
 
+	if !validateFileName(fileName) {
+		if err != nil {
+			writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "file name is invalid"}`)
+			return
+		}
+	}
+
 	old := path.Join(folderPath, tmpFileHex)
 	fileSize, err := common.FileSize(old)
 	if err != nil {
@@ -435,4 +444,22 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHeaderPayload(w, http.StatusOK, `{"token": "`+token.Token+`"}`)
+}
+
+func validateFileName(fileName string) bool {
+	// Clean the file name
+	fileName = filepath.Clean(fileName)
+
+	// Define a regular expression pattern for valid file names
+	pattern := `^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$`
+
+	// Compile the regular expression
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		// Handle the error
+		return false
+	}
+
+	// Check if the file name matches the pattern
+	return regex.MatchString(fileName)
 }
