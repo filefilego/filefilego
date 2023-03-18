@@ -46,6 +46,7 @@ type Interface interface {
 
 // FileMetadata holds the metadata for a file.
 type FileMetadata struct {
+	FileName       string `json:"file_name"`
 	MerkleRootHash string `json:"merkle_root_hash"`
 	Hash           string `json:"hash"`
 	FilePath       string `json:"file_path"`
@@ -277,6 +278,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	nodeHash := ""
 	tmpFileHex := ""
+	fileName := ""
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -295,6 +297,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if formName == "file" {
+			fileName = part.FileName()
 			tmpFileName, err := crypto.RandomEntropy(40)
 			if err != nil {
 				writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
@@ -313,7 +316,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		// part.Close()
+		part.Close()
 	}
 
 	old := path.Join(folderPath, tmpFileHex)
@@ -353,6 +356,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileMetadata := FileMetadata{
+		FileName:       fileName,
 		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
 		Hash:           fHash,
 		FilePath:       folderPath,
@@ -376,7 +380,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_hash": "%s", "merkle_root_hash": "%s", "size": %d}`, fileMetadata.Hash, fileMetadata.MerkleRootHash, fileMetadata.Size))
+	writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_name":"%s","file_hash": "%s", "merkle_root_hash": "%s", "size": %d}`, fileMetadata.FileName, fileMetadata.Hash, fileMetadata.MerkleRootHash, fileMetadata.Size))
 }
 
 // Authenticate authenticates storage access.

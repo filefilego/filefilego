@@ -18,9 +18,10 @@ type HTTPClient interface {
 
 // Client represents the client data.
 type Client struct {
-	httpClient HTTPClient
-	url        string
-	headers    map[string]string
+	httpClient      HTTPClient
+	url             string
+	storageEndpoint string
+	headers         map[string]string
 }
 
 // JSONRPCRequest is the jsonrpc2.0 request.
@@ -44,7 +45,8 @@ func New(urlEndpoint string, httpClient HTTPClient) (*Client, error) {
 		return nil, errors.New("url is empty")
 	}
 
-	if _, err := url.Parse(urlEndpoint); err != nil {
+	u, err := url.Parse(urlEndpoint)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse url: %w", err)
 	}
 
@@ -53,9 +55,10 @@ func New(urlEndpoint string, httpClient HTTPClient) (*Client, error) {
 	}
 
 	return &Client{
-		url:        urlEndpoint,
-		httpClient: httpClient,
-		headers:    make(map[string]string),
+		url:             urlEndpoint,
+		storageEndpoint: fmt.Sprintf("%s://%s", u.Scheme, u.Host),
+		httpClient:      httpClient,
+		headers:         make(map[string]string),
 	}, nil
 }
 
