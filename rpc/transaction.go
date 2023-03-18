@@ -19,6 +19,7 @@ type Blockchain interface {
 	PutMemPool(tx transaction.Transaction) error
 	GetTransactionsFromPool() []transaction.Transaction
 	GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error)
+	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 }
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -94,7 +95,7 @@ type SendRawTransactionArgs struct {
 func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs, response *TransactionResponse) error {
 	jsonTX := JSONTransaction{}
 	if err := json.Unmarshal([]byte(args.RawTransaction), &jsonTX); err != nil {
-		return fmt.Errorf("failed unmarshal transaction: %w", err)
+		return fmt.Errorf("failed to unmarshal transaction: %w", err)
 	}
 
 	txHash, err := hexutil.Decode(jsonTX.Hash)
@@ -112,10 +113,12 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		return fmt.Errorf("failed to decode transaction public key: %w", err)
 	}
 
-	txNounce, err := hexutil.Decode(jsonTX.Nounce)
+	txNounce, err := hexutil.DecodeUint64(jsonTX.Nounce)
 	if err != nil {
 		return fmt.Errorf("failed to decode transaction nounce: %w", err)
 	}
+
+	txNounceBytes := hexutil.EncodeUint64ToBytes(txNounce)
 
 	txData, err := hexutil.Decode(jsonTX.Data)
 	if err != nil {
@@ -131,7 +134,7 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		Hash:            txHash,
 		Signature:       txSig,
 		PublicKey:       txPublicKey,
-		Nounce:          txNounce,
+		Nounce:          txNounceBytes,
 		Data:            txData,
 		From:            jsonTX.From,
 		To:              jsonTX.To,
@@ -194,10 +197,12 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 		return errors.New("unauthorized access")
 	}
 
-	txNounce, err := hexutil.Decode(args.Nounce)
+	txNounce, err := hexutil.DecodeUint64(args.Nounce)
 	if err != nil {
 		return fmt.Errorf("failed to decode transaction nounce: %w", err)
 	}
+
+	txNounceBytes := hexutil.EncodeUint64ToBytes(txNounce)
 
 	txData, err := hexutil.Decode(args.Data)
 	if err != nil {
@@ -216,7 +221,7 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 
 	tx := transaction.Transaction{
 		PublicKey:       publicKeyBytes,
-		Nounce:          txNounce,
+		Nounce:          txNounceBytes,
 		Data:            txData,
 		From:            args.From,
 		To:              args.To,
@@ -259,10 +264,12 @@ func (api *TransactionAPI) Receipt(r *http.Request, args *ReceiptArgs, response 
 		return err
 	}
 
-	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(transactionBytes)
+	transactions, blockNumbers, err := api.blockchain.GetTransactionByHash(transactionBytes)
 	if err != nil {
 		return err
 	}
+
+	response.Transactions = make([]JSONBlockTransaction, 0)
 
 	for i, tx := range transactions {
 		jtx := toJSONTransaction(tx)
@@ -292,7 +299,7 @@ func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, respo
 	if err != nil {
 		return err
 	}
-
+	response.Transactions = make([]JSONBlockTransaction, 0)
 	for i, tx := range transactions {
 		jtx := toJSONTransaction(tx)
 		receipt := JSONBlockTransaction{
@@ -310,7 +317,7 @@ func toJSONTransaction(t transaction.Transaction) JSONTransaction {
 		Hash:            hexutil.Encode(t.Hash),
 		Signature:       hexutil.Encode(t.Signature),
 		PublicKey:       hexutil.Encode(t.PublicKey),
-		Nounce:          hexutil.Encode(t.Nounce),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(t.Nounce),
 		Data:            hexutil.Encode(t.Data),
 		From:            t.From,
 		To:              t.To,

@@ -6,17 +6,23 @@ import (
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/node"
 )
 
 // FilefilegoAPI represents the filefilego rpc service.
 type FilefilegoAPI struct {
+	conf       *config.Config
 	node       node.Interface
 	blockchain blockchain.Interface
 }
 
 // NewFilefilegoAPI creates a new filefilego API to be served using JSONRPC.
-func NewFilefilegoAPI(node node.Interface, blockchain blockchain.Interface) (*FilefilegoAPI, error) {
+func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockchain.Interface) (*FilefilegoAPI, error) {
+	if cfg == nil {
+		return nil, errors.New("config is nil")
+	}
+
 	if node == nil {
 		return nil, errors.New("node is nil")
 	}
@@ -26,17 +32,19 @@ func NewFilefilegoAPI(node node.Interface, blockchain blockchain.Interface) (*Fi
 	}
 
 	return &FilefilegoAPI{
+		conf:       cfg,
 		node:       node,
 		blockchain: blockchain,
 	}, nil
 }
 
-// SyncingResponse represents a syncing status
-type StatusResponse struct {
+// StatsResponse represents a syncing status
+type StatsResponse struct {
 	Syncing          bool       `json:"syncing"`
 	BlockchainHeight uint64     `json:"blockchain_height"`
 	PeerCount        int        `json:"peer_count"`
 	PeerID           string     `json:"peer_id"`
+	StorageEnabled   bool       `json:"storage_enabled"`
 	Verifiers        []verifier `json:"verifiers"`
 }
 
@@ -45,12 +53,13 @@ type verifier struct {
 	PublicKey string `json:"public_key"`
 }
 
-// Status reports the status of the node.
-func (api *FilefilegoAPI) Status(r *http.Request, args *EmptyArgs, response *StatusResponse) error {
+// Stats reports the stats of the node.
+func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *StatsResponse) error {
 	response.Syncing = api.node.GetSyncing()
 	response.BlockchainHeight = api.blockchain.GetHeight()
 	response.PeerCount = api.node.Peers().Len()
 	response.PeerID = api.node.GetID()
+	response.StorageEnabled = api.conf.Global.Storage
 	allVerifiers := block.GetBlockVerifiers()
 	response.Verifiers = make([]verifier, len(allVerifiers))
 

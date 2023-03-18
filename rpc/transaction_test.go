@@ -194,3 +194,7 @@ func (b *blockchainStub) GetTransactionsFromPool() []transaction.Transaction {
 func (b *blockchainStub) GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error) {
 	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsErr
 }
+
+func (b *blockchainStub) GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error) {
+	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsErr
+}

@@ -15,6 +15,14 @@ type AddressState struct {
 	Nounce  []byte
 }
 
+// FileMetadata represents channel file metadata.
+type FileMetadata struct {
+	Name string
+	Hash string
+	Size uint64
+	Path string
+}
+
 // GetBalance returns the balance as big int.
 func (a *AddressState) GetBalance() (*big.Int, error) {
 	if len(a.Balance) == 0 {

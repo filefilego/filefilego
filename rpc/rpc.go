@@ -1,7 +1,7 @@
 package rpc
 
-// AccountServiceNamespace is the namespace for account service rpc.
-const AccountServiceNamespace = "account"
+// AddressServiceNamespace is the namespace for address service rpc.
+const AddressServiceNamespace = "address"
 
 // BlockServiceNamespace is the namespace for block service rpc.
 const BlockServiceNamespace = "block"

@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -72,6 +73,7 @@ type Interface interface {
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetReleasedFeesOfDownloadContractInTransactionData(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error)
+	GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte) ([]FileMetadata, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -1246,6 +1248,50 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error) {
 	}
 
 	return childNodes, nil
+}
+
+// GetFilesFromEntryOrFolderRecursively findes all the files recursivly by given a folder or entry hash.
+func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte) ([]FileMetadata, error) {
+	fileItems := make([]FileMetadata, 0)
+
+	queue := list.New()
+	item, err := b.GetNodeItem(entryOrFolderHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node item: %w", err)
+	}
+	queue.PushBack(item)
+	path := ""
+	for queue.Len() > 0 {
+		el := queue.Front()
+		node := el.Value.(*NodeItem)
+		if node.NodeType == NodeItemType_DIR || node.NodeType == NodeItemType_ENTRY {
+			path += node.Name + "/"
+			childs, err := b.GetChildNodeItems(entryOrFolderHash)
+			if err == nil {
+				for _, v := range childs {
+					if v.NodeType == NodeItemType_DIR {
+						queue.PushFront(v)
+					} else {
+						queue.PushBack(v)
+					}
+				}
+			}
+		} else if node.NodeType == NodeItemType_FILE {
+			fileSize := uint64(0)
+			if node.Size != nil {
+				fileSize = *node.Size
+			}
+			fileItems = append(fileItems, FileMetadata{
+				Name: node.Name,
+				Hash: hexutil.EncodeNoPrefix(node.FileHash),
+				Size: fileSize,
+				Path: path + node.Name,
+			})
+		}
+		queue.Remove(el)
+	}
+
+	return fileItems, nil
 }
 
 // GetChannels gets a list of channels.

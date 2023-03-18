@@ -40,25 +40,25 @@ var (
 	{{end}}
 	`
 
-	AccountCommand = &cli.Command{
-		Name:     "account",
-		Usage:    "Manage accounts",
-		Category: "Account",
+	AddressCommand = &cli.Command{
+		Name:     "address",
+		Usage:    "Manage addresses",
+		Category: "Addresss",
 		Description: `
-					Manage accounts, create, delete load etc.`,
+					Manage addresses, create, delete load etc.`,
 		Subcommands: []*cli.Command{
 			{
 				Name:   "create",
 				Usage:  "create <passphrase>",
-				Action: CreateAccount,
+				Action: CreateAddress,
 				Flags:  []cli.Flag{},
 				Description: `
-				Creates a new account from passphrase`,
+				Creates a new address from passphrase`,
 			},
 			{
 				Name:   "info",
 				Usage:  "info <keypath> <passphrase>",
-				Action: GetAccountInfo,
+				Action: GetAddressInfo,
 				Flags:  []cli.Flag{},
 				Description: `
 				Get key information`,
@@ -74,10 +74,10 @@ var (
 			{
 				Name:   "list",
 				Usage:  "list",
-				Action: ListAccounts,
+				Action: ListAddresses,
 				Flags:  []cli.Flag{},
 				Description: `
-				Lists all available accounts`,
+				Lists all available addresses`,
 			},
 		},
 	}
@@ -208,13 +208,13 @@ func AddFile(ctx *cli.Context) error {
 	return nil
 }
 
-// ListAccounts
-func ListAccounts(ctx *cli.Context) error {
+// ListAddresses list the addresses on this node.
+func ListAddresses(ctx *cli.Context) error {
 	return nil
 }
 
-// CreateAccount creates a new keystore file.
-func CreateAccount(ctx *cli.Context) error {
+// CreateAddress creates a new keystore file.
+func CreateAddress(ctx *cli.Context) error {
 	conf := config.New(ctx)
 	store, err := keystore.New(conf.Global.KeystoreDir, []byte{1})
 	if err != nil {
@@ -228,8 +228,8 @@ func CreateAccount(ctx *cli.Context) error {
 	return nil
 }
 
-// GetAccountInfo gets the account info.
-func GetAccountInfo(ctx *cli.Context) error {
+// GetAddressInfo gets the address info.
+func GetAddressInfo(ctx *cli.Context) error {
 	keyPath := ctx.Args().Get(0)
 	passphrase := ctx.Args().Get(1)
 

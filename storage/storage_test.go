@@ -318,6 +318,7 @@ func TestUploadHandler(t *testing.T) {
 	storage.ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	type fileUploadResponse struct {
+		FileName       string `json:"file_name"`
 		FileHash       string `json:"file_hash"`
 		MerkleRootHash string `json:"merkle_root_hash"`
 		Size           int    `json:"size"`
@@ -326,6 +327,7 @@ func TestUploadHandler(t *testing.T) {
 	err = json.Unmarshal(response.Body.Bytes(), &fileUploaded)
 	assert.NoError(t, err)
 	assert.Equal(t, 8, fileUploaded.Size)
+	assert.Equal(t, "random.txt", fileUploaded.FileName)
 	// the merkle tree root hash is 32 bytes and 66 in hex encoded.
 	assert.Len(t, fileUploaded.MerkleRootHash, 66)
 

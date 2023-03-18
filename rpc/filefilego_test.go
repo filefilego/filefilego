@@ -36,18 +36,25 @@ import (
 func TestNewFilefilegoAPI(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
+		conf       *ffgconfig.Config
 		node       node.Interface
 		blockchain blockchain.Interface
 		expErr     string
 	}{
+		"no config": {
+			expErr: "config is nil",
+		},
 		"no node": {
+			conf:   &ffgconfig.Config{},
 			expErr: "node is nil",
 		},
 		"no blockchain": {
+			conf:   &ffgconfig.Config{},
 			node:   &node.Node{},
 			expErr: "blockchain is nil",
 		},
 		"success": {
+			conf:       &ffgconfig.Config{},
 			node:       &node.Node{},
 			blockchain: &blockchain.Blockchain{},
 		},
@@ -57,7 +64,7 @@ func TestNewFilefilegoAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewFilefilegoAPI(tt.node, tt.blockchain)
+			api, err := NewFilefilegoAPI(tt.conf, tt.node, tt.blockchain)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -135,24 +142,24 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	err = bhcain1.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)
 
-	api, err := NewFilefilegoAPI(n1, bhcain1)
+	api, err := NewFilefilegoAPI(&ffgconfig.Config{}, n1, bhcain1)
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 
-	api2, err := NewFilefilegoAPI(n2, bhcain2)
+	api2, err := NewFilefilegoAPI(&ffgconfig.Config{}, n2, bhcain2)
 	assert.NoError(t, err)
 	assert.NotNil(t, api2)
 
-	response := &StatusResponse{}
-	err = api.Status(&http.Request{}, &EmptyArgs{}, response)
+	response := &StatsResponse{}
+	err = api.Stats(&http.Request{}, &EmptyArgs{}, response)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), response.BlockchainHeight)
 	assert.Equal(t, 2, response.PeerCount)
 	assert.Equal(t, n1.GetID(), response.PeerID)
 	assert.NotEmpty(t, response.Verifiers)
 
-	response2 := &StatusResponse{}
-	err = api2.Status(&http.Request{}, &EmptyArgs{}, response2)
+	response2 := &StatsResponse{}
+	err = api2.Stats(&http.Request{}, &EmptyArgs{}, response2)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), response2.BlockchainHeight)
 	assert.Equal(t, 2, response2.PeerCount)

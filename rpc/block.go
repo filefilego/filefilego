@@ -26,7 +26,7 @@ func NewBlockAPI(bchain blockchain.Interface) (*BlockAPI, error) {
 
 // GetByNumberArgs represents the args of rpc request.
 type GetByNumberArgs struct {
-	Number string `json:"number"`
+	Number uint64 `json:"number"`
 }
 
 // JSONBlock represents the block response of rpc request.
@@ -43,12 +43,7 @@ type JSONBlock struct {
 
 // GetByNumber gets a block by number.
 func (api *BlockAPI) GetByNumber(r *http.Request, args *GetByNumberArgs, response *JSONBlock) error {
-	blockNumber, err := hexutil.DecodeUint64(args.Number)
-	if err != nil {
-		return err
-	}
-
-	validBlock, err := api.blockchain.GetBlockByNumber(blockNumber)
+	validBlock, err := api.blockchain.GetBlockByNumber(args.Number)
 	if err != nil {
 		return err
 	}
@@ -66,7 +61,7 @@ func (api *BlockAPI) GetByNumber(r *http.Request, args *GetByNumberArgs, respons
 			Hash:            hexutil.Encode(v.Hash),
 			Signature:       hexutil.Encode(v.Signature),
 			PublicKey:       hexutil.Encode(v.PublicKey),
-			Nounce:          hexutil.Encode(v.Nounce),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce),
 			Data:            hexutil.Encode(v.Data),
 			From:            v.From,
 			To:              v.To,
@@ -109,7 +104,7 @@ func (api *BlockAPI) GetByHash(r *http.Request, args *GetByHashArgs, response *J
 			Hash:            hexutil.Encode(v.Hash),
 			Signature:       hexutil.Encode(v.Signature),
 			PublicKey:       hexutil.Encode(v.PublicKey),
-			Nounce:          hexutil.Encode(v.Nounce),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce),
 			Data:            hexutil.Encode(v.Data),
 			From:            v.From,
 			To:              v.To,

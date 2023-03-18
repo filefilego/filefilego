@@ -14,7 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/rpc"
+	"github.com/gorilla/rpc/v2"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/block"
@@ -33,7 +33,7 @@ import (
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 	"github.com/filefilego/filefilego/validator"
-	"github.com/gorilla/rpc/json"
+	"github.com/gorilla/rpc/v2/json"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -59,7 +59,7 @@ func main() {
 	app.Copyright = "Copyright 2023 The FileFileGo Authors"
 	app.Flags = config.AppFlags
 	app.Commands = []*cli.Command{
-		ffgcli.AccountCommand,
+		ffgcli.AddressCommand,
 		ffgcli.StorageCommand,
 	}
 	app.Suggest = true
@@ -296,14 +296,14 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.AccountServiceNamespace) {
-		accountAPI, err := internalrpc.NewAccountAPI(keystore, bchain)
+	if contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
+		addressAPI, err := internalrpc.NewAddressAPI(keystore, bchain)
 		if err != nil {
-			return fmt.Errorf("failed to setup account rpc api: %w", err)
+			return fmt.Errorf("failed to setup address rpc api: %w", err)
 		}
-		err = s.RegisterService(accountAPI, internalrpc.AccountServiceNamespace)
+		err = s.RegisterService(addressAPI, internalrpc.AddressServiceNamespace)
 		if err != nil {
-			return fmt.Errorf("failed to register account rpc api service: %w", err)
+			return fmt.Errorf("failed to register address rpc api service: %w", err)
 		}
 	}
 
@@ -319,7 +319,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
-		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(ffgNode, bchain)
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain)
 		if err != nil {
 			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
 		}
@@ -341,7 +341,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
-		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine, storageEngine)
+		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine)
 		if err != nil {
 			return fmt.Errorf("failed to setup channel rpc api: %w", err)
 		}
