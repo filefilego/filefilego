@@ -36,18 +36,25 @@ import (
 func TestNewFilefilegoAPI(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
+		conf       *ffgconfig.Config
 		node       node.Interface
 		blockchain blockchain.Interface
 		expErr     string
 	}{
+		"no config": {
+			expErr: "config is nil",
+		},
 		"no node": {
+			conf:   &ffgconfig.Config{},
 			expErr: "node is nil",
 		},
 		"no blockchain": {
+			conf:   &ffgconfig.Config{},
 			node:   &node.Node{},
 			expErr: "blockchain is nil",
 		},
 		"success": {
+			conf:       &ffgconfig.Config{},
 			node:       &node.Node{},
 			blockchain: &blockchain.Blockchain{},
 		},
@@ -57,7 +64,7 @@ func TestNewFilefilegoAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewFilefilegoAPI(tt.node, tt.blockchain)
+			api, err := NewFilefilegoAPI(tt.conf, tt.node, tt.blockchain)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -135,11 +142,11 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	err = bhcain1.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)
 
-	api, err := NewFilefilegoAPI(n1, bhcain1)
+	api, err := NewFilefilegoAPI(&ffgconfig.Config{}, n1, bhcain1)
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 
-	api2, err := NewFilefilegoAPI(n2, bhcain2)
+	api2, err := NewFilefilegoAPI(&ffgconfig.Config{}, n2, bhcain2)
 	assert.NoError(t, err)
 	assert.NotNil(t, api2)
 
