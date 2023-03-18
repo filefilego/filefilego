@@ -107,7 +107,7 @@ In this section, the complete life cycle of a data transfer verification is demo
 
 At this stage, `node_1` has some `data_z`, plus some `data_enc` but has no knowledge on how to reassemble them in order to get the original file. Now, `v1` can validate the integrity of the data sent to `node_1` and if they match the original Merkle tree's identity, then the decryption key `k1` is sent to `node_1`. The order of the blocks will also be sent, so `node_1` can put all the parts together to reassemble the data. The final step is to release the fees to `node_2` by `v1`. 
 
-With this algorithm, we simultaneously achieve Proof of Transfer and Proof of Data Posession.
+With this algorithm, we simultaneously achieve Proof of Transfer and Proof of Data Possession.
 ```
             ┌───┬───┬───┬───┬───┬───┬───┬───┐
 Data Blocks:│ a │ b │ c │ d │ e │ f │ g │ h │
