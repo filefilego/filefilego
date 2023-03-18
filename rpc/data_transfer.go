@@ -191,11 +191,11 @@ func (api *DataTransferAPI) CheckDataQueryResponse(r *http.Request, args *CheckD
 		}
 
 		for i, j := range v.FileHashes {
-			dqrJSON.FileHashes[i] = hexutil.Encode(j)
+			dqrJSON.FileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
 		for i, j := range v.UnavailableFileHashes {
-			dqrJSON.UnavailableFileHashes[i] = hexutil.Encode(j)
+			dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
 		response.Responses = append(response.Responses, dqrJSON)
@@ -262,11 +262,11 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 		}
 
 		for i, j := range v.FileHashes {
-			dqrJSON.FileHashes[i] = hexutil.Encode(j)
+			dqrJSON.FileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
 		for i, j := range v.UnavailableFileHashes {
-			dqrJSON.UnavailableFileHashes[i] = hexutil.Encode(j)
+			dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
 		response.Responses = append(response.Responses, dqrJSON)
