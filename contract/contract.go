@@ -89,12 +89,14 @@ func New(db database.Database) (*Store, error) {
 func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	transfered, ok := c.bytesTransfered[contractHash][string(fileHash)]
+
+	fh := hexutil.EncodeNoPrefix(fileHash)
+	transfered, ok := c.bytesTransfered[contractHash][fh]
 	if !ok {
 		c.bytesTransfered[contractHash] = make(map[string]uint64)
 	}
 	transfered += count
-	c.bytesTransfered[contractHash][string(fileHash)] = transfered
+	c.bytesTransfered[contractHash][fh] = transfered
 }
 
 // GetTransferedBytes gets the transfered bytes for a file.
@@ -102,7 +104,10 @@ func (c *Store) GetTransferedBytes(contractHash string, fileHash []byte) uint64 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.bytesTransfered[contractHash][string(fileHash)]
+	fh := hexutil.EncodeNoPrefix(fileHash)
+
+	d := c.bytesTransfered[contractHash][fh]
+	return d
 }
 
 // ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.

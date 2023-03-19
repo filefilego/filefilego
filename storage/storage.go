@@ -368,7 +368,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		FileName:       fileName,
 		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
 		Hash:           fHash,
-		FilePath:       folderPath,
+		FilePath:       newPath,
 		Size:           fileSize,
 	}
 

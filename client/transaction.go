@@ -22,12 +22,12 @@ type SendTransaction struct {
 }
 
 // SendRawTransaction sends a raw transaction.
-func (cli *Client) SendRawTransaction(ctx context.Context, hexEncodedTransactionBytes string) (rpc.TransactionResponse, error) {
+func (cli *Client) SendRawTransaction(ctx context.Context, jsonEncodedTransactionBytes string) (rpc.TransactionResponse, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "transaction.SendRawTransaction",
 		Params: []interface{}{rpc.SendRawTransactionArgs{
-			RawTransaction: hexEncodedTransactionBytes,
+			RawTransaction: jsonEncodedTransactionBytes,
 		}},
 		ID: 1,
 	}

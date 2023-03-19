@@ -265,6 +265,10 @@ func run(ctx *cli.Context) error {
 
 	// advertise
 	ffgNode.Advertise(ctx.Context, "ffgnet")
+	err = ffgNode.DiscoverPeers(ctx.Context, "ffgnet")
+	if err != nil {
+		log.Warnf("discovering peers failed: %v", err)
+	}
 	// listen for pubsub messages
 	err = ffgNode.JoinPubSubNetwork(ctx.Context, "ffgnet_pubsub")
 	if err != nil {

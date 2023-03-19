@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	encjson "encoding/json"
 	"fmt"
 	"math/big"
 	"net"
@@ -16,9 +17,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/block"
@@ -36,11 +39,12 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
+	"github.com/filefilego/filefilego/node/protocols/messages"
 	internalrpc "github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
+	"github.com/filefilego/filefilego/transaction"
 	"github.com/filefilego/filefilego/validator"
-	"github.com/gorilla/rpc/v2/json"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -119,7 +123,7 @@ func TestE2E(t *testing.T) {
 	conf2.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf2.Global.Storage = true
 	conf2.Global.StorageDir = path.Join("filehoster", "file_storage")
-	conf2.Global.StorageFeesPerByte = currency.FFG().String()
+	conf2.Global.StorageFeesPerByte = "20"
 	conf2.Global.StorageToken = "1234"
 	conf2.Global.SearchEngine = true
 	conf2.Global.DataDir = "filehoster"
@@ -162,7 +166,7 @@ func TestE2E(t *testing.T) {
 	conf3.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf3.Global.Storage = true
 	conf3.Global.StorageDir = path.Join("filehoster2", "file_storage")
-	conf3.Global.StorageFeesPerByte = currency.FFG().String()
+	conf3.Global.StorageFeesPerByte = "10"
 	conf3.Global.StorageToken = "1234"
 	conf3.Global.SearchEngine = true
 	conf3.Global.DataDir = "filehoster2"
@@ -272,11 +276,11 @@ func TestE2E(t *testing.T) {
 	conf6.P2P.ListenPort = 10214
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095
-	conf6.RPC.EnabledServices = []string{"data_transfer"}
+	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction"}
 	// conf6.Global.DataVerifier = true
 	// conf6.Global.DataVerifierTransactionFees = "0x1"
 	// conf6.Global.DataVerifierVerificationFees = halfFFG
-	fileDownloader1, _, _, _ := createNode(t, "blockchain6.db", conf6, false)
+	fileDownloader1, _, _, kpFileDownloader1 := createNode(t, "blockchain6.db", conf6, false)
 	assert.NotNil(t, fileDownloader1)
 	// assert.Equal(t, uint64(0), dv2Bchain.GetHeight())
 	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -286,12 +290,217 @@ func TestE2E(t *testing.T) {
 
 	// scenario
 	// fileDownloader1 is a super light node
-	// send some coins to fileDownloader1 so it can perform a download operation
+	// from fileDownloader1 try to discover more peers
+	err = fileDownloader1.DiscoverPeers(context.TODO(), "ffgnet")
+	assert.NoError(t, err)
+	// send 1 FFG amount of coins to fileDownloader1 so it can perform a download operation
+	publicKeyV1, err := kpV1.PublicKey.Raw()
+	assert.NoError(t, err)
+	mainChain, err := hexutil.Decode("0x01")
+	assert.NoError(t, err)
+	v1Balance, err := v1Client.Balance(context.TODO(), kpV1.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, "0x1", v1Balance.NextNounce)
+	nextNounce, err := hexutil.DecodeUint64(v1Balance.NextNounce)
+	assert.NoError(t, err)
+	nounceBytes := hexutil.EncodeUint64ToBytes(nextNounce)
+	tx1 := transaction.Transaction{
+		PublicKey:       publicKeyV1,
+		Nounce:          nounceBytes,
+		Data:            []byte{0},
+		From:            kpV1.Address,
+		To:              kpFileDownloader1.Address,
+		Value:           hexutil.EncodeBig(currency.FFG()),
+		TransactionFees: "0x1",
+		Chain:           mainChain,
+	}
+	err = tx1.Sign(kpV1.PrivateKey)
+	assert.NoError(t, err)
+	ok, err := tx1.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	JSONTx1 := internalrpc.JSONTransaction{
+		Hash:            hexutil.Encode(tx1.Hash),
+		Signature:       hexutil.Encode(tx1.Signature),
+		PublicKey:       hexutil.Encode(tx1.PublicKey),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx1.Nounce),
+		Data:            hexutil.Encode(tx1.Data),
+		From:            tx1.From,
+		To:              tx1.To,
+		Value:           tx1.Value,
+		TransactionFees: tx1.TransactionFees,
+		Chain:           hexutil.Encode(mainChain),
+	}
+
+	JSONTx1Bytes, err := encjson.Marshal(JSONTx1)
+	assert.NoError(t, err)
+	tx1Response, err := v1Client.SendRawTransaction(context.TODO(), string(JSONTx1Bytes))
+	assert.NoError(t, err)
+	assert.Equal(t, tx1Response.Transaction, JSONTx1)
+	sealedBlock2, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock2)
+	assert.Equal(t, uint64(2), v1Bchain.GetHeight())
+	fileDownloader1Balance, err := v1Client.Balance(context.TODO(), kpFileDownloader1.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, "0x"+currency.FFG().Text(16), fileDownloader1Balance.BalanceHex)
 	// fileDownloader1 sends data query request of both files
-	// fileDownloader1 checks for data query responses both from local mem or from verfiers to check if responses are relayed to verifiers
+	hashOfDataQuery, err := fileDownloader1Client.SendDataQueryRequest(context.TODO(), []string{file2UploadResponse.FileHash, file1UploadResponse.FileHash})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, hashOfDataQuery)
+	// sleep a bit so the data query message is propagated
+	time.Sleep(200 * time.Millisecond)
+	// fileDownloader1 checks for data query responses from local mem
+	dataQueryResponses, err := fileDownloader1Client.CheckDataQueryResponse(context.TODO(), hashOfDataQuery)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, dataQueryResponses.Responses)
+	assert.Len(t, dataQueryResponses.Responses, 2)
+	// creates the required contracts and send them to verifiers
+	contractHashes, err := fileDownloader1Client.CreateContractsFromDataQueryResponses(context.TODO(), hashOfDataQuery)
+	assert.NoError(t, err)
+	assert.Len(t, contractHashes, 1)
+	sentContractToHosterAndVerifier, err := fileDownloader1Client.SendContractToFileHosterAndVerifier(context.TODO(), contractHashes[0])
+	assert.NoError(t, err)
+	assert.True(t, sentContractToHosterAndVerifier)
+
+	downloadContract, err := fileDownloader1Client.GetDownloadContract(context.TODO(), contractHashes[0])
+	assert.NoError(t, err)
+	assert.Equal(t, contractHashes[0], downloadContract.Contract.ContractHash)
+	assert.Len(t, downloadContract.Contract.FileHashesNeeded, 2)
+	assert.Len(t, downloadContract.Contract.FileHashesNeededSizes, 2)
+	assert.NotEmpty(t, downloadContract.Contract.VerifierFees)
+	assert.NotEmpty(t, downloadContract.Contract.VerifierPublicKey)
+	assert.NotEmpty(t, downloadContract.Contract.VerifierSignature)
 	// fileDownloader1 prepares the transaction through v1's json rpc endpoint because its a super light node
+	publicKeyOfSelectedVerifier, err := hexutil.Decode(downloadContract.Contract.VerifierPublicKey)
+	assert.NoError(t, err)
+	dataverifierAddr, err := crypto.RawPublicToAddress(publicKeyOfSelectedVerifier)
+	assert.NoError(t, err)
+	totalFileSize := uint64(0)
+	for _, v := range downloadContract.Contract.FileHashesNeededSizes {
+		totalFileSize += v
+	}
+	fileHosterFees, err := hexutil.DecodeBig(downloadContract.Contract.FileHosterResponse.FeesPerByte)
+	assert.NoError(t, err)
+	fileHosterFees = fileHosterFees.Mul(fileHosterFees, big.NewInt(0).SetUint64(totalFileSize))
+	verifierFees, err := hexutil.DecodeBig(downloadContract.Contract.VerifierFees)
+	assert.NoError(t, err)
+	fileHosterFees = fileHosterFees.Add(fileHosterFees, verifierFees)
+	publicKeyBytesOfFileDownloader, err := kpFileDownloader1.PublicKey.Raw()
+	assert.NoError(t, err)
+
+	contractHashBytes, err := hexutil.Decode(downloadContract.Contract.ContractHash)
+	assert.NoError(t, err)
+
+	fileRequesterNodePublicKey, err := hexutil.Decode(downloadContract.Contract.FileRequesterNodePublicKey)
+	assert.NoError(t, err)
+
+	FileHosterNodePublicKeyBytes, err := hexutil.Decode(downloadContract.Contract.FileHosterResponse.PublicKey)
+	assert.NoError(t, err)
+
+	VerifierPublicKeyBytes, err := hexutil.Decode(downloadContract.Contract.VerifierPublicKey)
+	assert.NoError(t, err)
+
+	dcinTX := &messages.DownloadContractInTransactionDataProto{
+		ContractHash:               contractHashBytes,
+		FileRequesterNodePublicKey: fileRequesterNodePublicKey,
+		FileHosterNodePublicKey:    FileHosterNodePublicKeyBytes,
+		VerifierPublicKey:          VerifierPublicKeyBytes,
+		VerifierFees:               downloadContract.Contract.VerifierFees,
+		FileHosterFees:             downloadContract.Contract.FileHosterResponse.FeesPerByte,
+	}
+
+	contractsEnvelope := &messages.DownloadContractsHashesProto{
+		Contracts: []*messages.DownloadContractInTransactionDataProto{dcinTX},
+	}
+	itemsBytes, err := proto.Marshal(contractsEnvelope)
+	assert.NoError(t, err)
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_DATA_CONTRACT,
+		Payload: itemsBytes,
+	}
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	assert.NoError(t, err)
+	tx2 := transaction.Transaction{
+		PublicKey:       publicKeyBytesOfFileDownloader,
+		Nounce:          []byte{1},
+		Data:            txPayloadBytes,
+		From:            kpFileDownloader1.Address,
+		To:              dataverifierAddr,
+		Value:           hexutil.EncodeBig(fileHosterFees),
+		TransactionFees: "0x1",
+		Chain:           mainChain,
+	}
+	err = tx2.Sign(kpFileDownloader1.PrivateKey)
+	assert.NoError(t, err)
+	ok, err = tx2.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	JSONTx2 := internalrpc.JSONTransaction{
+		Hash:            hexutil.Encode(tx2.Hash),
+		Signature:       hexutil.Encode(tx2.Signature),
+		PublicKey:       hexutil.Encode(tx2.PublicKey),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx2.Nounce),
+		Data:            hexutil.Encode(tx2.Data),
+		From:            tx2.From,
+		To:              tx2.To,
+		Value:           tx2.Value,
+		TransactionFees: tx2.TransactionFees,
+		Chain:           hexutil.Encode(mainChain),
+	}
+
+	JSONTx2Bytes, err := encjson.Marshal(JSONTx2)
+	assert.NoError(t, err)
+	tx2Response, err := fileDownloader1Client.SendRawTransaction(context.TODO(), string(JSONTx2Bytes))
+	assert.NoError(t, err)
+	assert.Equal(t, tx2Response.Transaction, JSONTx2)
+	time.Sleep(200 * time.Millisecond)
+	mempoolTransactions := v1Bchain.GetTransactionsFromPool()
+	found := false
+	for _, v := range mempoolTransactions {
+		if hexutil.Encode(v.Hash) == JSONTx2.Hash {
+			found = true
+		}
+	}
+	assert.True(t, found)
+
 	// validator mines a block
+	sealedBlock3, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock3)
+
+	err = dv1.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = dv2.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = n1.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = n2.Sync(context.TODO())
+	assert.NoError(t, err)
 	// fileDownloader1 downloads the files and asks the data verifier for decryption keys and restores the original files
+	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash, uint64(file1UploadResponse.Size))
+	assert.NoError(t, err)
+	assert.Equal(t, "started", stats1)
+	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash, uint64(file2UploadResponse.Size))
+	assert.NoError(t, err)
+	assert.Equal(t, "started", stats2)
+	time.Sleep(400 * time.Millisecond)
+	file1Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
+	assert.NoError(t, err)
+	assert.Empty(t, file1Progress.Error)
+	assert.Equal(t, uint64(file1UploadResponse.Size), file1Progress.BytesTransfered)
+
+	// file2Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
+	// assert.NoError(t, err)
+	// assert.Empty(t, file2Progress.Error)
+	// // assert.Equal(t, uint64(file2UploadResponse.Size), file2Progress.BytesTransfered)
+	// ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
+	// assert.NoError(t, err)
+	// assert.True(t, ok)
+	// ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
+	// assert.NoError(t, err)
+	// assert.True(t, ok)
+	// time.Sleep(200 * time.Millisecond)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
@@ -393,6 +602,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 
 	// advertise
 	ffgNode.Advertise(ctx, "ffgnet")
+	err = ffgNode.DiscoverPeers(ctx, "ffgnet")
+	assert.NoError(t, err)
 	// listen for pubsub messages
 	err = ffgNode.JoinPubSubNetwork(ctx, "ffgnet_pubsub")
 	assert.NoError(t, err)

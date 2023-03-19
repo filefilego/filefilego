@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestGetDownloadContract(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{"contract": {"contract_hash":"0x01","file_hoster_response":{"from_peer_addr":"idofpeer"}}},"error":null,"id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	downloadContract, err := c.GetDownloadContract(context.TODO(), "0x01")
+	assert.NoError(t, err)
+	assert.Equal(t, "0x01", downloadContract.Contract.ContractHash)
+}
+
 func TestSendDataQueryRequest(t *testing.T) {
 	bodyReader := strings.NewReader(`{"result":{"hash":"0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae"},"error":null,"id":1}`)
 	stringReadCloser := io.NopCloser(bodyReader)

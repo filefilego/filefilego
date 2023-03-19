@@ -12,6 +12,66 @@ import (
 	"github.com/filefilego/filefilego/rpc"
 )
 
+// GetDownloadContract gets a download contract
+func (cli *Client) GetDownloadContract(ctx context.Context, contractHash string) (rpc.GetDownloadContractResponse, error) {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "data_transfer.GetDownloadContract",
+		Params: []interface{}{rpc.GetDownloadContractArgs{
+			ContractHash: contractHash,
+		}},
+		ID: 1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return rpc.GetDownloadContractResponse{}, errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return rpc.GetDownloadContractResponse{}, errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	responseData := rpc.GetDownloadContractResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return rpc.GetDownloadContractResponse{}, errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &responseData); err != nil {
+		return rpc.GetDownloadContractResponse{}, fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return responseData, nil
+}
+
 // SendDataQueryRequest sends a data query request.
 func (cli *Client) SendDataQueryRequest(ctx context.Context, fileHashes []string) (string, error) {
 	if len(fileHashes) == 0 {
