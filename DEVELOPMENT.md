@@ -2,7 +2,7 @@
 
 ### Channel Nodes
 
-#### Constrains
+#### Constraints
 The following constraints apply to each node type:
 1. Channel: `Size`, `ParentHash`, `ContentType` are not needed
 2. `FILE, DIR, SUBCHANNEL, ENTRY` require correct  `ParentHash` and correct Permissions
@@ -10,7 +10,7 @@ The following constraints apply to each node type:
 
 Permissions are as follows:
 1. `Owner` has full access
-2. `Admins` memebers can create everything except changing the `Owner` property of a node
+2. `Admins` members can create everything except changing the `Owner` property of a node
 3. `Posters` can create ONLY `Entries`, `DIR`, `FILE`
 4. Guests are only allowed to create `OTHER` nodes, BUT with fees applied
 5. Guests MAY act as Posters IF-AND-ONLY-IF, there is a wildcard`*` in the `Posters` field which simply means everyone can post.
