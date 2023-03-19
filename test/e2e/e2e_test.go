@@ -283,6 +283,15 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, fileDownloader1Client)
 	assert.NoError(t, err)
+
+	// scenario
+	// fileDownloader1 is a super light node
+	// send some coins to fileDownloader1 so it can perform a download operation
+	// fileDownloader1 sends data query request of both files
+	// fileDownloader1 checks for data query responses both from local mem or from verfiers to check if responses are relayed to verifiers
+	// fileDownloader1 prepares the transaction through v1's json rpc endpoint because its a super light node
+	// validator mines a block
+	// fileDownloader1 downloads the files and asks the data verifier for decryption keys and restores the original files
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
