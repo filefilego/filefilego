@@ -60,13 +60,14 @@ type JSONTransaction struct {
 
 // TransactionAPI represents the transaction rpc service.
 type TransactionAPI struct {
-	keystore   keystore.KeyAuthorizer
-	publisher  NetworkMessagePublisher
-	blockchain Blockchain
+	keystore       keystore.KeyAuthorizer
+	publisher      NetworkMessagePublisher
+	blockchain     Blockchain
+	superLightNode bool
 }
 
 // NewTransactionAPI creates a new transaction API to be served using JSONRPC.
-func NewTransactionAPI(keystore keystore.KeyAuthorizer, publisher NetworkMessagePublisher, blockchain Blockchain) (*TransactionAPI, error) {
+func NewTransactionAPI(keystore keystore.KeyAuthorizer, publisher NetworkMessagePublisher, blockchain Blockchain, superLightNode bool) (*TransactionAPI, error) {
 	if keystore == nil {
 		return nil, errors.New("keystore is nil")
 	}
@@ -80,9 +81,10 @@ func NewTransactionAPI(keystore keystore.KeyAuthorizer, publisher NetworkMessage
 	}
 
 	return &TransactionAPI{
-		keystore:   keystore,
-		publisher:  publisher,
-		blockchain: blockchain,
+		keystore:       keystore,
+		publisher:      publisher,
+		blockchain:     blockchain,
+		superLightNode: superLightNode,
 	}, nil
 }
 
@@ -152,8 +154,10 @@ func (api *TransactionAPI) validateBroadcastTxSetResponse(ctx context.Context, t
 		return fmt.Errorf("failed to validate transaction: %w", err)
 	}
 
-	if err := api.blockchain.PutMemPool(*tx); err != nil {
-		return fmt.Errorf("failed to insert transaction from rpc method to mempool: %w", err)
+	if !api.superLightNode {
+		if err := api.blockchain.PutMemPool(*tx); err != nil {
+			return fmt.Errorf("failed to insert transaction from rpc method to mempool: %w", err)
+		}
 	}
 
 	payload := messages.GossipPayload{

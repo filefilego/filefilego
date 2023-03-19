@@ -1,0 +1,527 @@
+package e2e
+
+import (
+	"context"
+	"fmt"
+	"math/big"
+	"net"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"github.com/urfave/cli/v2"
+
+	"github.com/gorilla/mux"
+	"github.com/gorilla/rpc/v2"
+	"github.com/syndtr/goleveldb/leveldb"
+
+	"github.com/filefilego/filefilego/block"
+	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/client"
+	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/currency"
+	"github.com/filefilego/filefilego/common/hexutil"
+	"github.com/filefilego/filefilego/config"
+	"github.com/filefilego/filefilego/contract"
+	"github.com/filefilego/filefilego/crypto"
+	"github.com/filefilego/filefilego/database"
+	"github.com/filefilego/filefilego/keystore"
+	"github.com/filefilego/filefilego/node"
+	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
+	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
+	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
+	internalrpc "github.com/filefilego/filefilego/rpc"
+	"github.com/filefilego/filefilego/search"
+	"github.com/filefilego/filefilego/storage"
+	"github.com/filefilego/filefilego/validator"
+	"github.com/gorilla/rpc/v2/json"
+	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
+	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
+)
+
+func TestE2E(t *testing.T) {
+	t.Cleanup(func() {
+		os.RemoveAll("v1")
+		os.RemoveAll("filehoster")
+		os.RemoveAll("filehoster2")
+		os.RemoveAll("filestoupload")
+		os.RemoveAll("dataverifier1")
+		os.RemoveAll("dataverifier2")
+		os.RemoveAll("datadownloader")
+	})
+	fileContent := "this is ffg network a decentralized data sharing network+"
+	fileContent2 := "Whoever would overthrow the liberty of a nation must begin by subduing the freeness of speech."
+	inputFile := "uploadedFile.txt"
+	inputFile2 := "uploadedFile2.txt"
+
+	currentDir, err := os.Getwd()
+	assert.NoError(t, err)
+	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "filestoupload", inputFile))
+	assert.NoError(t, err)
+	uploadedFile2path, err := common.WriteToFile([]byte(fileContent2), filepath.Join(currentDir, "filestoupload", inputFile2))
+	assert.NoError(t, err)
+	// verifier
+	conf1 := config.New(&cli.Context{})
+	conf1.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf1.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf1.Global.DataDir = "v1"
+	conf1.Global.DataDownloadsPath = path.Join("v1", "downloads")
+	conf1.Global.KeystoreDir = path.Join("v1", "keystore")
+	conf1.Global.Validator = true
+	conf1.P2P.ListenPort = 10209
+	conf1.RPC.HTTP.Enabled = true
+	conf1.RPC.HTTP.ListenPort = 8090
+	conf1.RPC.EnabledServices = []string{"*"}
+	v1, v1Bchain, validator, kpV1 := createNode(t, "blockchain1.db", conf1, true)
+	assert.NotNil(t, v1)
+	assert.Equal(t, uint64(0), v1Bchain.GetHeight())
+	assert.NotEmpty(t, kpV1.Address)
+	v1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf1.RPC.HTTP.ListenAddress, conf1.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, v1Client)
+	balanceOfVerifier, err := v1Client.Balance(context.TODO(), kpV1.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, "0", balanceOfVerifier.Balance)
+	sealedBlock, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock)
+	assert.Equal(t, uint64(1), v1Bchain.GetHeight())
+	// check again verifiers balance address
+	balanceOfVerifier, err = v1Client.Balance(context.TODO(), kpV1.Address)
+	assert.NoError(t, err)
+	v1AddressBytes, err := hexutil.Decode(kpV1.Address)
+	assert.NoError(t, err)
+	addressState, err := v1Bchain.GetAddressState(v1AddressBytes)
+	assert.NoError(t, err)
+	balanceBig, err := addressState.GetBalance()
+	assert.NoError(t, err)
+	ffg40 := currency.FFG().Mul(currency.FFG(), big.NewInt(40))
+	assert.Equal(t, balanceBig.Text(16), ffg40.Text(16))
+	assert.Equal(t, "0x"+ffg40.Text(16), balanceOfVerifier.BalanceHex)
+	v1MultiAddr, err := v1.GetMultiaddr()
+	assert.NoError(t, err)
+
+	// n1 file hoster with file 1 and 2
+	conf2 := config.New(&cli.Context{})
+	conf2.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf2.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf2.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
+	conf2.Global.Storage = true
+	conf2.Global.StorageDir = path.Join("filehoster", "file_storage")
+	conf2.Global.StorageFeesPerByte = currency.FFG().String()
+	conf2.Global.StorageToken = "1234"
+	conf2.Global.SearchEngine = true
+	conf2.Global.DataDir = "filehoster"
+	conf2.Global.DataDownloadsPath = path.Join("filehoster", "downloads")
+	conf2.Global.KeystoreDir = path.Join("filehoster", "keystore")
+	conf2.Global.Validator = false
+	conf2.P2P.ListenPort = 10210
+	conf2.RPC.HTTP.Enabled = true
+	conf2.RPC.HTTP.ListenPort = 8091
+	conf2.RPC.EnabledServices = []string{"*"}
+	n1, n1Bchain, _, _ := createNode(t, "blockchain2.db", conf2, false)
+	assert.NotNil(t, n1)
+	assert.Equal(t, uint64(0), n1Bchain.GetHeight())
+	assert.Len(t, n1.Peers(), 2)
+	n1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf2.RPC.HTTP.ListenAddress, conf2.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, n1Client)
+	err = n1.Sync(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), n1Bchain.GetHeight())
+	storageAccess, err := n1Client.GetStorageAccessToken(context.TODO(), conf2.Global.StorageToken)
+	assert.NoError(t, err)
+	file1UploadResponse, err := n1Client.UploadFile(context.TODO(), uploadedFilepath, "", storageAccess)
+	assert.NoError(t, err)
+	assert.Equal(t, "uploadedFile.txt", file1UploadResponse.FileName)
+	assert.NotEmpty(t, file1UploadResponse.FileHash)
+	assert.NotEmpty(t, file1UploadResponse.MerkleRootHash)
+	assert.Equal(t, 57, file1UploadResponse.Size)
+	file2UploadResponse, err := n1Client.UploadFile(context.TODO(), uploadedFile2path, "", storageAccess)
+	assert.NoError(t, err)
+	assert.Equal(t, "uploadedFile2.txt", file2UploadResponse.FileName)
+	assert.NotEmpty(t, file2UploadResponse.FileHash)
+	assert.NotEmpty(t, file2UploadResponse.MerkleRootHash)
+	assert.Equal(t, 94, file2UploadResponse.Size)
+
+	// n2 file hoster with file 1
+	conf3 := config.New(&cli.Context{})
+	conf3.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf3.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf3.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
+	conf3.Global.Storage = true
+	conf3.Global.StorageDir = path.Join("filehoster2", "file_storage")
+	conf3.Global.StorageFeesPerByte = currency.FFG().String()
+	conf3.Global.StorageToken = "1234"
+	conf3.Global.SearchEngine = true
+	conf3.Global.DataDir = "filehoster2"
+	conf3.Global.DataDownloadsPath = path.Join("filehoster2", "downloads")
+	conf3.Global.KeystoreDir = path.Join("filehoster2", "keystore")
+	conf3.Global.Validator = false
+	conf3.P2P.ListenPort = 10211
+	conf3.RPC.HTTP.Enabled = true
+	conf3.RPC.HTTP.ListenPort = 8092
+	conf3.RPC.EnabledServices = []string{"*"}
+	n2, n2Bchain, _, _ := createNode(t, "blockchain3.db", conf3, false)
+	assert.NotNil(t, n2)
+	assert.Equal(t, uint64(0), n2Bchain.GetHeight())
+	n2Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf3.RPC.HTTP.ListenAddress, conf3.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, n2Client)
+	err = n2.Sync(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), n2Bchain.GetHeight())
+	storageAccessN2, err := n2Client.GetStorageAccessToken(context.TODO(), conf3.Global.StorageToken)
+	assert.NoError(t, err)
+	file1UploadResponseN2, err := n2Client.UploadFile(context.TODO(), uploadedFilepath, "", storageAccessN2)
+	assert.NoError(t, err)
+	assert.Equal(t, "uploadedFile.txt", file1UploadResponseN2.FileName)
+	assert.NotEmpty(t, file1UploadResponseN2.FileHash)
+	assert.NotEmpty(t, file1UploadResponseN2.MerkleRootHash)
+	assert.Equal(t, 57, file1UploadResponseN2.Size)
+
+	// dataverifier1
+	conf4 := config.New(&cli.Context{})
+	conf4.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf4.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf4.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
+	conf4.Global.Storage = true
+	conf4.Global.StorageDir = path.Join("dataverifier1", "file_storage")
+	conf4.Global.StorageFeesPerByte = currency.FFG().String()
+	conf4.Global.StorageToken = "1234"
+	conf4.Global.SearchEngine = true
+	conf4.Global.DataDir = "dataverifier1"
+	conf4.Global.DataDownloadsPath = path.Join("dataverifier1", "downloads")
+	conf4.Global.KeystoreDir = path.Join("dataverifier1", "keystore")
+	conf4.Global.Validator = false
+	conf4.P2P.ListenPort = 10212
+	conf4.RPC.HTTP.Enabled = true
+	conf4.RPC.HTTP.ListenPort = 8093
+	conf4.RPC.EnabledServices = []string{"*"}
+	conf4.Global.DataVerifier = true
+	conf4.Global.DataVerifierTransactionFees = "0x1"
+	halfFFG := currency.FFG().Div(currency.FFG(), big.NewInt(2)).String()
+	conf4.Global.DataVerifierVerificationFees = halfFFG
+	dv1, dv1Bchain, _, _ := createNode(t, "blockchain4.db", conf4, true)
+	assert.NotNil(t, dv1)
+	assert.Equal(t, uint64(0), dv1Bchain.GetHeight())
+	dv1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf4.RPC.HTTP.ListenAddress, conf4.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, dv1Client)
+	err = dv1.Sync(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), dv1Bchain.GetHeight())
+
+	// dataverifier2
+	conf5 := config.New(&cli.Context{})
+	conf5.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf5.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf5.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
+	conf5.Global.Storage = true
+	conf5.Global.StorageDir = path.Join("dataverifier2", "file_storage")
+	conf5.Global.StorageFeesPerByte = currency.FFG().String()
+	conf5.Global.StorageToken = "1234"
+	conf5.Global.SearchEngine = true
+	conf5.Global.DataDir = "dataverifier2"
+	conf5.Global.DataDownloadsPath = path.Join("dataverifier2", "downloads")
+	conf5.Global.KeystoreDir = path.Join("dataverifier2", "keystore")
+	conf5.Global.Validator = false
+	conf5.P2P.ListenPort = 10213
+	conf5.RPC.HTTP.Enabled = true
+	conf5.RPC.HTTP.ListenPort = 8094
+	conf5.RPC.EnabledServices = []string{"*"}
+	conf5.Global.DataVerifier = true
+	conf5.Global.DataVerifierTransactionFees = "0x1"
+	conf5.Global.DataVerifierVerificationFees = halfFFG
+	dv2, dv2Bchain, _, _ := createNode(t, "blockchain5.db", conf5, true)
+	assert.NotNil(t, dv2)
+	assert.Equal(t, uint64(0), dv2Bchain.GetHeight())
+	dv2Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf5.RPC.HTTP.ListenAddress, conf5.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, dv2Client)
+	err = dv2.Sync(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), dv2Bchain.GetHeight())
+
+	// file downloader
+	conf6 := config.New(&cli.Context{})
+	conf6.Global.SuperLightNode = true
+	conf6.Global.StorageFileMerkleTreeTotalSegments = 8
+	conf6.Global.StorageFileSegmentsEncryptionPercentage = 5
+	conf6.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
+	// conf6.Global.Storage = true
+	// conf6.Global.StorageDir = path.Join("dataverifier2", "file_storage")
+	// conf6.Global.StorageFeesPerByte = currency.FFG().String()
+	// conf6.Global.StorageToken = "1234"
+	// conf6.Global.SearchEngine = true
+	conf6.Global.DataDir = "datadownloader"
+	conf6.Global.DataDownloadsPath = path.Join("datadownloader", "downloads")
+	conf6.Global.KeystoreDir = path.Join("datadownloader", "keystore")
+	// conf6.Global.Validator = false
+	conf6.P2P.ListenPort = 10214
+	conf6.RPC.HTTP.Enabled = true
+	conf6.RPC.HTTP.ListenPort = 8095
+	conf6.RPC.EnabledServices = []string{"data_transfer"}
+	// conf6.Global.DataVerifier = true
+	// conf6.Global.DataVerifierTransactionFees = "0x1"
+	// conf6.Global.DataVerifierVerificationFees = halfFFG
+	fileDownloader1, _, _, _ := createNode(t, "blockchain6.db", conf6, false)
+	assert.NotNil(t, fileDownloader1)
+	// assert.Equal(t, uint64(0), dv2Bchain.GetHeight())
+	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
+	assert.NoError(t, err)
+	assert.NotNil(t, fileDownloader1Client)
+	assert.NoError(t, err)
+}
+
+func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
+	ctx := context.Background()
+	connManager, err := connmgr.NewConnManager(conf.P2P.MinPeers, conf.P2P.MaxPeers, connmgr.WithGracePeriod(time.Minute))
+	assert.NoError(t, err)
+
+	kp, err := crypto.GenerateKeyPair()
+	assert.NoError(t, err)
+
+	if isVerifier {
+		pk, err := kp.PublicKey.Raw()
+		assert.NoError(t, err)
+		block.SetBlockVerifiers(block.Verifier{
+			Address:   kp.Address,
+			PublicKey: hexutil.Encode(pk),
+		})
+	}
+
+	host, err := libp2p.New(libp2p.Identity(kp.PrivateKey),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/%s/tcp/%d", conf.P2P.ListenAddress, conf.P2P.ListenPort)),
+		libp2p.Ping(false),
+		libp2p.Security(libp2ptls.ID, libp2ptls.New),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.DefaultTransports,
+		libp2p.ConnectionManager(connManager),
+		libp2p.NATPortMap(),
+		libp2p.EnableNATService(),
+	)
+	assert.NoError(t, err)
+
+	kademliaDHT, err := dht.New(ctx, host, dht.Mode(dht.ModeServer))
+	assert.NoError(t, err)
+	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
+
+	optsPS := []pubsub.Option{pubsub.WithMessageSigning(true), pubsub.WithMaxMessageSize(conf.P2P.GossipMaxMessageSize)} // 10 MB
+	gossip, err := pubsub.NewGossipSub(ctx, host, optsPS...)
+	assert.NoError(t, err)
+	db, err := leveldb.OpenFile(filepath.Join(conf.Global.DataDir, dbName), nil)
+	assert.NoError(t, err)
+	globalDB, err := database.New(db)
+	assert.NoError(t, err)
+	s := rpc.NewServer()
+	s.RegisterCodec(json.NewCodec(), "application/json")
+
+	blockValidator := &validator.Validator{}
+	// nolint:staticcheck
+	ffgNode := &node.Node{}
+	// nolint:staticcheck
+	bchain := &blockchain.Blockchain{}
+	storageEngine := &storage.Storage{}
+	searchEngine := &search.Search{}
+	dataQueryProtocol, err := dataquery.New(host)
+	assert.NoError(t, err)
+	genesisblockValid, err := block.GetGenesisBlock()
+	assert.NoError(t, err)
+
+	// super light node dependencies setup
+	if conf.Global.SuperLightNode {
+		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
+		assert.NoError(t, err)
+
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{})
+		assert.NoError(t, err)
+	} else {
+		// full node dependencies setup
+		if conf.Global.Storage {
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
+			assert.NoError(t, err)
+		}
+
+		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
+		assert.NoError(t, err)
+
+		searchEngine, err = search.New(blv)
+		assert.NoError(t, err)
+
+		bchain, err = blockchain.New(globalDB, searchEngine, genesisblockValid.Hash)
+		assert.NoError(t, err)
+
+		start := time.Now()
+		err = bchain.InitOrLoad()
+		assert.NoError(t, err)
+		elapsed := time.Since(start)
+		log.Infof("finished verifying local blockchain in %s", elapsed)
+
+		blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
+		assert.NoError(t, err)
+
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+		assert.NoError(t, err)
+
+		// validator node
+		if conf.Global.Validator && !conf.Global.SuperLightNode {
+			blockValidator, err = validator.New(ffgNode, bchain, kp.PrivateKey)
+			assert.NoError(t, err)
+		}
+	}
+
+	// advertise
+	ffgNode.Advertise(ctx, "ffgnet")
+	// listen for pubsub messages
+	err = ffgNode.JoinPubSubNetwork(ctx, "ffgnet_pubsub")
+	assert.NoError(t, err)
+
+	// if full node, then hanlde incoming block, transactions, and data queries
+	if !conf.Global.SuperLightNode {
+		err = ffgNode.HandleIncomingMessages(ctx, "ffgnet_pubsub")
+		assert.NoError(t, err)
+	}
+
+	// bootstrap
+	err = ffgNode.Bootstrap(ctx, conf.P2P.Bootstraper.Nodes)
+	assert.NoError(t, err)
+
+	err = common.CreateDirectory(conf.Global.KeystoreDir)
+	assert.NoError(t, err)
+
+	// we use the content of the file as a jwt key signer byte array
+	kpBytes, err := kp.PrivateKey.Raw()
+	assert.NoError(t, err)
+
+	keystore, err := keystore.New(conf.Global.KeystoreDir, kpBytes)
+	assert.NoError(t, err)
+
+	if contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
+		addressAPI, err := internalrpc.NewAddressAPI(keystore, bchain)
+		assert.NoError(t, err)
+		err = s.RegisterService(addressAPI, internalrpc.AddressServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.BlockServiceNamespace) {
+		blockAPI, err := internalrpc.NewBlockAPI(bchain)
+		assert.NoError(t, err)
+		err = s.RegisterService(blockAPI, internalrpc.BlockServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain)
+		assert.NoError(t, err)
+		err = s.RegisterService(filefilegoAPI, internalrpc.FilefilegoServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
+		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain, conf.Global.SuperLightNode)
+		assert.NoError(t, err)
+		err = s.RegisterService(transactionAPI, internalrpc.TransactionServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
+		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine)
+		assert.NoError(t, err)
+		err = s.RegisterService(channelAPI, internalrpc.ChannelServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	contractStore, err := contract.New(globalDB)
+	assert.NoError(t, err)
+
+	dataVerificationProtocol, err := dataverification.New(
+		host,
+		contractStore,
+		storageEngine,
+		bchain,
+		ffgNode,
+		conf.Global.StorageFileMerkleTreeTotalSegments,
+		conf.Global.StorageFileSegmentsEncryptionPercentage,
+		conf.Global.DataDownloadsPath,
+		conf.Global.DataVerifier,
+		conf.Global.DataVerifierVerificationFees,
+		conf.Global.DataVerifierTransactionFees)
+	assert.NoError(t, err)
+
+	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore)
+		assert.NoError(t, err)
+		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	peers := ffgNode.Peers()
+	log.Infof("node id: %s", ffgNode.GetID())
+	log.Infof("peerstore content: %v ", peers)
+
+	r := mux.NewRouter()
+	r.Handle("/rpc", s)
+
+	// storage is allowed only in full node mode
+	if conf.Global.Storage && !conf.Global.SuperLightNode {
+		r.Handle("/uploads", storageEngine)
+		r.HandleFunc("/auth", storageEngine.Authenticate)
+	}
+
+	// unix socket
+	unixserver := &http.Server{
+		ReadHeaderTimeout: 2 * time.Second,
+		Handler:           r,
+	}
+
+	if conf.RPC.Socket.Enabled {
+		unixListener, err := net.Listen("unix", conf.RPC.Socket.Path)
+		assert.NoError(t, err)
+
+		go func() {
+			if err := unixserver.Serve(unixListener); err != nil {
+				log.Fatalf("failed to start unix socket: %v", err)
+			}
+		}()
+	}
+
+	// http
+	server := &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", conf.RPC.HTTP.ListenAddress, conf.RPC.HTTP.ListenPort),
+		ReadHeaderTimeout: 2 * time.Second,
+	}
+
+	if conf.RPC.HTTP.Enabled {
+		server.Handler = r
+	}
+
+	go func() {
+		err := server.ListenAndServe()
+		assert.NoError(t, err)
+	}()
+
+	return ffgNode, bchain, blockValidator, kp
+}
+
+// if * it means all services are allowed, otherwise a list of services will be scanned
+func contains(allowedServices []string, service string) bool {
+	for _, s := range allowedServices {
+		s = strings.TrimSpace(s)
+		if s == service || s == "*" {
+			return true
+		}
+	}
+	return false
+}

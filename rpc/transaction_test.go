@@ -45,7 +45,7 @@ func TestNewTransactionAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewTransactionAPI(tt.keystore, tt.publisher, tt.blockchain)
+			api, err := NewTransactionAPI(tt.keystore, tt.publisher, tt.blockchain, false)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -69,7 +69,7 @@ func TestTransactionAPIMethods(t *testing.T) {
 	ks := keyAuthorizerStub{ok: true, key: unlockedKey}
 
 	bchain := &blockchainStub{}
-	transactionAPI, err := NewTransactionAPI(&ks, &networkMessagePublisherStub{}, bchain)
+	transactionAPI, err := NewTransactionAPI(&ks, &networkMessagePublisherStub{}, bchain, false)
 	assert.NoError(t, err)
 
 	validTx, kp := validTransaction(t)
