@@ -775,6 +775,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		assert.NoError(t, err)
 	}()
 
+	time.Sleep(100 * time.Millisecond)
+
 	return ffgNode, bchain, blockValidator, kp
 }
 
