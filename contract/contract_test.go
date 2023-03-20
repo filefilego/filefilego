@@ -157,6 +157,7 @@ func TestStoreMethods(t *testing.T) {
 	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
 	assert.Equal(t, uint64(10), transfered)
 	store2.IncrementTransferedBytes("0x0a", []byte{75}, 10)
+	store2.IncrementTransferedBytes("0x0a", []byte{79}, 10)
 	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
 	assert.Equal(t, uint64(20), transfered)
 }

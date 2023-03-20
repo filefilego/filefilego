@@ -567,7 +567,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		return fmt.Errorf("failed to check and validate contract before releasing file hoster fees: %w", err)
 	}
 
-	fileHosterAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.FileRequesterNodePublicKey)
+	fileHosterAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.FileHosterResponse.PublicKey)
 	if err != nil {
 		return fmt.Errorf("failed to get file hosters address from contract: %w", err)
 	}
@@ -1175,7 +1175,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		return "", fmt.Errorf("failed to created contract directory: %w", err)
 	}
 
-	fileHashHex := hexutil.Encode(request.FileHash)
+	fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
 	destinationFilePath := filepath.Join(d.downloadDirectory, contractHashHex, fileHashHex)
 	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {

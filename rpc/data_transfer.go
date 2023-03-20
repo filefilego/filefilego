@@ -145,6 +145,80 @@ func (api *DataTransferAPI) SendDataQueryRequest(r *http.Request, args *SendData
 	return nil
 }
 
+// GetDownloadContractArgs represent the args.
+type GetDownloadContractArgs struct {
+	ContractHash string `json:"contract_hash"`
+}
+
+// DownloadContractJSON is a download contract in JSON.
+type DownloadContractJSON struct {
+	FileHosterResponse         DataQueryResponseJSON `json:"file_hoster_response"`
+	FileRequesterNodePublicKey string                `json:"file_requester_node_public_key"`
+	FileHashesNeeded           []string              `json:"file_hashes_needed"`
+	FileHashesNeededSizes      []uint64              `json:"file_hashes_needed_sizes"`
+	VerifierPublicKey          string                `json:"verifier_public_key"`
+	VerifierFees               string                `json:"verifier_fees"`
+	ContractHash               string                `json:"contract_hash"`
+	VerifierSignature          string                `json:"verifier_signature"`
+}
+
+// GetDownloadContractResponse represents the response.
+type GetDownloadContractResponse struct {
+	Contract DownloadContractJSON `json:"contract"`
+}
+
+// GetDownloadContract returns a contract from the memmory.
+func (api *DataTransferAPI) GetDownloadContract(r *http.Request, args *GetDownloadContractArgs, response *GetDownloadContractResponse) error {
+	if args.ContractHash == "" {
+		return errors.New("contract hash is empty")
+	}
+
+	downloadContract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("failed to get contract: %w", err)
+	}
+
+	dqrJSON := DataQueryResponseJSON{
+		FromPeerAddr:          downloadContract.FileHosterResponse.FromPeerAddr,
+		FeesPerByte:           downloadContract.FileHosterResponse.FeesPerByte,
+		HashDataQueryRequest:  hexutil.Encode(downloadContract.FileHosterResponse.HashDataQueryRequest),
+		PublicKey:             hexutil.Encode(downloadContract.FileHosterResponse.PublicKey),
+		Signature:             hexutil.Encode(downloadContract.FileHosterResponse.Signature),
+		FileHashes:            make([]string, len(downloadContract.FileHosterResponse.FileHashes)),
+		FileHashesSizes:       downloadContract.FileHosterResponse.FileHashesSizes,
+		UnavailableFileHashes: make([]string, len(downloadContract.FileHosterResponse.UnavailableFileHashes)),
+		Timestamp:             downloadContract.FileHosterResponse.Timestamp,
+	}
+
+	for i, j := range downloadContract.FileHosterResponse.FileHashes {
+		dqrJSON.FileHashes[i] = hexutil.EncodeNoPrefix(j)
+	}
+
+	for i, j := range downloadContract.FileHosterResponse.UnavailableFileHashes {
+		dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
+	}
+
+	jsonContract := DownloadContractJSON{
+		FileHosterResponse:         dqrJSON,
+		FileRequesterNodePublicKey: hexutil.Encode(downloadContract.FileRequesterNodePublicKey),
+		FileHashesNeeded:           make([]string, len(downloadContract.FileHashesNeeded)),
+		FileHashesNeededSizes:      make([]uint64, len(downloadContract.FileHashesNeededSizes)),
+		VerifierPublicKey:          hexutil.Encode(downloadContract.VerifierPublicKey),
+		VerifierFees:               downloadContract.VerifierFees,
+		ContractHash:               hexutil.Encode(downloadContract.ContractHash),
+		VerifierSignature:          hexutil.Encode(downloadContract.VerifierSignature),
+	}
+
+	for i, j := range downloadContract.FileHashesNeeded {
+		jsonContract.FileHashesNeeded[i] = hexutil.EncodeNoPrefix(j)
+	}
+
+	copy(jsonContract.FileHashesNeededSizes, downloadContract.FileHashesNeededSizes)
+	response.Contract = jsonContract
+
+	return nil
+}
+
 // CheckDataQueryResponseArgs is a data query response arg.
 type CheckDataQueryResponseArgs struct {
 	DataQueryRequestHash string `json:"data_query_request_hash"`
@@ -304,6 +378,9 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		return fmt.Errorf("failed to decode file hoster's peer id: %w", err)
 	}
 
+	// trigger a file initialization by seting the size of the file
+	api.contractStore.SetFileSize(args.ContractHash, fileHash, args.FileSize)
+
 	request := &messages.FileTransferInfoProto{
 		ContractHash: downloadContract.ContractHash,
 		FileHash:     fileHash,
@@ -391,7 +468,7 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 
 	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
 	downloadDir := api.dataVerificationProtocol.GetDownloadDirectory()
-	fileHashWithPrefix := hexutil.Encode(fileHash)
+	fileHashWithPrefix := hexutil.EncodeNoPrefix(fileHash)
 	destinationFilePath := filepath.Join(downloadDir, args.ContractHash, fileHashWithPrefix)
 
 	orderedSlice := make([]int, totalDesiredSegments)
@@ -528,10 +605,10 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		}
 
 		outputPathOfFile := args.RestoredFilePaths[foundIdx]
-		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.Encode(v.FileHash))
+		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.EncodeNoPrefix(v.FileHash))
 		decryptedPath, err := api.dataVerificationProtocol.DecryptFile(inputEncryptedFilePath, outputPathOfFile, encryptionData.KeyIvRandomizedFileSegments[i].Key, encryptionData.KeyIvRandomizedFileSegments[i].Iv, common.EncryptionType(encryptionData.KeyIvRandomizedFileSegments[i].EncryptionType), randomizedSegsFromKey)
 		if err != nil {
-			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.Encode(v.FileHash), err)
+			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.EncodeNoPrefix(v.FileHash), err)
 		}
 
 		response.DecryptedFilePaths = append(response.DecryptedFilePaths, decryptedPath)

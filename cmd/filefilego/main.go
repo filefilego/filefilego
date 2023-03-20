@@ -169,7 +169,7 @@ func run(ctx *cli.Context) error {
 	} else {
 		// full node dependencies setup
 		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, filepath.Join(conf.Global.DataDir, "storage"), true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
 			if err != nil {
 				return fmt.Errorf("failed to setup storage engine: %w", err)
 			}
@@ -265,6 +265,10 @@ func run(ctx *cli.Context) error {
 
 	// advertise
 	ffgNode.Advertise(ctx.Context, "ffgnet")
+	err = ffgNode.DiscoverPeers(ctx.Context, "ffgnet")
+	if err != nil {
+		log.Warnf("discovering peers failed: %v", err)
+	}
 	// listen for pubsub messages
 	err = ffgNode.JoinPubSubNetwork(ctx.Context, "ffgnet_pubsub")
 	if err != nil {
@@ -330,7 +334,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
-		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain)
+		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain, conf.Global.SuperLightNode)
 		if err != nil {
 			return fmt.Errorf("failed to setup transaction rpc api: %w", err)
 		}

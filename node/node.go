@@ -271,7 +271,7 @@ func (n *Node) DiscoverPeers(ctx context.Context, ns string) error {
 		if err := n.host.Connect(ctx, peer); err != nil {
 			log.Warnf("failed connecting to %s with error: %v", peer.ID.Pretty(), err)
 		} else {
-			log.Info("Connected to: ", peer.ID.Pretty())
+			log.Info("connected to: ", peer.ID.Pretty())
 		}
 	}
 	return nil
@@ -410,7 +410,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 		}
 
 		for _, v := range dataQueryRequest.FileHashes {
-			fileMetaData, err := n.storage.GetFileMetadata(hexutil.Encode(v))
+			fileMetaData, err := n.storage.GetFileMetadata(hexutil.EncodeNoPrefix(v))
 			if err != nil {
 				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
 				continue
