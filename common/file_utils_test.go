@@ -277,7 +277,7 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 
 	start = time.Now()
-	err = DecryptFileSegments(int(outputStats.Size()), totalSegments, percentageDecrypt, randomSlices, output, outputOriginalRestored, encryptor)
+	err = DecryptFileSegments(int(outputStats.Size()), totalSegments, percentageDecrypt, randomSlices, output, outputOriginalRestored, encryptor, false)
 	elapsed = time.Since(start)
 	log.Printf("DecryptFileSegments took %s", elapsed)
 	assert.NoError(t, err)
@@ -428,7 +428,7 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.NoError(t, err)
 
 	// decrypt the file segments
-	err = DecryptFileSegments(int(outputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, output, outputOriginalRestored, encryptor)
+	err = DecryptFileSegments(int(outputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, output, outputOriginalRestored, encryptor, false)
 	assert.NoError(t, err)
 	outputOriginalRestored.Close()
 

@@ -156,7 +156,7 @@ type ReadWriteSeekerSyncer interface {
 }
 
 // DecryptFileSegments decrypts the segments and replaces them in the original file and then performs a file block/segment re-arrangement and writes to the output.
-func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input ReadWriteSeekerSyncer, output io.WriteCloser, encryptor DataEncryptor) error {
+func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input ReadWriteSeekerSyncer, output io.WriteCloser, encryptor DataEncryptor, onlyFileReArrangement bool) error {
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
 	if !ok || len(ranges) == 0 {
@@ -195,7 +195,9 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 					return fmt.Errorf("failed to seek input file to the point before read: %w", err)
 				}
 				if n > 0 {
-					stream.XORKeyStream(buf, buf[:n])
+					if !onlyFileReArrangement {
+						stream.XORKeyStream(buf, buf[:n])
+					}
 					totalOffset += n
 					okn, err := input.Write(buf[:n])
 					if err != nil {
