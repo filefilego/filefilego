@@ -1,14 +1,12 @@
 # FileFileGo v2 Decentralized Network
 
-A Peer-to-peer data-sharing network with indexing/tracking, storage, full-text search, and incentive mechanism form a decentralized network that allows users to share data without a single point of failure and censorship. The architecture is designed in a way to prevent censorship and privacy issues, improves data availability with an incentive system based on game-theory concepts, and achieves fault-tolerance. To solve these challenges we propose a Peer-to-peer and decentralized data sharing network (FileFileGo) for the web3 era.
+The FileFileGo protocol is a peer-to-peer data-sharing network designed for the web3 era, with an incentive mechanism, full-text search, storage, and indexing/tracking. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
 
-We have seen the rise of the Internet from the first days until now. Open internet suffers from big corporations and ISPs which censor freedom of speech. We have seen acts and statements such as SOPA, PIPA, ACTA and so many more from law-makers with the goal of controlling the Internet and the flow of information.
+As the internet has grown, it has become increasingly vulnerable to censorship and control by large corporations and ISPs. Governments have also attempted to regulate the flow of information online, making it challenging for platforms like WikiLeaks and The Pirate Bay to operate without interruption. The FileFileGo protocol was developed to address these issues and enable users to access and share information freely.
 
-These days it's extremely difficult for sites like WikiLeaks, thepiratebay, and so on to operate without interruption and pressure from different oppressing parties. With these in mind, we have developed the FileFileGo protocol and stacks to allow users to access and share data without a single point of failure.
+FileFileGo is an open-source community project, with no centralized control or ownership. Its coin distribution is designed to be fair, with an emission of 15 FFG per block that decreases by half every 24 months. The protocol is launched without ICO/STO/IEO or pre-mine, relying on a Proof of Authority consensus algorithm that will eventually transition to Proof of Stake to allow more stakeholders to participate.
 
-FileFileGo is not controlled by any individual. It's a joint effort by the Open-source community. The coin distribution is designed to be as fair as possible, with the emission of 15 FFG (the native currency) per block which is divided by 2 every 24 months.
-
-FileFileGo is launched fairly - free of ICO/STO/IEO or pre-mine. We rely on a current PoA (Proof of Authority) consensus algorithm which will eventually be replaced by a PoS (Proof of Stake) to allow more parties to participate in the project. Support the movement by contributing to the project and develop innovative ideas that respect our digital rights, privacy, freedom of information, freedom from Internet censorship, and net neutrality.
+By supporting FileFileGo, users can help promote digital rights, privacy, freedom of information, and net neutrality. We encourage contributions and innovative ideas to ensure that the internet remains an open and decentralized platform.
 
 
 # The Innovation: Proof of Transfer (PoX) / Proof of Data Possession (PoDP)
@@ -26,7 +24,8 @@ The network can resist Byzantine faults if `node_x` can broadcast (peer-to-peer)
 1. If `node_x` is an honest node, then all honest nodes agree on the value x.
 2. In any case, all honest nodes agree on the same value y.
 
-Proof of Transfer solves exactly these problems. It is designed so that honest nodes within the network can verify and agree that `node_2` has successfully transferred `data_x` to `node_1`. In order to achieve this consensus mechanism, we introduce a set of verifiers which are responsible to challenge the participating nodes. A simple and straightforward approach would be to send the required data to a verifier and then forward it to the destination node. However, this approach introduces bandwidth and storage bottlenecks on the verifiers which in turn decreases the throughput of the overall network. The solution must have minimal bandwidth and storage/memory requirements.
+The Proof of Transfer mechanism addresses the aforementioned issues by enabling honest nodes in the network to verify and reach consensus on the successful transfer of `data_x` from `node_2` to `node_1`. This is accomplished through the use of verifiers, which are responsible for challenging participating nodes. While a straightforward approach would involve sending the required data to a verifier and then forwarding it to the destination node, this method can lead to bandwidth and storage bottlenecks, thereby reducing the overall network throughput. Therefore, the Proof of Transfer solution has been designed to minimize the bandwidth and storage/memory requirements associated with this process.
+
 
 ```
               ┌───────────┐
@@ -45,7 +44,7 @@ Proof of Transfer solves exactly these problems. It is designed so that honest n
 
 #### Merkle Tree
 
-Verifiers can use Merkle Trees as a data integrity verification mechanism without having access to the actual data. Participating nodes must generate Merkle trees which are used by verifiers for comparison and other operations.
+The verification process employed by the verifiers can utilize Merkle Trees as a mechanism for ensuring data integrity, even in cases where they do not have access to the actual data. In this process, participating nodes generate Merkle Trees that are used by the verifiers for comparison and other relevant operations.
 
 ```
      ABCD 
@@ -61,7 +60,7 @@ Verifiers can use Merkle Trees as a data integrity verification mechanism withou
 
 In this section, the complete life cycle of a data transfer verification is demonstrated.
 
-1. **Data Discovery:** There are several wire protocols created to allow nodes to communicate with each other. The first protocol used by nodes is the `Data Query` protocol which allows nodes to broadcast queries to the network throughout a gossip channel and get the response back by using direct communication. Simply put, a node asks who hosts a specific piece of data.
+1. **Data Discovery:** Numerous wire protocols have been developed to facilitate communication among nodes in a network. Among these protocols, the Data Query protocol is often the first utilized by nodes. This protocol enables nodes to broadcast queries throughout a gossip channel and retrieve responses via direct communication. Essentially, a node sends a request inquiring about which node hosts a particular piece of data.
 
 ```
              1. Data Query Request
@@ -105,9 +104,9 @@ In this section, the complete life cycle of a data transfer verification is demo
 * `v1` decides the **order** and the **number of blocks/data** ranges to be sent to `node_1` by `node_2`. We don't want to reveal the order of blocks to `node_1` yet.
 * `v1` asks `node_2` for a fixed range of data, which will be encrypted using a random key `k1` as `data_enc` by `v1` and sent to `node_1`.
 
-At this stage, `node_1` has some `data_z`, plus some `data_enc` but has no knowledge on how to reassemble them in order to get the original file. Now, `v1` can validate the integrity of the data sent to `node_1` and if they match the original Merkle tree's identity, then the decryption key `k1` is sent to `node_1`. The order of the blocks will also be sent, so `node_1` can put all the parts together to reassemble the data. The final step is to release the fees to `node_2` by `v1`. 
+In this stage, `node_1` possesses some `data_z` and `data_enc` but lacks the knowledge of how to combine them to obtain the original file. The verifier, v1, is able to verify the integrity of the data transmitted to `node_1` and, if they match the original Merkle tree's identity, the decryption key k1 is provided to `node_1`. Additionally, the block order is sent to `node_1`, enabling the reassembly of all the parts to form the original data. Once this process is complete, v1 releases the fees to `node_2`.
 
-With this algorithm, we simultaneously achieve Proof of Transfer and Proof of Data Possession.
+The use of this algorithm enables the simultaneous attainment of Proof of Transfer and Proof of Data Possession.
 ```
             ┌───┬───┬───┬───┬───┬───┬───┬───┐
 Data Blocks:│ a │ b │ c │ d │ e │ f │ g │ h │
@@ -315,41 +314,43 @@ A cyberlocker is a third-party online service that provides file-storing and fil
 
 ### Features
 
-FileFileGo combines the strength of Usenet, Blockchain/Cryptocurrency, DHT, and innovations behind BitTorrent to form a decentralized network that can't be censored and taken down by ISPs.
+FileFileGo is a decentralized network that incorporates the robustness of Usenet, Blockchain/Cryptocurrency, DHT, and BitTorrent's innovative technology to form an unassailable infrastructure that cannot be censored or taken down by Internet Service Providers (ISPs).
 
-- Blockchain-based for indexing, tracking, and other network metadata and logic.
-- Encrypted traffic to prevent ISPs and other third parties from traffic inspection.
-- Privacy-first design, to relay traffic through a set of intermediate peers.
-- The peer-to-Peer design replicates the state of the network on each full-node.
-- Native cryptocurrency to work as the "fuel" of the network.
-- Extremely low and conditional transaction fees compared to Ethereum/Bitcoin.
-- Dynamic block size.
-- Block-time of 10 seconds.
-- RPC interface to build DApps.
+- The platform employs Blockchain technology for indexing, tracking, and other network metadata and logic, ensuring a secure and efficient system. 
+- Encrypted traffic protects user data from third-party traffic inspection, while a privacy-centric design relays traffic through a set of intermediate peers. 
+- The peer-to-peer design replicates the network's state on each full node, enhancing data reliability.
+- The network's native cryptocurrency serves as the "fuel" and guarantees an extremely low and conditional transaction fee compared to Ethereum/Bitcoin. 
+- With a dynamic block size and block-time of 10 seconds, FileFileGo ensures quick and seamless transactions.
+- FileFileGo also offers an RPC interface that allows developers to build DApps on the network.
 
 ### Blockchain Consensus Algorithm
 
-Block-time of 10 seconds requires an appropriate consensus algorithm that doesn't waste much processing power and is efficient enough to process a high volume of transactions. For the first phase of FileFileGo, we choose to use Proof of Authority to achieve consensus, and later on a PoS mechanism will replace the current algorithm. PoW based algorithms are risky (PoW is safe by design) for new blockchains since there are already huge pools of computing power out there and can be used to perform 51% attacks.
+To achieve a block-time of 10 seconds, FileFileGo requires a consensus algorithm that is both efficient in processing a high volume of transactions and conserves processing power. For the initial phase, we have selected Proof of Authority (PoA) as our consensus algorithm. In the future, a Proof of Stake (PoS) mechanism will replace the current algorithm.
+
+Using PoW-based algorithms for new blockchains poses a risk, as there are already substantial pools of computing power available that could be used for 51% attacks. Therefore, we have opted for PoA, which is safe by design and provides the necessary efficiency to support our high transaction volume requirements.
 
 #### Proof of Authority / Validator+Verifier Algorithms
 
-Validator's identities are hardcoded within the blockchain and can be verified by the Genesis block coinbase transaction. The verification by participating nodes is a simple process of checking the block's signatures.
+The identities of validators are hardcoded into the blockchain and can be verified by examining the Genesis block's coinbase transaction. Participating nodes can easily verify the authenticity of these identities by checking the block's signatures.
 
 #### Proof of Stake
 
-In the future, proof-of-stake will eventually replace the current PoA mechanism so different parties can participate in the block mining process. In terms of blockchain governance, we want more parties and developers to get involved and increase the stakeholders, and one of the incentives is the Proof-of-Stake mechanism.
+As we move forward, the current PoA mechanism will be replaced by proof-of-stake to enable multiple parties to participate in the block mining process. Our goal for blockchain governance is to encourage more parties and developers to become involved and increase stakeholder engagement. One of the incentives for achieving this goal is the Proof-of-Stake mechanism.
 
 ### Blockchain and Metadata/Accounting
 
-When it comes to transaction and state mutation, we choose a different approach from UTXO-like structures to eliminate complexity. In FileFileGo accounting and metadata are stored like a normal database row while the raw blocks are stored in original format within the database.
+To simplify transaction and state mutation, FileFileGo adopts a different approach than UTXO-like structures. Rather than using such structures, we store accounting and metadata as regular database rows, while retaining the raw blocks in their original format within the database. This approach helps to eliminate unnecessary complexity.
 
 # Technical Details
 
-In this section, we will introduce technical terms and concepts used in FileFileGo.
+In this section, we will provide an overview of technical terms and concepts used in FileFileGo.
 
 ### Channels
 
-Channels allow users to organize and group data. It's similar to a bucket or a folder. For example, all the content on Wikileaks can be placed within a channel called "Wikileaks". The channel creator inherits all the permissions required for updates and other channel-related functionalities. Channels are represented in a node-chain format and are denoted as a node without `ParentHash`
+
+Channels in FileFileGo enable users to organize and group data into distinct buckets or folders. For instance, all content on Wikileaks could be placed in a channel named "Wikileaks." The user who creates a channel receives all permissions necessary for updates and other channel-related operations.
+
+Channels are structured in a node-chain format and can be identified as a node without a `ParentHash`.
 
 ### Sub Channel
 
@@ -361,18 +362,18 @@ In filefilego an `Entry` represents a post or a piece of data that contains more
 
 ### Data Storage Layer
 
-`Storage Engine` is the storage layer that tracks binary data, which are used by hash pointers within the blockchain to refer to a piece of data. The `ChanNode` structure has a field called `FileHash` which refers to the binary hash and is in the form of `"{HASH_ALGORITHM}:>{DATA_HASH}"`. We would like to keep the metadata of the hashing algorithm used as it might be useful in the future.
+`Storage Engine` is the storage layer that tracks binary data, which are used by hash pointers within the blockchain to refer to a piece of data. The `NodeItem` structure has a field called `FileHash` which refers to the binary hash and is in the form of `"{HASH_ALGORITHM}:>{DATA_HASH}"`. We would like to keep the metadata of the hashing algorithm used as it might be useful in the future.
 
 ### Full-text Index/Search
 
-Search accuracy and flexibility are as important as the core blockchain. The aim is to be able to build complex queries including binary searches using a specific query language. For instance, we should allow queries of these types:
-1. Required or inclusive ("filefilego coin"), which means both "filefilego" and "coin" is required.
-2. Optional or exclusive ("filefilego currency"), which means one of those words can be excluded.
+In FileFileGo, search accuracy and flexibility are equally important as the core blockchain functionality. We aim to enable users to construct complex queries, including binary searches, using a specific query language. For example, queries of the following types should be possible:
 
-The development of a query language that allows complex queries is a powerful tool that can be used to increase the accuracy of the search engine.
+1. Required or inclusive ("filefilego coin"), which means both "filefilego" and "coin" are required in the search results.
+2. Optional or exclusive ("filefilego currency"), which means one of those words can be excluded from the search results.
 
-There is the option to disable the full-text indexing functionality of a node by using the `--fulltex` cli flag.
+Developing a query language that supports such complex queries is a powerful tool that can significantly enhance the search engine's accuracy.
 
+It is also possible to enable a node's full-text indexing functionality using the `--search` CLI flag.
 ### Storage Engine
 
 The storage layer keeps track of binary files and uses hashes to represent a piece of information within the blockchain. This feature can be turned on by using the following flags:
