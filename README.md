@@ -128,135 +128,67 @@ Data Blocks:│ a │ b │ c │ d │ e │ f │ g │ h │
 
 # Installation
 
-### Linux, macOS, and FreeBSD based systems
-
-#### Installation requirements
-
-1. Download and install golang
+Follow the instructions to compile and install filefilego
 
 ```
-https://golang.org/doc/install
-follow the instructions to install golang on your system
+https://filefilego.com/documentation/docs/installation.html#prerequisites
 ```
 
-#### Compile FileFileGo for Linux, macOS, and FreeBSD
-
-1. Download and Compile:
+Run the full node:
 
 ```
-git clone https://github.com/filefilego/filefilego.git
-make build
-```
-
-2. Create Node Identity Key (Used for encryption and network identification)
-   Replace **thisismynodespassword** with your own password
-
-```
-./cmd/filefilego/filefilego account create_node_key thisismynodespassword
-```
-
-3. Create an account to send/receive coins.
-   Replace **thisismypassword** with your own password
-
-```
-./cmd/filefilego/filefilego account create thisismypassword
-```
-
-4. List the created accounts:
-
-```
-./cmd/filefilego/filefilego account list
-
-You will get json filenames that contain the address of your created account in step 3.
-0x--------------------------------.json
-```
-
-5. Run the full node:
-
-```
-./cmd/filefilego/filefilego --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrap_nodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
+./filefilego --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/"
 ```
 
 The above command runs a full node and starts the http rpc server. In this case, we listen on all interfaces `0.0.0.0` and port `8090` so we can build an application that can interact with this full node.
 
-### Windows
+### CLI Flags
 
-#### Install requirements for Windows
-
-1. Install Go for windows
+A list of available CLI flags are available below or you can run `./filefilego help`
 
 ```
-https://golang.org/dl/
-
-Download: go1.19.x.windows-amd64.msi
-and install the package
+  --config FILE                                        Load configuration from FILE
+  --node_identity_passphrase value                     Passphrase to unlock the node identity file
+  --log_path_line                                      Logs include file path and line number (default: false)
+  --log_level value                                    Logging level
+  --data_dir value                                     Data directory to store data/metadata (default: "/home/filefilego/.filefilego_data")
+  --keystore_dir value                                 Keystore directory (default: "/home/filefilego/.filefilego_data/keystore")
+  --validator                                          Enable Validator (default: false)
+  --validator_keypath value                            Path to the key for sealing blocks
+  --validator_key_pass value                           Passphrase of keyfile
+  --search_engine                                      Enable full-text indexing (default: false)
+  --search_engine_result_count value                   Max number of documents per search query (default: 0)
+  --storage                                            Enable storage (default: false)
+  --storage_dir value                                  Storage location
+  --storage_token value                                Access token for storage engine
+  --storage_fees_byte value                            Storage fees per Byte of data
+  --storage_file_merkle_tree_total_segments value      File's total segments for merkle tree generation (default: 0)
+  --storage_file_segments_encryption_percentage value  File's segments total encryption (default: 0)
+  --verify                                             Enable data verification(if verifier in genesis) (default: false)
+  --data_verification_fees value                       Data verification fees
+  --data_verification_transaction_fees value           Data verification transaction fees for releasing file hoster fees
+  --data_downloads_path value                          Directory path for data downloads
+  --super_light_node                                   Runs a super light node (default: false)
+  --rpc_services value                                 List of rpc services allowed
+  --rpc_whitelist value                                Allow IP addresses to access the RPC servers
+  --unix_socket                                        Enable IPC-RPC interface (default: false)
+  --unix_socket_path value                             Path of the socker/pipe file
+  --http                                               Enable the HTTP-RPC server (default: false)
+  --http_port value                                    HTTP-RPC server listening port (default: 0)
+  --http_addr value                                    HTTP-RPC server listening interface
+  --http_origin value                                  HTTP-RPC cross-origin value
+  --ws                                                 Enable the WS-RPC server (default: false)
+  --ws_port value                                      WS-RPC server listening port (default: 0)
+  --ws_addr value                                      WS-RPC server listening interface
+  --ws_origin value                                    WS-RPC cross-origin value
+  --max_gossip_size value                              Maximum gossip size (default: 0)
+  --max_peers value                                    Maximum number of peers to connect (default: 0)
+  --port value                                         P2P listening port (default: 0)
+  --addr value                                         P2P listening interface
+  --min_peers value                                    Minimum number of peers to start periodic bootstraper (default: 0)
+  --bootstrap_nodes value                              Bootstraping nodes
+  --bootstrap_freq value                               Bootstraping frequency (default: 0)
 ```
-
-2. Install TDM-GCC
-
-In order to compile the code on windows we need gcc. Download the TDM-GCC installer by visiting this page:
-
-```
-https://jmeubank.github.io/tdm-gcc/
-
-Download tdm64-gcc-x.x.x.exe if you are on a 64-bit machine
--- or ---
-Download tdm-gcc-9.2.0.exe if you are on a 32-bit machine
-
-Most of the modern CPUs are 64-bit based so go for the first binary
-```
-
-3. Install Git on Windows
-
-```
-https://git-scm.com/download/win
-
-Download:
-
-64-bit Git for Windows Setup
--- or --
-32-bit Git for Windows Setup
-```
-
-#### Compile FileFileGo for Windows
-
-1. Download and Compile:
-   Open a windows cmd/terminal and follow the instructions(use `dir` to navigate to your desired folder e.g. `C:/FileFileGo`):
-
-```
-git clone https://github.com/filefilego/filefilego.git
-make build
-```
-
-2. Create Node Identity Key (Used for encryption and network identification)
-   Replace **thisismynodespassword** with your own password
-
-```
-filefilego.exe account create_node_key thisismynodespassword
-```
-
-3. Create an account to send/receive coins.
-   Replace **thisismypassword** with your own password
-
-```
-filefilego.exe account create thisismypassword
-```
-
-4. List the created accounts:
-
-```
-filefilego.exe account list
-
-You will get json filenames that contain the address of your created account in step 3.
-0x--------------------------------.json
-```
-
-5. Run the full node:
-
-```
-filefilego.exe --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrapnodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
-```
-
 
 # Architecture
 
@@ -379,10 +311,10 @@ It is also possible to enable a node's full-text indexing functionality using th
 The storage layer keeps track of binary files and uses hashes to represent a piece of information within the blockchain. This feature can be turned on by using the following flags:
 
 ```
-... --storage --storage_dir="/somewhere/to/store/data" --storage_token="somelongtokenhere" ...
+... --storage --storage_dir="/somewhere/to/store/data" --storage_token="somelongtokenhere" --storage_fees_byte="10000" ...
 ```
 
-`--storage_dir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `storage_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users.
+`--storage_dir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `storage_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users and `--storage_fees_byte="10000"` is the fees charged per byte of data.
 
 # Coin Distribution
 
