@@ -400,5 +400,5 @@ The storage layer keeps track of binary files and uses hashes to represent a pie
 | **ZFFG**                 | **1.000.000.000.000.000.000.000** |
 
 **Total Supply:** 500 Million FFG
-**Validation/Stake Reward:** 15 FFG per Block
+**Validation/Stake Reward:** 40 FFG per Block
 **Supply Decrease Rate:** Divide by 2 every 24 months
