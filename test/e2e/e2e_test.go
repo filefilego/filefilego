@@ -267,25 +267,15 @@ func TestE2E(t *testing.T) {
 	conf6.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf6.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf6.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
-	// conf6.Global.Storage = true
-	// conf6.Global.StorageDir = path.Join("dataverifier2", "file_storage")
-	// conf6.Global.StorageFeesPerByte = currency.FFG().String()
-	// conf6.Global.StorageToken = "1234"
-	// conf6.Global.SearchEngine = true
 	conf6.Global.DataDir = "datadownloader"
 	conf6.Global.DataDownloadsPath = path.Join("datadownloader", "downloads")
 	conf6.Global.KeystoreDir = path.Join("datadownloader", "keystore")
-	// conf6.Global.Validator = false
 	conf6.P2P.ListenPort = 10214
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095
 	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction"}
-	// conf6.Global.DataVerifier = true
-	// conf6.Global.DataVerifierTransactionFees = "0x1"
-	// conf6.Global.DataVerifierVerificationFees = halfFFG
 	fileDownloader1, _, _, kpFileDownloader1 := createNode(t, "blockchain6.db", conf6, false)
 	assert.NotNil(t, fileDownloader1)
-	// assert.Equal(t, uint64(0), dv2Bchain.GetHeight())
 	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
 	assert.NoError(t, err)
 	assert.NotNil(t, fileDownloader1Client)
