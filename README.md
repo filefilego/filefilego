@@ -128,135 +128,19 @@ Data Blocks:│ a │ b │ c │ d │ e │ f │ g │ h │
 
 # Installation
 
-### Linux, macOS, and FreeBSD based systems
-
-#### Installation requirements
-
-1. Download and install golang
+Follow the instructions to compile and install filefilego
 
 ```
-https://golang.org/doc/install
-follow the instructions to install golang on your system
+https://filefilego.com/documentation/docs/installation.html#prerequisites
 ```
 
-#### Compile FileFileGo for Linux, macOS, and FreeBSD
-
-1. Download and Compile:
+Run the full node:
 
 ```
-git clone https://github.com/filefilego/filefilego.git
-make build
-```
-
-2. Create Node Identity Key (Used for encryption and network identification)
-   Replace **thisismynodespassword** with your own password
-
-```
-./cmd/filefilego/filefilego account create_node_key thisismynodespassword
-```
-
-3. Create an account to send/receive coins.
-   Replace **thisismypassword** with your own password
-
-```
-./cmd/filefilego/filefilego account create thisismypassword
-```
-
-4. List the created accounts:
-
-```
-./cmd/filefilego/filefilego account list
-
-You will get json filenames that contain the address of your created account in step 3.
-0x--------------------------------.json
-```
-
-5. Run the full node:
-
-```
-./cmd/filefilego/filefilego --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrap_nodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
+./filefilego --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/"
 ```
 
 The above command runs a full node and starts the http rpc server. In this case, we listen on all interfaces `0.0.0.0` and port `8090` so we can build an application that can interact with this full node.
-
-### Windows
-
-#### Install requirements for Windows
-
-1. Install Go for windows
-
-```
-https://golang.org/dl/
-
-Download: go1.19.x.windows-amd64.msi
-and install the package
-```
-
-2. Install TDM-GCC
-
-In order to compile the code on windows we need gcc. Download the TDM-GCC installer by visiting this page:
-
-```
-https://jmeubank.github.io/tdm-gcc/
-
-Download tdm64-gcc-x.x.x.exe if you are on a 64-bit machine
--- or ---
-Download tdm-gcc-9.2.0.exe if you are on a 32-bit machine
-
-Most of the modern CPUs are 64-bit based so go for the first binary
-```
-
-3. Install Git on Windows
-
-```
-https://git-scm.com/download/win
-
-Download:
-
-64-bit Git for Windows Setup
--- or --
-32-bit Git for Windows Setup
-```
-
-#### Compile FileFileGo for Windows
-
-1. Download and Compile:
-   Open a windows cmd/terminal and follow the instructions(use `dir` to navigate to your desired folder e.g. `C:/FileFileGo`):
-
-```
-git clone https://github.com/filefilego/filefilego.git
-make build
-```
-
-2. Create Node Identity Key (Used for encryption and network identification)
-   Replace **thisismynodespassword** with your own password
-
-```
-filefilego.exe account create_node_key thisismynodespassword
-```
-
-3. Create an account to send/receive coins.
-   Replace **thisismypassword** with your own password
-
-```
-filefilego.exe account create thisismypassword
-```
-
-4. List the created accounts:
-
-```
-filefilego.exe account list
-
-You will get json filenames that contain the address of your created account in step 3.
-0x--------------------------------.json
-```
-
-5. Run the full node:
-
-```
-filefilego.exe --rpc --http --http_port=8090 --http_addr=0.0.0.0 --bootstrapnodes="/ip4/{node_ip}/tcp/10209/p2p/{node_id}"
-```
-
 
 # Architecture
 
