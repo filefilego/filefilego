@@ -311,10 +311,10 @@ It is also possible to enable a node's full-text indexing functionality using th
 The storage layer keeps track of binary files and uses hashes to represent a piece of information within the blockchain. This feature can be turned on by using the following flags:
 
 ```
-... --storage --storage_dir="/somewhere/to/store/data" --storage_token="somelongtokenhere" ...
+... --storage --storage_dir="/somewhere/to/store/data" --storage_token="somelongtokenhere" --storage_fees_byte="10000" ...
 ```
 
-`--storage_dir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `storage_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users.
+`--storage_dir` should be a directory that exists with appropriate read/write permissions. Please note that full nodes can work without this mechanism. `storage_token` is a token that grants admin rights to a token so it can create other tokens using the HTTP API. This is useful when access right is needed by web apps or distinct users and `--storage_fees_byte="10000"` is the fees charged per byte of data.
 
 # Coin Distribution
 
