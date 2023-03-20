@@ -34,6 +34,7 @@ type Interface interface {
 	IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
+	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
 }
 
 // FileInfo represents a contract with the file information.
@@ -91,12 +92,22 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, c
 	defer c.mu.Unlock()
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
-	transfered, ok := c.bytesTransfered[contractHash][fh]
+	_, ok := c.bytesTransfered[contractHash]
+
 	if !ok {
 		c.bytesTransfered[contractHash] = make(map[string]uint64)
+		c.bytesTransfered[contractHash][fh] = count
+		return
 	}
-	transfered += count
-	c.bytesTransfered[contractHash][fh] = transfered
+
+	bytesStats, ok := c.bytesTransfered[contractHash][fh]
+	if !ok {
+		c.bytesTransfered[contractHash][fh] = count
+		return
+	}
+
+	bytesStats += count
+	c.bytesTransfered[contractHash][fh] = bytesStats
 }
 
 // GetTransferedBytes gets the transfered bytes for a file.
@@ -247,6 +258,44 @@ func (c *Store) SetError(contractHash string, fileHash []byte, errorMessage stri
 
 	v := c.fileContracts[contractHash][foundFileContractIndex]
 	v.Error = errorMessage
+	c.fileContracts[contractHash][foundFileContractIndex] = v
+
+	_ = c.persistToDB()
+}
+
+// SetFileSize sets a file size
+func (c *Store) SetFileSize(contractHash string, fileHash []byte, fileSize uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fileContracts, ok := c.fileContracts[contractHash]
+	if !ok {
+		return
+	}
+
+	foundFileContractIndex := -1
+	for idx, v := range fileContracts {
+		if bytes.Equal(v.FileHash, fileHash) {
+			foundFileContractIndex = idx
+		}
+	}
+
+	// if file info item isn't there create it
+	if foundFileContractIndex == -1 {
+		fileInfo := FileInfo{
+			FileHash: make([]byte, len(fileHash)),
+			FileSize: fileSize,
+		}
+		copy(fileInfo.FileHash, fileHash)
+
+		fileInfoSlice := c.fileContracts[contractHash]
+		fileInfoSlice = append(fileInfoSlice, fileInfo)
+		c.fileContracts[contractHash] = fileInfoSlice
+		return
+	}
+
+	v := c.fileContracts[contractHash][foundFileContractIndex]
+	v.FileSize = fileSize
 	c.fileContracts[contractHash][foundFileContractIndex] = v
 
 	_ = c.persistToDB()

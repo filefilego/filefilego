@@ -378,8 +378,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		return fmt.Errorf("failed to decode file hoster's peer id: %w", err)
 	}
 
-	// trigger a file initialization by seting an empty error
-	api.contractStore.SetError(args.ContractHash, fileHash, "")
+	// trigger a file initialization by seting the size of the file
+	api.contractStore.SetFileSize(args.ContractHash, fileHash, args.FileSize)
 
 	request := &messages.FileTransferInfoProto{
 		ContractHash: downloadContract.ContractHash,
@@ -468,7 +468,7 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 
 	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
 	downloadDir := api.dataVerificationProtocol.GetDownloadDirectory()
-	fileHashWithPrefix := hexutil.Encode(fileHash)
+	fileHashWithPrefix := hexutil.EncodeNoPrefix(fileHash)
 	destinationFilePath := filepath.Join(downloadDir, args.ContractHash, fileHashWithPrefix)
 
 	orderedSlice := make([]int, totalDesiredSegments)
@@ -605,10 +605,10 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		}
 
 		outputPathOfFile := args.RestoredFilePaths[foundIdx]
-		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.Encode(v.FileHash))
+		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.EncodeNoPrefix(v.FileHash))
 		decryptedPath, err := api.dataVerificationProtocol.DecryptFile(inputEncryptedFilePath, outputPathOfFile, encryptionData.KeyIvRandomizedFileSegments[i].Key, encryptionData.KeyIvRandomizedFileSegments[i].Iv, common.EncryptionType(encryptionData.KeyIvRandomizedFileSegments[i].EncryptionType), randomizedSegsFromKey)
 		if err != nil {
-			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.Encode(v.FileHash), err)
+			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.EncodeNoPrefix(v.FileHash), err)
 		}
 
 		response.DecryptedFilePaths = append(response.DecryptedFilePaths, decryptedPath)

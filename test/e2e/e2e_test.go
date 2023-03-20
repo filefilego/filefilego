@@ -63,6 +63,7 @@ func TestE2E(t *testing.T) {
 		os.RemoveAll("dataverifier1")
 		os.RemoveAll("dataverifier2")
 		os.RemoveAll("datadownloader")
+		os.RemoveAll("restored_files")
 	})
 	fileContent := "this is ffg network a decentralized data sharing network+"
 	fileContent2 := "Whoever would overthrow the liberty of a nation must begin by subduing the freeness of speech."
@@ -70,6 +71,7 @@ func TestE2E(t *testing.T) {
 	inputFile2 := "uploadedFile2.txt"
 
 	currentDir, err := os.Getwd()
+	common.CreateDirectory(filepath.Join(currentDir, "restored_files"))
 	assert.NoError(t, err)
 	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "filestoupload", inputFile))
 	assert.NoError(t, err)
@@ -134,7 +136,7 @@ func TestE2E(t *testing.T) {
 	conf2.RPC.HTTP.Enabled = true
 	conf2.RPC.HTTP.ListenPort = 8091
 	conf2.RPC.EnabledServices = []string{"*"}
-	n1, n1Bchain, _, _ := createNode(t, "blockchain2.db", conf2, false)
+	n1, n1Bchain, _, kpN1 := createNode(t, "blockchain2.db", conf2, false)
 	assert.NotNil(t, n1)
 	assert.Equal(t, uint64(0), n1Bchain.GetHeight())
 	assert.Len(t, n1.Peers(), 2)
@@ -385,7 +387,7 @@ func TestE2E(t *testing.T) {
 	fileHosterFees = fileHosterFees.Mul(fileHosterFees, big.NewInt(0).SetUint64(totalFileSize))
 	verifierFees, err := hexutil.DecodeBig(downloadContract.Contract.VerifierFees)
 	assert.NoError(t, err)
-	fileHosterFees = fileHosterFees.Add(fileHosterFees, verifierFees)
+	totalFees := currency.FFGZero().Add(fileHosterFees, verifierFees)
 	publicKeyBytesOfFileDownloader, err := kpFileDownloader1.PublicKey.Raw()
 	assert.NoError(t, err)
 
@@ -427,7 +429,7 @@ func TestE2E(t *testing.T) {
 		Data:            txPayloadBytes,
 		From:            kpFileDownloader1.Address,
 		To:              dataverifierAddr,
-		Value:           hexutil.EncodeBig(fileHosterFees),
+		Value:           hexutil.EncodeBig(totalFees),
 		TransactionFees: "0x1",
 		Chain:           mainChain,
 	}
@@ -490,17 +492,58 @@ func TestE2E(t *testing.T) {
 	assert.Empty(t, file1Progress.Error)
 	assert.Equal(t, uint64(file1UploadResponse.Size), file1Progress.BytesTransfered)
 
-	// file2Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
-	// assert.NoError(t, err)
-	// assert.Empty(t, file2Progress.Error)
-	// // assert.Equal(t, uint64(file2UploadResponse.Size), file2Progress.BytesTransfered)
-	// ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
-	// assert.NoError(t, err)
-	// assert.True(t, ok)
-	// ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
-	// assert.NoError(t, err)
-	// assert.True(t, ok)
-	// time.Sleep(200 * time.Millisecond)
+	file2Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
+	assert.NoError(t, err)
+	assert.Empty(t, file2Progress.Error)
+	assert.Equal(t, uint64(file2UploadResponse.Size), file2Progress.BytesTransfered)
+
+	ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	time.Sleep(200 * time.Millisecond)
+	restoredPaths, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{filepath.Join("restored_files", "randomfile1.txt"), filepath.Join("restored_files", "randomfile2.txt")})
+	assert.NoError(t, err)
+	assert.Len(t, restoredPaths, 2)
+	shaOfFile1, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile1.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, shaOfFile1, file1UploadResponse.FileHash)
+	shaOfFile2, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile2.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, shaOfFile2, file2UploadResponse.FileHash)
+
+	// sleep so the fees release tx is there
+	time.Sleep(200 * time.Millisecond)
+	mempoolTxs := v1Bchain.GetTransactionsFromPool()
+	assert.Len(t, mempoolTxs, 1)
+	assert.Equal(t, dataverifierAddr, mempoolTxs[0].From)
+	assert.Equal(t, kpN1.Address, mempoolTxs[0].To)
+	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), mempoolTxs[0].Value)
+
+	// seal block
+	sealedBlock4, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock4)
+
+	err = dv1.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = dv2.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = n1.Sync(context.TODO())
+	assert.NoError(t, err)
+	err = n2.Sync(context.TODO())
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+	mempoolTxs = v1Bchain.GetTransactionsFromPool()
+	assert.Len(t, mempoolTxs, 0)
+
+	// the balance of file hoster 1 should be equal to the total fees in the contract.
+	n1Balance, err := v1Client.Balance(context.TODO(), kpN1.Address)
+	assert.NoError(t, err)
+	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), n1Balance.BalanceHex)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
