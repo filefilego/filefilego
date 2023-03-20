@@ -142,6 +142,54 @@ Run the full node:
 
 The above command runs a full node and starts the http rpc server. In this case, we listen on all interfaces `0.0.0.0` and port `8090` so we can build an application that can interact with this full node.
 
+### CLI Flags
+
+A list of available CLI flags are available below or you can run `./filefilego help`
+
+```
+  --config FILE                                        Load configuration from FILE
+  --node_identity_passphrase value                     Passphrase to unlock the node identity file
+  --log_path_line                                      Logs include file path and line number (default: false)
+  --log_level value                                    Logging level
+  --data_dir value                                     Data directory to store data/metadata (default: "/home/filefilego/.filefilego_data")
+  --keystore_dir value                                 Keystore directory (default: "/home/filefilego/.filefilego_data/keystore")
+  --validator                                          Enable Validator (default: false)
+  --validator_keypath value                            Path to the key for sealing blocks
+  --validator_key_pass value                           Passphrase of keyfile
+  --search_engine                                      Enable full-text indexing (default: false)
+  --search_engine_result_count value                   Max number of documents per search query (default: 0)
+  --storage                                            Enable storage (default: false)
+  --storage_dir value                                  Storage location
+  --storage_token value                                Access token for storage engine
+  --storage_fees_byte value                            Storage fees per Byte of data
+  --storage_file_merkle_tree_total_segments value      File's total segments for merkle tree generation (default: 0)
+  --storage_file_segments_encryption_percentage value  File's segments total encryption (default: 0)
+  --verify                                             Enable data verification(if verifier in genesis) (default: false)
+  --data_verification_fees value                       Data verification fees
+  --data_verification_transaction_fees value           Data verification transaction fees for releasing file hoster fees
+  --data_downloads_path value                          Directory path for data downloads
+  --super_light_node                                   Runs a super light node (default: false)
+  --rpc_services value                                 List of rpc services allowed
+  --rpc_whitelist value                                Allow IP addresses to access the RPC servers
+  --unix_socket                                        Enable IPC-RPC interface (default: false)
+  --unix_socket_path value                             Path of the socker/pipe file
+  --http                                               Enable the HTTP-RPC server (default: false)
+  --http_port value                                    HTTP-RPC server listening port (default: 0)
+  --http_addr value                                    HTTP-RPC server listening interface
+  --http_origin value                                  HTTP-RPC cross-origin value
+  --ws                                                 Enable the WS-RPC server (default: false)
+  --ws_port value                                      WS-RPC server listening port (default: 0)
+  --ws_addr value                                      WS-RPC server listening interface
+  --ws_origin value                                    WS-RPC cross-origin value
+  --max_gossip_size value                              Maximum gossip size (default: 0)
+  --max_peers value                                    Maximum number of peers to connect (default: 0)
+  --port value                                         P2P listening port (default: 0)
+  --addr value                                         P2P listening interface
+  --min_peers value                                    Minimum number of peers to start periodic bootstraper (default: 0)
+  --bootstrap_nodes value                              Bootstraping nodes
+  --bootstrap_freq value                               Bootstraping frequency (default: 0)
+```
+
 # Architecture
 
 In this section, we cover the disadvantages of different protocols and platforms to get clear picture and examine the weaknesses.
