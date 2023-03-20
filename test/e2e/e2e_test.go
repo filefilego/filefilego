@@ -71,7 +71,8 @@ func TestE2E(t *testing.T) {
 	inputFile2 := "uploadedFile2.txt"
 
 	currentDir, err := os.Getwd()
-	common.CreateDirectory(filepath.Join(currentDir, "restored_files"))
+	assert.NoError(t, err)
+	err = common.CreateDirectory(filepath.Join(currentDir, "restored_files"))
 	assert.NoError(t, err)
 	uploadedFilepath, err := common.WriteToFile([]byte(fileContent), filepath.Join(currentDir, "filestoupload", inputFile))
 	assert.NoError(t, err)
