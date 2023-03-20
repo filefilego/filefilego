@@ -141,6 +141,16 @@ func TestStoreMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "expected error", fileInfo.Error)
 
+	store2.SetFileDecrypted("0x0a", fileHash, true)
+	fileInfo, err = store2.GetContractFileInfo("0x0a", fileHash)
+	assert.NoError(t, err)
+	assert.Equal(t, true, fileInfo.FileDecrypted)
+
+	store2.SetFileDecrypted("0x0a", fileHash, false)
+	fileInfo, err = store2.GetContractFileInfo("0x0a", fileHash)
+	assert.NoError(t, err)
+	assert.Equal(t, false, fileInfo.FileDecrypted)
+
 	err = store2.DeleteContract("0x0a")
 	assert.NoError(t, err)
 

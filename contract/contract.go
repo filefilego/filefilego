@@ -35,6 +35,7 @@ type Interface interface {
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
+	SetFileDecrypted(contractHash string, fileHash []byte, decrypted bool)
 }
 
 // FileInfo represents a contract with the file information.
@@ -50,6 +51,7 @@ type FileInfo struct {
 	ProofOfTransferVerified               bool
 	ReceivedUnencryptedDataFromFileHoster bool
 	Error                                 string
+	FileDecrypted                         bool
 }
 
 // Store represents the contract stores.
@@ -223,6 +225,44 @@ func (c *Store) GetContractFiles(contractHash string) ([]FileInfo, error) {
 	copy(filesInfos, fileContracts)
 
 	return filesInfos, nil
+}
+
+// SetFileDecrypted sets true if a file was decrypted.
+func (c *Store) SetFileDecrypted(contractHash string, fileHash []byte, decrypted bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fileContracts, ok := c.fileContracts[contractHash]
+	if !ok {
+		return
+	}
+
+	foundFileContractIndex := -1
+	for idx, v := range fileContracts {
+		if bytes.Equal(v.FileHash, fileHash) {
+			foundFileContractIndex = idx
+		}
+	}
+
+	// if file info item isn't there create it
+	if foundFileContractIndex == -1 {
+		fileInfo := FileInfo{
+			FileHash:      make([]byte, len(fileHash)),
+			FileDecrypted: decrypted,
+		}
+		copy(fileInfo.FileHash, fileHash)
+
+		fileInfoSlice := c.fileContracts[contractHash]
+		fileInfoSlice = append(fileInfoSlice, fileInfo)
+		c.fileContracts[contractHash] = fileInfoSlice
+		return
+	}
+
+	v := c.fileContracts[contractHash][foundFileContractIndex]
+	v.FileDecrypted = decrypted
+	c.fileContracts[contractHash][foundFileContractIndex] = v
+
+	_ = c.persistToDB()
 }
 
 // SetError sets an error indication for a filehash

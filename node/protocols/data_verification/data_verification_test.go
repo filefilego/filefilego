@@ -563,13 +563,13 @@ func TestDataVerificationMethods(t *testing.T) {
 		randomizedSegsFromKey2[i] = int(v)
 	}
 
-	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.KeyIvRandomizedFileSegments[0].Key, keyData.KeyIvRandomizedFileSegments[0].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[0].EncryptionType), randomizedSegsFromKey)
+	restoresPath, err := protocolH2.DecryptFile(res, filepath.Join(currentDir, "data_download2", "restoredfile.txt"), keyData.KeyIvRandomizedFileSegments[0].Key, keyData.KeyIvRandomizedFileSegments[0].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[0].EncryptionType), randomizedSegsFromKey, false)
 	assert.NoError(t, err)
 	hashOfRestoredFile, err := ffgcrypto.Sha1File(restoresPath)
 	assert.NoError(t, err)
 	assert.Equal(t, fileHash, hashOfRestoredFile)
 
-	restoresPath2, err := protocolH2.DecryptFile(res2, filepath.Join(currentDir, "data_download2", "restoredfile2.txt"), keyData.KeyIvRandomizedFileSegments[1].Key, keyData.KeyIvRandomizedFileSegments[1].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[1].EncryptionType), randomizedSegsFromKey2)
+	restoresPath2, err := protocolH2.DecryptFile(res2, filepath.Join(currentDir, "data_download2", "restoredfile2.txt"), keyData.KeyIvRandomizedFileSegments[1].Key, keyData.KeyIvRandomizedFileSegments[1].Iv, common.EncryptionType(keyData.KeyIvRandomizedFileSegments[1].EncryptionType), randomizedSegsFromKey2, false)
 	assert.NoError(t, err)
 	hashOfRestoredFile2, err := ffgcrypto.Sha1File(restoresPath2)
 	assert.NoError(t, err)

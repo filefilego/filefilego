@@ -61,7 +61,7 @@ const (
 type Interface interface {
 	SendContractToVerifierForAcceptance(ctx context.Context, verifierID peer.ID, request *messages.DownloadContractProto) (*messages.DownloadContractProto, error)
 	TransferContract(ctx context.Context, peerID peer.ID, request *messages.DownloadContractProto) error
-	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error)
+	DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int, onlyFileReArrangement bool) (string, error)
 	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestsProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
 	SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error
 	SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error
@@ -454,7 +454,7 @@ func (d *Protocol) TransferContract(ctx context.Context, peerID peer.ID, request
 }
 
 // DecryptFile descrypts a file given the file's encryption setup.
-func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int) (string, error) {
+func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byte, encryptionType common.EncryptionType, randomizedFileSegments []int, onlyFileReArrangement bool) (string, error) {
 	inputFile, err := os.OpenFile(filePath, os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to open input file in decryptFile: %w", err)
@@ -476,7 +476,7 @@ func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byt
 		return "", fmt.Errorf("failed to open output file in decryptFile: %w", err)
 	}
 
-	err = common.DecryptFileSegments(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage, randomizedFileSegments, inputFile, outputFile, encryptor)
+	err = common.DecryptFileSegments(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage, randomizedFileSegments, inputFile, outputFile, encryptor, onlyFileReArrangement)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt file segments in decryptFile: %w", err)
 	}
