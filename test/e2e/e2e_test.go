@@ -540,6 +540,12 @@ func TestE2E(t *testing.T) {
 	restoredPaths2, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{filepath.Join("restored_files", "randomfile1_again.txt"), filepath.Join("restored_files", "randomfile2_again.txt")})
 	assert.NoError(t, err)
 	assert.Len(t, restoredPaths2, 2)
+	shaOfFile1New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile1_again.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, shaOfFile1New, file1UploadResponse.FileHash)
+	shaOfFile2New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile2_again.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, shaOfFile2New, file2UploadResponse.FileHash)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
