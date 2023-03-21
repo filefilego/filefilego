@@ -609,13 +609,19 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 			return fmt.Errorf("failed to get a file of a contract: %w", err)
 		}
 
+		if fileInfo.FileDecryptionStatus == contract.FileDecrypting {
+			continue
+		}
+
+		api.contractStore.SetFileDecryptionStatus(args.ContractHash, v.FileHash, contract.FileDecrypting)
 		outputPathOfFile := args.RestoredFilePaths[foundIdx]
 		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(v.ContractHash), hexutil.EncodeNoPrefix(v.FileHash))
-		decryptedPath, err := api.dataVerificationProtocol.DecryptFile(inputEncryptedFilePath, outputPathOfFile, encryptionData.KeyIvRandomizedFileSegments[i].Key, encryptionData.KeyIvRandomizedFileSegments[i].Iv, common.EncryptionType(encryptionData.KeyIvRandomizedFileSegments[i].EncryptionType), randomizedSegsFromKey, fileInfo.FileDecrypted)
+		decryptedPath, err := api.dataVerificationProtocol.DecryptFile(inputEncryptedFilePath, outputPathOfFile, encryptionData.KeyIvRandomizedFileSegments[i].Key, encryptionData.KeyIvRandomizedFileSegments[i].Iv, common.EncryptionType(encryptionData.KeyIvRandomizedFileSegments[i].EncryptionType), randomizedSegsFromKey, fileInfo.FileDecryptionStatus == contract.FileDecrypted)
 		if err != nil {
+			api.contractStore.SetFileDecryptionStatus(args.ContractHash, v.FileHash, contract.FileDecryptionError)
 			return fmt.Errorf("failed to decrypt file %s with message: %w", hexutil.EncodeNoPrefix(v.FileHash), err)
 		}
-		api.contractStore.SetFileDecrypted(args.ContractHash, v.FileHash, true)
+		api.contractStore.SetFileDecryptionStatus(args.ContractHash, v.FileHash, contract.FileDecrypted)
 		response.DecryptedFilePaths = append(response.DecryptedFilePaths, decryptedPath)
 	}
 

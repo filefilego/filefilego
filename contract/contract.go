@@ -35,7 +35,7 @@ type Interface interface {
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
-	SetFileDecrypted(contractHash string, fileHash []byte, decrypted bool)
+	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
 }
 
 // FileInfo represents a contract with the file information.
@@ -51,7 +51,7 @@ type FileInfo struct {
 	ProofOfTransferVerified               bool
 	ReceivedUnencryptedDataFromFileHoster bool
 	Error                                 string
-	FileDecrypted                         bool
+	FileDecryptionStatus                  FileDecryptionStatus
 }
 
 // Store represents the contract stores.
@@ -227,8 +227,18 @@ func (c *Store) GetContractFiles(contractHash string) ([]FileInfo, error) {
 	return filesInfos, nil
 }
 
-// SetFileDecrypted sets true if a file was decrypted.
-func (c *Store) SetFileDecrypted(contractHash string, fileHash []byte, decrypted bool) {
+// FileDecryptionStatus represents the file decryption status.
+type FileDecryptionStatus string
+
+const (
+	FileNotDecrypted    FileDecryptionStatus = ""
+	FileDecrypted       FileDecryptionStatus = "decrypted"
+	FileDecrypting      FileDecryptionStatus = "decrypting"
+	FileDecryptionError FileDecryptionStatus = "decryption_error"
+)
+
+// SetFileDecryptionStatus sets a file encryption status.
+func (c *Store) SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -247,8 +257,8 @@ func (c *Store) SetFileDecrypted(contractHash string, fileHash []byte, decrypted
 	// if file info item isn't there create it
 	if foundFileContractIndex == -1 {
 		fileInfo := FileInfo{
-			FileHash:      make([]byte, len(fileHash)),
-			FileDecrypted: decrypted,
+			FileHash:             make([]byte, len(fileHash)),
+			FileDecryptionStatus: decryptionStatus,
 		}
 		copy(fileInfo.FileHash, fileHash)
 
@@ -259,7 +269,7 @@ func (c *Store) SetFileDecrypted(contractHash string, fileHash []byte, decrypted
 	}
 
 	v := c.fileContracts[contractHash][foundFileContractIndex]
-	v.FileDecrypted = decrypted
+	v.FileDecryptionStatus = decryptionStatus
 	c.fileContracts[contractHash][foundFileContractIndex] = v
 
 	_ = c.persistToDB()
