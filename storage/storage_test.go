@@ -338,3 +338,46 @@ func TestUploadHandler(t *testing.T) {
 		t.Errorf("Expected file %s to exist", fileMetadata.FilePath)
 	}
 }
+
+func TestValidateFileName(t *testing.T) {
+	validFileNames := []string{
+		"file.txt",
+		"my-file.jpg",
+		"12345.txt",
+		"my file.jpg",
+		"file.",
+		"file",
+		"file.ext",
+		"Fil e.jpg",
+		"file.d",
+		"file.longextension",
+		"565gfgf.mov",
+	}
+
+	invalidFileNames := []string{
+		"file.txt$",
+		"file#gg.jpg",
+		"file s saca a sa as ascsa! g.jpg",
+		"fi<c.txt",
+		"fi>c.txt",
+		"fi:c.txt",
+		"fi\"c.txt",
+		"fi/c.txt",
+		"fil\\.txt",
+		"foo|w.txt",
+		"foo?w.txt",
+		"foo*w.txt",
+	}
+
+	for _, fileName := range validFileNames {
+		if !validateFileName(fileName) {
+			t.Errorf("'%s' should be a valid file name", fileName)
+		}
+	}
+
+	for _, fileName := range invalidFileNames {
+		if validateFileName(fileName) {
+			t.Errorf("'%s' should be an invalid file name", fileName)
+		}
+	}
+}

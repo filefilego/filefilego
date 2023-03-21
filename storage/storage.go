@@ -451,7 +451,7 @@ func validateFileName(fileName string) bool {
 	fileName = filepath.Clean(fileName)
 
 	// Define a regular expression pattern for valid file names
-	pattern := `^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$`
+	pattern := `^[\w,\s-]+\.?[A-Za-z]*$`
 
 	// Compile the regular expression
 	regex, err := regexp.Compile(pattern)
