@@ -1,17 +1,17 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/term"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
@@ -84,11 +84,13 @@ func run(ctx *cli.Context) error {
 	nodeIdentityPassphrase := conf.Global.NodeIdentityKeyPassphrase
 	if nodeIdentityPassphrase == "" {
 		fmt.Println("Node identity passphrase:")
-		bytepw, err := term.ReadPassword(syscall.Stdin)
-		if err != nil {
-			return fmt.Errorf("failed to read node identity password: %w", err)
+		scanner := bufio.NewScanner(os.Stdin)
+		ok := scanner.Scan()
+		if !ok {
+			return errors.New("failed to read passphrase from user input")
 		}
-		nodeIdentityPassphrase = string(bytepw)
+		text := scanner.Text()
+		nodeIdentityPassphrase = text
 	}
 
 	key, err := keystore.UnmarshalKey(nodeIdentityData, nodeIdentityPassphrase)
