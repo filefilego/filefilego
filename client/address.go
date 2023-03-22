@@ -19,14 +19,15 @@ type BalanceOfAddress struct {
 	NextNounce string
 }
 
-// UnlockAddress unlocks an address.
-func (cli *Client) UnlockAddress(ctx context.Context, address, passphrase string) (string, error) {
+// UnlockAddress unlocks an address or a node identity key.
+func (cli *Client) UnlockAddress(ctx context.Context, address, passphrase string, nodeIdentityKey bool) (string, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "address.Unlock",
 		Params: []interface{}{rpc.UnlockAddressArgs{
-			Address:    address,
-			Passphrase: passphrase,
+			NodeIdentityKey: nodeIdentityKey,
+			Address:         address,
+			Passphrase:      passphrase,
 		}},
 		ID: 1,
 	}

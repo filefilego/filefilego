@@ -550,10 +550,23 @@ func TestE2E(t *testing.T) {
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
 	ctx := context.Background()
+	randomEntropy, err := crypto.RandomEntropy(40)
+	assert.NoError(t, err)
+	keyst, err := keystore.New(conf.Global.KeystoreDir, randomEntropy)
+	assert.NoError(t, err)
+
 	connManager, err := connmgr.NewConnManager(conf.P2P.MinPeers, conf.P2P.MaxPeers, connmgr.WithGracePeriod(time.Minute))
 	assert.NoError(t, err)
 
 	kp, err := crypto.GenerateKeyPair()
+	assert.NoError(t, err)
+
+	keyStoreKey, err := keystore.NewKeyFromKeyPair(kp)
+	assert.NoError(t, err)
+
+	nodeIdentityKeyPath, err := keyst.SaveKey(keyStoreKey, "1234")
+	assert.NoError(t, err)
+	err = os.Rename(nodeIdentityKeyPath, filepath.Join(conf.Global.KeystoreDir, "node_identity.json"))
 	assert.NoError(t, err)
 
 	if isVerifier {
@@ -666,15 +679,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
 	assert.NoError(t, err)
 
-	// we use the content of the file as a jwt key signer byte array
-	kpBytes, err := kp.PrivateKey.Raw()
-	assert.NoError(t, err)
-
-	keystore, err := keystore.New(conf.Global.KeystoreDir, kpBytes)
-	assert.NoError(t, err)
-
 	if contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
-		addressAPI, err := internalrpc.NewAddressAPI(keystore, bchain)
+		addressAPI, err := internalrpc.NewAddressAPI(keyst, bchain)
 		assert.NoError(t, err)
 		err = s.RegisterService(addressAPI, internalrpc.AddressServiceNamespace)
 		assert.NoError(t, err)
@@ -695,7 +701,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
-		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain, conf.Global.SuperLightNode)
+		transactionAPI, err := internalrpc.NewTransactionAPI(keyst, ffgNode, bchain, conf.Global.SuperLightNode)
 		assert.NoError(t, err)
 		err = s.RegisterService(transactionAPI, internalrpc.TransactionServiceNamespace)
 		assert.NoError(t, err)
@@ -726,7 +732,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	assert.NoError(t, err)
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
-		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keystore)
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keyst)
 		assert.NoError(t, err)
 		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
 		assert.NoError(t, err)

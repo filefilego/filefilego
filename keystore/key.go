@@ -38,6 +38,11 @@ func NewKey() (*Key, error) {
 		return nil, fmt.Errorf("failed to generate keypair: %w", err)
 	}
 
+	return NewKeyFromKeyPair(keypair)
+}
+
+// NewKeyFromKeyPair returns a key from a keypair.
+func NewKeyFromKeyPair(keypair crypto.KeyPair) (*Key, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate random uuid: %w", err)

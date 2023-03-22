@@ -87,7 +87,7 @@ func TestAccountAPIMethods(t *testing.T) {
 	key, err := keystore.UnmarshalKey(keydata, "123")
 	assert.NoError(t, err)
 
-	unlockArg := &UnlockAddressArgs{Address: "wrong", Passphrase: "ddf"}
+	unlockArg := &UnlockAddressArgs{NodeIdentityKey: false, Address: "wrong", Passphrase: "ddf"}
 	unlockResp := &UnlockAddressResponse{}
 	// Unlock
 	// empty addr
