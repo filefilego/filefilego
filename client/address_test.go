@@ -19,7 +19,7 @@ func TestUnlockAddress(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	token, err := c.UnlockAddress(context.TODO(), "0x958ef8e7e9c6d4ce25b24b2b61b671d813d77472", "123")
+	token, err := c.UnlockAddress(context.TODO(), "0x958ef8e7e9c6d4ce25b24b2b61b671d813d77472", "123", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "tokenvalue", token)
 }

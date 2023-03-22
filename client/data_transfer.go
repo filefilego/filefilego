@@ -625,3 +625,66 @@ func (cli *Client) CreateContractsFromDataQueryResponses(ctx context.Context, da
 
 	return responseData.ContractHashes, nil
 }
+
+// CreateTransactionsWithDataPayloadFromContractHashes given a list of contract hashes it creates the transactions and its data payloads and returns them in a raw json format.
+func (cli *Client) CreateTransactionsWithDataPayloadFromContractHashes(ctx context.Context, contractHashes []string, accessToken, currentAddressNounce, transactionFeesToBeUsed string) ([]string, string, error) {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "data_transfer.CreateTransactionsWithDataPayloadFromContractHashes",
+		Params: []interface{}{rpc.CreateTransactionDataPayloadFromContractHashesArgs{
+			AccessToken:             accessToken,
+			ContractHashes:          contractHashes,
+			CurrentNounce:           currentAddressNounce,
+			TransactionFeesToBeUsed: transactionFeesToBeUsed,
+		}},
+		ID: 1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return nil, "", errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return nil, "", errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	responseData := rpc.CreateTransactionDataPayloadFromContractHashesResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return nil, "", errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &responseData); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return responseData.TransactionDataBytesHex, responseData.TotalFeesForTransactions, nil
+}

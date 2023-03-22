@@ -19,7 +19,7 @@ const jwtValidityHours = 2160
 // KeyLockUnlocker is an interface with locking and unlocking key functionality.
 type KeyLockUnlocker interface {
 	LockKey(address string, jwt string) (bool, error)
-	UnlockKey(address string, passphrase string) (string, error)
+	UnlockKey(address string, passphrase string, nodeIdentityKey bool) (string, error)
 }
 
 // KeyAuthorizer is an interface with auth mechanism of a key.
@@ -67,6 +67,21 @@ func (ks *Store) CreateKey(passphrase string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create key: %w", err)
 	}
+
+	fileName, err := ks.SaveKey(key, passphrase)
+	if err != nil {
+		return "", err
+	}
+
+	return fileName, nil
+}
+
+// SaveKey saves a key given the passphrase.
+func (ks *Store) SaveKey(key *Key, passphrase string) (string, error) {
+	if passphrase == "" {
+		return "", errors.New("passphrase is empty")
+	}
+
 	keyDataJSON, err := key.MarshalToJSON(passphrase)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal key: %w", err)
@@ -92,8 +107,9 @@ func (ks *Store) LockKey(address string, jwt string) (bool, error) {
 	return false, fmt.Errorf("address %s not found", address)
 }
 
-// UnlockKey unlocks a key by address
-func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
+// UnlockKey unlocks a key by address.
+// it will try to unlock the node_identity_key first and if not then it will proceed with the keystore dir.
+func (ks *Store) UnlockKey(address string, passphrase string, nodeIdentityKey bool) (string, error) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
@@ -108,30 +124,39 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 	}
 
 	for _, file := range fileInfo {
-		if strings.Contains(file.Name(), address) {
-			bts, err := os.ReadFile(path.Join(ks.keysDir, file.Name()))
-			if err != nil {
-				return "", fmt.Errorf("failed to read keystore file: %w", err)
+		if nodeIdentityKey {
+			if !strings.Contains(file.Name(), "node_identity.json") {
+				continue
 			}
-			key, err := UnmarshalKey(bts, passphrase)
-			if err != nil {
-				return "", fmt.Errorf("failed to unmarshal keystore file: %w", err)
+		} else {
+			fileNameContainsAddress := strings.Contains(file.Name(), address)
+			if !fileNameContainsAddress {
+				continue
 			}
-
-			atClaims := jwt.MapClaims{}
-			atClaims["address"] = address
-			atClaims["exp"] = time.Now().Add(time.Hour * jwtValidityHours).Unix()
-			at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
-			token, err := at.SignedString(ks.nodeIdentityData)
-			if err != nil {
-				return "", fmt.Errorf("failed to sign jwt token with node's identity file: %w", err)
-			}
-			ks.unlockedKeys[address] = UnlockedKey{
-				Key: key,
-				JWT: token,
-			}
-			return token, nil
 		}
+
+		bts, err := os.ReadFile(path.Join(ks.keysDir, file.Name()))
+		if err != nil {
+			return "", fmt.Errorf("failed to read keystore file: %w", err)
+		}
+		key, err := UnmarshalKey(bts, passphrase)
+		if err != nil {
+			return "", fmt.Errorf("failed to unmarshal keystore file: %w", err)
+		}
+
+		atClaims := jwt.MapClaims{}
+		atClaims["address"] = address
+		atClaims["exp"] = time.Now().Add(time.Hour * jwtValidityHours).Unix()
+		at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
+		token, err := at.SignedString(ks.nodeIdentityData)
+		if err != nil {
+			return "", fmt.Errorf("failed to sign jwt token with node's identity file: %w", err)
+		}
+		ks.unlockedKeys[address] = UnlockedKey{
+			Key: key,
+			JWT: token,
+		}
+		return token, nil
 	}
 
 	return "", errors.New("key not found on this node")
