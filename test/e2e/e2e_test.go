@@ -217,6 +217,7 @@ func TestE2E(t *testing.T) {
 	conf4.RPC.HTTP.ListenPort = 8093
 	conf4.RPC.EnabledServices = []string{"*"}
 	conf4.Global.DataVerifier = true
+	// nolint:goconst
 	conf4.Global.DataVerifierTransactionFees = "0x1"
 	halfFFG := currency.FFG().Div(currency.FFG(), big.NewInt(2)).String()
 	conf4.Global.DataVerifierVerificationFees = halfFFG
@@ -273,7 +274,7 @@ func TestE2E(t *testing.T) {
 	conf6.P2P.ListenPort = 10214
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095
-	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction"}
+	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction", "address"}
 	fileDownloader1, _, _, kpFileDownloader1 := createNode(t, "blockchain6.db", conf6, false)
 	assert.NotNil(t, fileDownloader1)
 	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -444,7 +445,25 @@ func TestE2E(t *testing.T) {
 
 	JSONTx2Bytes, err := encjson.Marshal(JSONTx2)
 	assert.NoError(t, err)
-	tx2Response, err := fileDownloader1Client.SendRawTransaction(context.TODO(), string(JSONTx2Bytes))
+	// at this stage we have contracted a transaction locally
+	// we want to call CreateTransactionsWithDataPayloadFromContractHashes and see if the transaction is the same as JSONTx2Bytes
+
+	// to get the current address nounce we will utilize another full node's rpc
+	kpFileDownloader1Balance, err := v1Client.Balance(context.TODO(), kpFileDownloader1.Address)
+	assert.NoError(t, err)
+
+	currentAddressNounce := kpFileDownloader1Balance.Nounce
+	// nolint:goconst
+	eachTransactionFee := "0x1"
+	accessTokenForNodeIDKeyUnlock, err := fileDownloader1Client.UnlockAddress(context.TODO(), kpFileDownloader1.Address, "1234", true)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, accessTokenForNodeIDKeyUnlock)
+	jsonEncodedRawTransactions, totalFeesForTransactionsNeeded, err := fileDownloader1Client.CreateTransactionsWithDataPayloadFromContractHashes(context.TODO(), []string{downloadContract.Contract.ContractHash}, accessTokenForNodeIDKeyUnlock, currentAddressNounce, eachTransactionFee)
+	assert.NoError(t, err)
+	assert.Len(t, jsonEncodedRawTransactions, 1)
+	assert.Equal(t, JSONTx2.Value, totalFeesForTransactionsNeeded)
+	assert.Equal(t, string(JSONTx2Bytes), jsonEncodedRawTransactions[0])
+	tx2Response, err := fileDownloader1Client.SendRawTransaction(context.TODO(), jsonEncodedRawTransactions[0])
 	assert.NoError(t, err)
 	assert.Equal(t, tx2Response.Transaction, JSONTx2)
 	time.Sleep(200 * time.Millisecond)
