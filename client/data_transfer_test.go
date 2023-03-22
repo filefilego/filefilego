@@ -153,3 +153,20 @@ func TestCreateContractsFromDataQueryResponses(t *testing.T) {
 	assert.NotEmpty(t, contractHashes)
 	assert.Equal(t, "0x1232", contractHashes[0])
 }
+
+func TestCreateTransactionsWithDataPayloadFromContractHashes(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{"total_fees_for_transaction":"0x9", "transaction_data_bytes_hex":["0x0121"]},"error":null,"id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	contractHashes, totalFees, err := c.CreateTransactionsWithDataPayloadFromContractHashes(context.TODO(), []string{"0x01"}, "accesstoken", "0x0", "0x1")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, contractHashes)
+	assert.NotEmpty(t, totalFees)
+	assert.Equal(t, "0x0121", contractHashes[0])
+	assert.Equal(t, "0x9", totalFees)
+}

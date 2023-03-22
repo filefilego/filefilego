@@ -11,7 +11,9 @@ import (
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/contract"
+	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
+	"github.com/filefilego/filefilego/keystore"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -31,6 +33,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		dataVerificationProtocol dataverification.Interface
 		publisherNodesFinder     PublisherNodesFinder
 		contractStore            contract.Interface
+		keystore                 keystore.KeyAuthorizer
 		expErr                   string
 	}{
 		"no host": {
@@ -58,12 +61,21 @@ func TestNewDataTransferAPI(t *testing.T) {
 			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
 			expErr:                   "contractStore is nil",
 		},
+		"no keystore": {
+			host:                     h,
+			dataQueryProtocol:        &dataquery.Protocol{},
+			dataVerificationProtocol: &dataverification.Protocol{},
+			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
+			contractStore:            &contract.Store{},
+			expErr:                   "keystore is nil",
+		},
 		"success": {
 			host:                     h,
 			dataQueryProtocol:        &dataquery.Protocol{},
 			dataVerificationProtocol: &dataverification.Protocol{},
 			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
 			contractStore:            &contract.Store{},
+			keystore:                 &keyAuthorizerStub{},
 		},
 	}
 
@@ -71,7 +83,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder, tt.contractStore)
+			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder, tt.contractStore, tt.keystore)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -90,6 +102,7 @@ func TestDataTransferAPIMethods(t *testing.T) {
 		db1.Close()
 		os.RemoveAll("file_transfer_api.db")
 		os.RemoveAll("data_download")
+		os.RemoveAll("keystore")
 	})
 	db, err := database.New(db1)
 	assert.NoError(t, err)
@@ -102,7 +115,11 @@ func TestDataTransferAPIMethods(t *testing.T) {
 	assert.NoError(t, err)
 	dv, err := dataverification.New(h, contractStore, &storage.Storage{}, &blockchain.Blockchain{}, &networkMessagePublisherNodesFinderStub{}, 8, 1, filepath.Join(currentDir, "data_download"), false, "", "")
 	assert.NoError(t, err)
-	api, err := NewDataTransferAPI(h, dq, dv, &networkMessagePublisherNodesFinderStub{}, contractStore)
+	randomKeyForJWT, err := crypto.RandomEntropy(40)
+	assert.NoError(t, err)
+	keystore, err := keystore.New(filepath.Join(currentDir, "keystore"), randomKeyForJWT)
+	assert.NoError(t, err)
+	api, err := NewDataTransferAPI(h, dq, dv, &networkMessagePublisherNodesFinderStub{}, contractStore, keystore)
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 

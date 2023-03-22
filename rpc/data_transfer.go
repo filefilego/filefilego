@@ -3,8 +3,10 @@ package rpc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"net/http"
 	"path/filepath"
@@ -15,12 +17,15 @@ import (
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/currency"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/contract"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
+	"github.com/filefilego/filefilego/keystore"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	"github.com/filefilego/filefilego/transaction"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
@@ -39,10 +44,11 @@ type DataTransferAPI struct {
 	dataVerificationProtocol dataverification.Interface
 	publisherNodesFinder     PublisherNodesFinder
 	contractStore            contract.Interface
+	keystore                 keystore.KeyAuthorizer
 }
 
 // NewDataTransferAPI creates a new data transfer API to be served using JSONRPC.
-func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder, contractStore contract.Interface) (*DataTransferAPI, error) {
+func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder, contractStore contract.Interface, keystore keystore.KeyAuthorizer) (*DataTransferAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -63,12 +69,17 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 		return nil, errors.New("contractStore is nil")
 	}
 
+	if keystore == nil {
+		return nil, errors.New("keystore is nil")
+	}
+
 	return &DataTransferAPI{
 		host:                     host,
 		dataQueryProtocol:        dataQueryProtocol,
 		dataVerificationProtocol: dataVerificationProtocol,
 		publisherNodesFinder:     publisherNodeFinder,
 		contractStore:            contractStore,
+		keystore:                 keystore,
 	}, nil
 }
 
@@ -676,6 +687,141 @@ func (api *DataTransferAPI) SendContractToFileHosterAndVerifier(r *http.Request,
 	}
 
 	response.Success = true
+	return nil
+}
+
+// CreateTransactionDataPayloadFromContractHashesArgs represent the function args.
+type CreateTransactionDataPayloadFromContractHashesArgs struct {
+	AccessToken             string   `json:"access_token"`
+	ContractHashes          []string `json:"contract_hashes"`
+	CurrentNounce           string   `json:"current_nounce"`
+	TransactionFeesToBeUsed string   `json:"transaction_fees_to_be_used"`
+}
+
+// CreateTransactionDataPayloadFromContractHashesResponse represent the function response.
+type CreateTransactionDataPayloadFromContractHashesResponse struct {
+	TransactionDataBytesHex  []string `json:"transaction_data_bytes_hex"`
+	TotalFeesForTransactions string   `json:"total_fees_for_transaction"`
+}
+
+// CreateTransactionsWithDataPayloadFromContractHashes given a list of contract hashes it creates the transactions and its data payloads.
+func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(r *http.Request, args *CreateTransactionDataPayloadFromContractHashesArgs, response *CreateTransactionDataPayloadFromContractHashesResponse) error {
+	ok, key, err := api.keystore.Authorized(args.AccessToken)
+	if err != nil || !ok {
+		return fmt.Errorf("failed to authorize access token %v", err)
+	}
+	response.TransactionDataBytesHex = make([]string, 0)
+	currentNounce, err := hexutil.DecodeUint64(args.CurrentNounce)
+	if err != nil {
+		return fmt.Errorf("failed to decode current nounce: %w", err)
+	}
+
+	transactionFees, err := hexutil.DecodeBig(args.TransactionFeesToBeUsed)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction fees to be used for transaction: %w", err)
+	}
+	allTransactionFess := big.NewInt(0)
+	for _, v := range args.ContractHashes {
+		currentNounce++
+		downloadContract, err := api.contractStore.GetContract(v)
+		if err != nil {
+			return fmt.Errorf("failed to get contract: %w", err)
+		}
+
+		dcinTX := &messages.DownloadContractInTransactionDataProto{
+			ContractHash:               downloadContract.ContractHash,
+			FileRequesterNodePublicKey: downloadContract.FileRequesterNodePublicKey,
+			FileHosterNodePublicKey:    downloadContract.FileHosterResponse.PublicKey,
+			VerifierPublicKey:          downloadContract.VerifierPublicKey,
+			VerifierFees:               downloadContract.VerifierFees,
+			FileHosterFees:             downloadContract.FileHosterResponse.FeesPerByte,
+		}
+
+		contractsEnvelope := &messages.DownloadContractsHashesProto{
+			Contracts: []*messages.DownloadContractInTransactionDataProto{dcinTX},
+		}
+
+		itemsBytes, err := proto.Marshal(contractsEnvelope)
+		if err != nil {
+			return fmt.Errorf("failed to marshal contract envelope: %w", err)
+		}
+		txPayload := transaction.DataPayload{
+			Type:    transaction.DataType_DATA_CONTRACT,
+			Payload: itemsBytes,
+		}
+		txPayloadBytes, err := proto.Marshal(&txPayload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal data payload with contract envelope inside: %w", err)
+		}
+
+		dataverifierAddr, err := ffgcrypto.RawPublicToAddress(downloadContract.VerifierPublicKey)
+		if err != nil {
+			return fmt.Errorf("failed to get the address of data verifier: %w", err)
+		}
+		publicKeyOfTxSigner, err := key.Key.PublicKey.Raw()
+		if err != nil {
+			return fmt.Errorf("failed get the public key bytes of unlocked address: %w", err)
+		}
+		mainChain, _ := hexutil.Decode(transaction.ChainID)
+
+		totalFileSize := uint64(0)
+		for _, v := range downloadContract.FileHashesNeededSizes {
+			totalFileSize += v
+		}
+		fileHosterFees, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.FeesPerByte)
+		if err != nil {
+			return fmt.Errorf("failed to decode file hosters fees: %w", err)
+		}
+
+		fileHosterFees = fileHosterFees.Mul(fileHosterFees, big.NewInt(0).SetUint64(totalFileSize))
+		verifierFees, err := hexutil.DecodeBig(downloadContract.VerifierFees)
+		if err != nil {
+			return fmt.Errorf("failed to decode verifier's fees: %w", err)
+		}
+
+		totalFees := currency.FFGZero().Add(fileHosterFees, verifierFees)
+		allTransactionFess = allTransactionFess.Add(allTransactionFess, totalFees)
+		tx := transaction.Transaction{
+			PublicKey:       publicKeyOfTxSigner,
+			Nounce:          hexutil.EncodeUint64ToBytes(currentNounce),
+			Data:            txPayloadBytes,
+			From:            key.Key.Address,
+			To:              dataverifierAddr,
+			Value:           hexutil.EncodeBig(totalFees),
+			TransactionFees: hexutil.EncodeBig(transactionFees),
+			Chain:           mainChain,
+		}
+		err = tx.Sign(key.Key.PrivateKey)
+		if err != nil {
+			return fmt.Errorf("failed to sign the transaction with data contract inside: %w", err)
+		}
+		ok, err = tx.Validate()
+		if !ok || err != nil {
+			return fmt.Errorf("failed to validate transaction: %w", err)
+		}
+		JSONTx := JSONTransaction{
+			Hash:            hexutil.Encode(tx.Hash),
+			Signature:       hexutil.Encode(tx.Signature),
+			PublicKey:       hexutil.Encode(tx.PublicKey),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(tx.Nounce),
+			Data:            hexutil.Encode(tx.Data),
+			From:            tx.From,
+			To:              tx.To,
+			Value:           tx.Value,
+			TransactionFees: tx.TransactionFees,
+			Chain:           hexutil.Encode(mainChain),
+		}
+
+		JSONTxBytes, err := json.Marshal(JSONTx)
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSON transaction: %w", err)
+		}
+
+		response.TransactionDataBytesHex = append(response.TransactionDataBytesHex, string(JSONTxBytes))
+	}
+
+	response.TotalFeesForTransactions = hexutil.EncodeBig(allTransactionFess)
+
 	return nil
 }
 
