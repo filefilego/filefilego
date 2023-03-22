@@ -149,4 +149,8 @@ message FileTransferInfoProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
     uint64 file_size = 3;
+    // from indicates the starting file segment range to be requested
+    int32 from = 4;
+    // to indicates the end of the file segment range to be requested
+    int32 to = 5;
 }

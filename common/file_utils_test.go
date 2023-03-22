@@ -119,6 +119,21 @@ func TestPrepareFileBlockRanges(t *testing.T) {
 
 	assert.EqualValues(t, []int{2, 7, 11}, orders)
 	assert.Equal(t, totalSegmentsToEncrypt, totalEnc)
+
+	ranges, ok = PrepareFileBlockRanges(0, 9, filesize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomSlice)
+	assert.True(t, ok)
+	assert.Len(t, ranges, 10)
+	totalEnc = 0
+	orders = []int{}
+	for i, v := range ranges {
+		if v.mustEncrypt {
+			fmt.Println("must be encrypted ", i)
+			totalEnc++
+			orders = append(orders, i)
+		}
+	}
+
+	assert.EqualValues(t, []int{2, 7}, orders)
 }
 
 func TestGenerateRandomIntSlice(t *testing.T) {
@@ -258,7 +273,7 @@ func TestEncryptDecryption(t *testing.T) {
 
 	randomSlices := GenerateRandomIntSlice(howManySegmentsForInputFile)
 	start = time.Now()
-	err = EncryptWriteOutput(int(inputStats.Size()), totalSegments, percentageDecrypt, randomSlices, input, output, encryptor)
+	err = EncryptWriteOutput(int(inputStats.Size()), 0, totalSegments-1, totalSegments, percentageDecrypt, randomSlices, input, output, encryptor)
 	elapsed = time.Since(start)
 	log.Printf("EncryptWriteOutput took %s", elapsed)
 	assert.NoError(t, err)
@@ -374,7 +389,7 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	// encrypt and shuffle segments based on the random slice
 	input, err = os.Open(inputFile)
 	assert.NoError(t, err)
-	err = EncryptWriteOutput(int(inputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, output, encryptor)
+	err = EncryptWriteOutput(int(inputStats.Size()), 0, howManySegmentsAllowedForFile-1, howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, output, encryptor)
 	assert.NoError(t, err)
 
 	input.Close()

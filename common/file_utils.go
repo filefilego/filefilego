@@ -414,12 +414,12 @@ func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments 
 }
 
 // EncryptWriteOutput uses the stream cipher to encrypt the input reader and write to the output.
-func EncryptWriteOutput(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser, encryptor DataEncryptor) error {
+func EncryptWriteOutput(fileSize, from, to, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser, encryptor DataEncryptor) error {
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
 	if len(randomizedFileSegments) != howManySegments {
 		return fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
 	}
-	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
+	ranges, ok := PrepareFileBlockRanges(from, to, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
 	if !ok || len(ranges) == 0 {
 		return errors.New("failed to prepare file blocks")
 	}
@@ -484,13 +484,17 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		return nil, false
 	}
 
+	if to > totalSegments-1 {
+		to = totalSegments - 1
+	}
+
 	if from > to || to > totalSegments-1 {
 		return nil, false
 	}
 
 	fileRanges := make([]FileBlockRange, 0)
 
-	for i := from; i <= to; i++ {
+	for i := 0; i <= totalSegments-1; i++ {
 		start := randomSlice[i] * segmentSizeBytes
 		end := start + segmentSizeBytes - 1
 
@@ -530,7 +534,12 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		}
 	}
 
-	return fileRanges, true
+	finalFileRanges := make([]FileBlockRange, 0)
+	for i := from; i <= to; i++ {
+		finalFileRanges = append(finalFileRanges, fileRanges[i])
+	}
+
+	return finalFileRanges, true
 }
 
 // RetrieveMerkleTreeNodes retrives the original order of merkle tree given the random list.
