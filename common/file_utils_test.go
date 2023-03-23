@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -476,4 +477,61 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, hashOfDecryptedRestoredFile, hashOfOriginalFile)
 	output.Close()
+}
+
+func TestConcatenateFiles(t *testing.T) {
+	inputFiles := []string{"file1.txt", "file2.txt", "file3.txt"}
+	for _, inputFile := range inputFiles {
+		f, err := os.Create(inputFile)
+		if err != nil {
+			t.Fatalf("failed to create temporary input file %s: %v", inputFile, err)
+		}
+		defer f.Close()
+
+		if _, err := f.WriteString("Hello, world!\n"); err != nil {
+			t.Fatalf("failed to write to temporary input file %s: %v", inputFile, err)
+		}
+	}
+
+	outputFile := "output.txt"
+
+	t.Cleanup(func() {
+		os.RemoveAll(outputFile)
+		os.RemoveAll("file1.txt")
+		os.RemoveAll("file2.txt")
+		os.RemoveAll("file3.txt")
+
+	})
+
+	if err := ConcatenateFiles(outputFile, inputFiles); err != nil {
+		t.Fatalf("failed to concatenate files: %v", err)
+	}
+
+	// read the contents of the output file and ensure it matches the input files
+	expectedContents := "Hello, world!\nHello, world!\nHello, world!\n"
+	actualContents, err := ioutil.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	if string(actualContents) != expectedContents {
+		t.Fatalf("output file contents do not match expected contents:\nexpected: %q\nactual: %q", expectedContents, actualContents)
+	}
+
+	// rest with an empty list of input files
+	emptyInputFiles := []string{}
+	if err := ConcatenateFiles(outputFile, emptyInputFiles); err != nil {
+		t.Fatalf("failed to concatenate files with empty input files list: %v", err)
+	}
+
+	// rest with a non-existent input file
+	nonexistentInputFiles := []string{"nonexistent.txt"}
+	if err := ConcatenateFiles(outputFile, nonexistentInputFiles); err == nil {
+		t.Fatalf("expected error when concatenating non-existent input file, but no error was returned")
+	}
+
+	// rest with a non-existent output file directory
+	nonexistentOutputFile := "nonexistent/output.txt"
+	if err := ConcatenateFiles(nonexistentOutputFile, inputFiles); err == nil {
+		t.Fatalf("expected error when creating output file in non-existent directory, but no error was returned")
+	}
 }
