@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
@@ -851,4 +852,42 @@ func FileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// ConcatenateFiles concatenates multiple files into one output file.
+func ConcatenateFiles(outputFile string, inputFiles []string) error {
+	f, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to create output file %s: %w", outputFile, err)
+	}
+	defer f.Close()
+
+	for _, inputFile := range inputFiles {
+		in, err := os.Open(inputFile)
+		if err != nil {
+			return fmt.Errorf("failed to open input file %s: %w", inputFile, err)
+		}
+		defer in.Close()
+
+		// use a buffered reader to read the input file in chunks
+		reader := bufio.NewReader(in)
+		buf := make([]byte, bufferSize)
+		for {
+			n, err := reader.Read(buf)
+			if err != nil && err != io.EOF {
+				return fmt.Errorf("failed to read from input file %s: %w", inputFile, err)
+			}
+
+			if n == 0 {
+				break
+			}
+
+			// write the chunk to the output file
+			if _, err := f.Write(buf[:n]); err != nil {
+				return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
+			}
+		}
+	}
+
+	return nil
 }

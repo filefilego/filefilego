@@ -228,7 +228,10 @@ func TestEncryptDecryption(t *testing.T) {
 	// nolint:goconst
 	fileContent := "this is ffg network a decentralized data sharing network+"
 	inputFile := "sampletext.txt"
-	outputFile := "sampletext.enc.txt"
+	outputFinalFile := "sampletext.enc.txt"
+	outputFilePart1 := "sampletext.enc.1.txt"
+	outputFilePart2 := "sampletext.enc.2.txt"
+	outputFilePart3 := "sampletext.enc.3.txt"
 	outputFileDecryptedRestored := "sampletext.original.txt"
 	percentageDecrypt := 10
 	totalSegments := 8
@@ -237,7 +240,10 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 	t.Cleanup(func() {
 		os.RemoveAll(inputFile)
-		os.RemoveAll(outputFile)
+		os.RemoveAll(outputFinalFile)
+		os.RemoveAll(outputFilePart1)
+		os.RemoveAll(outputFilePart2)
+		os.RemoveAll(outputFilePart3)
 		os.RemoveAll(outputFileDecryptedRestored)
 	})
 
@@ -255,11 +261,9 @@ func TestEncryptDecryption(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, merkleTree, totalSegments)
 
-	output, err := os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
-	assert.NoError(t, err)
-
 	outputOriginalRestored, err := os.OpenFile(outputFileDecryptedRestored, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
+	assert.NotNil(t, outputOriginalRestored)
 
 	start := time.Now()
 	key, err := crypto.RandomEntropy(32)
@@ -272,20 +276,38 @@ func TestEncryptDecryption(t *testing.T) {
 	log.Printf("RandomEntropy for key and iv took %s", elapsed)
 
 	randomSlices := GenerateRandomIntSlice(howManySegmentsForInputFile)
-	start = time.Now()
-	err = EncryptWriteOutput(int(inputStats.Size()), 0, totalSegments-1, totalSegments, percentageDecrypt, randomSlices, input, output, encryptor)
-	elapsed = time.Since(start)
-	log.Printf("EncryptWriteOutput took %s", elapsed)
+	output1, err := os.OpenFile(outputFilePart1, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
-	err = output.Sync()
+	output2, err := os.OpenFile(outputFilePart2, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
-	err = output.Close()
+	output3, err := os.OpenFile(outputFilePart3, os.O_RDWR|os.O_CREATE, os.ModePerm)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 0, 2, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 3, 5, totalSegments, percentageDecrypt, randomSlices, input, output2, encryptor)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 6, totalSegments-1, totalSegments, percentageDecrypt, randomSlices, input, output3, encryptor)
+	assert.NoError(t, err)
+
+	err = output1.Close()
+	assert.NoError(t, err)
+
+	err = output2.Close()
+	assert.NoError(t, err)
+
+	err = output3.Close()
+	assert.NoError(t, err)
+
+	err = ConcatenateFiles(outputFinalFile, []string{outputFilePart1, outputFilePart2, outputFilePart3})
 	assert.NoError(t, err)
 
 	// reopen output file
-	output, err = os.OpenFile(outputFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
+	output, err := os.OpenFile(outputFinalFile, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
 	outputStats, err := output.Stat()
