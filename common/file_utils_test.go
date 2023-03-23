@@ -2,7 +2,6 @@ package common
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -500,7 +499,6 @@ func TestConcatenateFiles(t *testing.T) {
 		os.RemoveAll("file1.txt")
 		os.RemoveAll("file2.txt")
 		os.RemoveAll("file3.txt")
-
 	})
 
 	if err := ConcatenateFiles(outputFile, inputFiles); err != nil {
@@ -509,7 +507,7 @@ func TestConcatenateFiles(t *testing.T) {
 
 	// read the contents of the output file and ensure it matches the input files
 	expectedContents := "Hello, world!\nHello, world!\nHello, world!\n"
-	actualContents, err := ioutil.ReadFile(outputFile)
+	actualContents, err := os.ReadFile(outputFile)
 	if err != nil {
 		t.Fatalf("failed to read output file: %v", err)
 	}
