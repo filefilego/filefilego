@@ -1185,7 +1185,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 
 	buf := make([]byte, bufferSize)
 	totalFileBytesTransfered := uint64(0)
-	for totalFileBytesTransfered != request.FileSize {
+	for {
 		n, err := s.Read(buf)
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])
@@ -1436,7 +1436,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	}()
 
 	// write to the stream the content of the input file while encrypting and shuffling its segments.
-	err = common.EncryptWriteOutput(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
+	err = common.EncryptWriteOutput(int(fileMetadata.Size), int(fileTransferRequest.From), int(fileTransferRequest.To), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
 	if err != nil {
 		log.Errorf("failed to encryptWriteOutput in handleIncomingFileTransfer: %v", err)
 		return

@@ -365,6 +365,8 @@ type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
 	FileHash     string `json:"file_hash"`
 	FileSize     uint64 `json:"file_size"`
+	From         int64  `json:"from"`
+	To           int64  `json:"to"`
 }
 
 // DownloadFileArgs represents a response.
@@ -396,6 +398,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		ContractHash: downloadContract.ContractHash,
 		FileHash:     fileHash,
 		FileSize:     args.FileSize,
+		From:         args.From,
+		To:           args.To,
 	}
 
 	go func() {

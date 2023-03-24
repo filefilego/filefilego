@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
@@ -413,29 +414,127 @@ func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments 
 	return hashes, nil
 }
 
+type fromToData struct {
+	fromPartStart int
+	fromSendData  int
+	to            int
+	toPartEnd     int
+	// will be used later for sorting purposes
+	whichSegment int
+	encrypt      bool
+}
+
+func getBytesRangesToEncryptAndSend(from, to, segmentSizeBytes int, ranges []FileBlockRange) []fromToData {
+	m := make(map[int]fromToData)
+	for i := from; i <= to; i++ {
+		whichFileSegment := i / segmentSizeBytes
+		offset := i % segmentSizeBytes
+		part := ranges[whichFileSegment]
+		startOfPart := part.from
+		fromWhereToSendBytes := startOfPart + offset
+		endOfPart := part.to
+		fromToRanges, ok := m[whichFileSegment]
+
+		if !ok {
+			m[whichFileSegment] = fromToData{fromPartStart: startOfPart, fromSendData: fromWhereToSendBytes, to: fromWhereToSendBytes, toPartEnd: endOfPart, whichSegment: whichFileSegment, encrypt: part.mustEncrypt}
+			continue
+		}
+
+		fromToRanges.to = fromWhereToSendBytes
+		m[whichFileSegment] = fromToRanges
+	}
+
+	allRanges := make([]fromToData, 0)
+	for _, v := range m {
+		allRanges = append(allRanges, v)
+	}
+
+	sort.Slice(allRanges, func(i, j int) bool { return allRanges[i].whichSegment < allRanges[j].whichSegment })
+
+	return allRanges
+}
+
 // EncryptWriteOutput uses the stream cipher to encrypt the input reader and write to the output.
-func EncryptWriteOutput(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser, encryptor DataEncryptor) error {
+func EncryptWriteOutput(fileSize, from, to, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser, encryptor DataEncryptor) error {
 	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
 	if len(randomizedFileSegments) != howManySegments {
 		return fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
 	}
+
+	if segmentSizeBytes == 0 {
+		return errors.New("segment size is zero")
+	}
+
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
 	if !ok || len(ranges) == 0 {
 		return errors.New("failed to prepare file blocks")
 	}
 
-	for _, v := range ranges {
+	// we have all the segments and which one should be encrypted
+	// we should find the ranges, and do the following:
+	// 1. if the range is within an encrypted segment, and its not the start of the segment then:
+	//		a. read from the start of the segment and XOR it
+	//		b. when we reach to the offset then start sending the data
+	// 2. if the range is not within an encrypted segment just send the data as is without XORing it
+	if to > fileSize-1 {
+		to = fileSize - 1
+	}
+
+	fromToRanges := getBytesRangesToEncryptAndSend(from, to, segmentSizeBytes, ranges)
+
+	for _, v := range fromToRanges {
+		fullBlockIsRequired := v.fromPartStart == v.fromSendData && v.to == v.toPartEnd
+		// we have a request that requires specific bytes and encryption is required
 		stream, err := encryptor.StreamEncryptor()
 		if err != nil {
 			return fmt.Errorf("failed to create an encryptor: %w", err)
 		}
 
-		_, err = input.Seek(int64(v.from), 0)
-		if err != nil {
-			return fmt.Errorf("failed to seek input file at offset %d filesize %d: %w", v.from, fileSize, err)
+		if !fullBlockIsRequired && v.encrypt {
+			// read the bytes from the start of the file segment until the given offset required - 1
+			// just XOR the data
+			seekFrom := v.fromPartStart
+			_, err := input.Seek(int64(seekFrom), 0)
+			if err != nil {
+				return fmt.Errorf("failed to seek input file at offset %d filesize %d: %w", seekFrom, fileSize, err)
+			}
+
+			diff := v.fromSendData - v.fromPartStart
+
+			for diff > 0 {
+				totalBytesRead := 0
+				if diff > bufferSize {
+					diff -= bufferSize
+					totalBytesRead = bufferSize
+				} else {
+					totalBytesRead = diff
+					diff -= diff
+				}
+
+				buf := make([]byte, totalBytesRead)
+				n, err := input.Read(buf)
+				if n > 0 {
+					if v.encrypt {
+						stream.XORKeyStream(buf, buf[:n])
+					}
+				}
+
+				if err == io.EOF {
+					log.Warn("io.EOF when encrypting")
+					break
+				}
+
+				if err != nil {
+					return fmt.Errorf("failed to read from input: %w", err)
+				}
+			}
 		}
 
-		diff := (v.to - v.from) + 1
+		diff := (v.to - v.fromSendData) + 1
+		_, err = input.Seek(int64(v.fromSendData), 0)
+		if err != nil {
+			return fmt.Errorf("failed to seek input file at offset %d filesize %d: %w", v.fromSendData, fileSize, err)
+		}
 
 		for diff > 0 {
 			totalBytesRead := 0
@@ -450,7 +549,7 @@ func EncryptWriteOutput(fileSize, totalSegments, percentageToEncryptData int, ra
 			buf := make([]byte, totalBytesRead)
 			n, err := input.Read(buf)
 			if n > 0 {
-				if v.mustEncrypt {
+				if v.encrypt {
 					stream.XORKeyStream(buf, buf[:n])
 				}
 				okn, err := output.Write(buf[:n])
@@ -484,13 +583,17 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		return nil, false
 	}
 
+	if to > totalSegments-1 {
+		to = totalSegments - 1
+	}
+
 	if from > to || to > totalSegments-1 {
 		return nil, false
 	}
 
 	fileRanges := make([]FileBlockRange, 0)
 
-	for i := from; i <= to; i++ {
+	for i := 0; i <= totalSegments-1; i++ {
 		start := randomSlice[i] * segmentSizeBytes
 		end := start + segmentSizeBytes - 1
 
@@ -530,7 +633,12 @@ func PrepareFileBlockRanges(from, to, fileSize, totalSegments, segmentSizeBytes,
 		}
 	}
 
-	return fileRanges, true
+	finalFileRanges := make([]FileBlockRange, 0)
+	for i := from; i <= to; i++ {
+		finalFileRanges = append(finalFileRanges, fileRanges[i])
+	}
+
+	return finalFileRanges, true
 }
 
 // RetrieveMerkleTreeNodes retrives the original order of merkle tree given the random list.
@@ -842,4 +950,42 @@ func FileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// ConcatenateFiles concatenates multiple files into one output file.
+func ConcatenateFiles(outputFile string, inputFiles []string) error {
+	f, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to create output file %s: %w", outputFile, err)
+	}
+	defer f.Close()
+
+	for _, inputFile := range inputFiles {
+		in, err := os.Open(inputFile)
+		if err != nil {
+			return fmt.Errorf("failed to open input file %s: %w", inputFile, err)
+		}
+		defer in.Close()
+
+		// use a buffered reader to read the input file in chunks
+		reader := bufio.NewReader(in)
+		buf := make([]byte, bufferSize)
+		for {
+			n, err := reader.Read(buf)
+			if err != nil && err != io.EOF {
+				return fmt.Errorf("failed to read from input file %s: %w", inputFile, err)
+			}
+
+			if n == 0 {
+				break
+			}
+
+			// write the chunk to the output file
+			if _, err := f.Write(buf[:n]); err != nil {
+				return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
+			}
+		}
+	}
+
+	return nil
 }
