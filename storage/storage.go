@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
@@ -364,6 +365,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileName = html.EscapeString(fileName)
 	fileMetadata := FileMetadata{
 		FileName:       fileName,
 		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
