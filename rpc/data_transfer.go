@@ -365,8 +365,8 @@ type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
 	FileHash     string `json:"file_hash"`
 	FileSize     uint64 `json:"file_size"`
-	From         int32  `json:"from"`
-	To           int32  `json:"to"`
+	From         int64  `json:"from"`
+	To           int64  `json:"to"`
 }
 
 // DownloadFileArgs represents a response.

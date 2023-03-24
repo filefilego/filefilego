@@ -431,7 +431,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileHash:     fileHashBytes,
 		FileSize:     uint64(fileSize),
 		From:         0,
-		To:           int32(totalDesiredFileSegments),
+		To:           fileSize - 1,
 	}
 	res, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request)
 	assert.NoError(t, err)
@@ -491,7 +491,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileHash:     fileHash2Bytes,
 		FileSize:     uint64(fileSize2),
 		From:         0,
-		To:           int32(totalDesiredFileSegments),
+		To:           fileSize2 - 1,
 	}
 	res2, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request2)
 	assert.NoError(t, err)

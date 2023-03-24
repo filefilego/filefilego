@@ -440,7 +440,7 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	// encrypt and shuffle segments based on the random slice
 	input, err = os.Open(inputFile)
 	assert.NoError(t, err)
-	err = EncryptWriteOutput(int(inputStats.Size()), 0, howManySegmentsAllowedForFile-1, howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, output, encryptor)
+	err = EncryptWriteOutput(int(inputStats.Size()), 0, int(inputStats.Size()), howManySegmentsAllowedForFile, percentageEcrypt, randomSlices, input, output, encryptor)
 	assert.NoError(t, err)
 
 	input.Close()
