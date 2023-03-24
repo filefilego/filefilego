@@ -70,6 +70,9 @@ func TestStoreMethods(t *testing.T) {
 	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
 	assert.NoError(t, err)
 
+	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
+	assert.EqualError(t, err, "encryption data is already set")
+
 	fileHash2 := []byte{35}
 	err = store.SetKeyIVEncryptionTypeRandomizedFileSegments("0x0a", fileHash2, key, iv, []byte{73}, common.EncryptionTypeAES256, randomizedSegments, 14)
 	assert.NoError(t, err)

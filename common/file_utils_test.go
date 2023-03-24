@@ -230,10 +230,9 @@ func TestEncryptDecryption(t *testing.T) {
 	inputFile := "sampletext.txt"
 	outputFinalFile := "sampletext.enc.txt"
 	outputFilePart1 := "sampletext.enc.1.txt"
-	outputFilePart2 := "sampletext.enc.2.txt"
-	outputFilePart3 := "sampletext.enc.3.txt"
 	outputFileDecryptedRestored := "sampletext.original.txt"
-	percentageDecrypt := 10
+
+	percentageDecrypt := 100
 	totalSegments := 8
 
 	_, err := WriteToFile([]byte(fileContent), inputFile)
@@ -242,8 +241,6 @@ func TestEncryptDecryption(t *testing.T) {
 		os.RemoveAll(inputFile)
 		os.RemoveAll(outputFinalFile)
 		os.RemoveAll(outputFilePart1)
-		os.RemoveAll(outputFilePart2)
-		os.RemoveAll(outputFilePart3)
 		os.RemoveAll(outputFileDecryptedRestored)
 	})
 
@@ -279,31 +276,64 @@ func TestEncryptDecryption(t *testing.T) {
 	output1, err := os.OpenFile(outputFilePart1, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	assert.NoError(t, err)
 
-	output2, err := os.OpenFile(outputFilePart2, os.O_RDWR|os.O_CREATE, os.ModePerm)
-	assert.NoError(t, err)
-
-	output3, err := os.OpenFile(outputFilePart3, os.O_RDWR|os.O_CREATE, os.ModePerm)
-	assert.NoError(t, err)
-
 	err = EncryptWriteOutput(int(inputStats.Size()), 0, 2, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
 	assert.NoError(t, err)
 
-	err = EncryptWriteOutput(int(inputStats.Size()), 3, 5, totalSegments, percentageDecrypt, randomSlices, input, output2, encryptor)
+	_, err = input.Seek(0, 0)
 	assert.NoError(t, err)
 
-	err = EncryptWriteOutput(int(inputStats.Size()), 6, totalSegments-1, totalSegments, percentageDecrypt, randomSlices, input, output3, encryptor)
+	err = EncryptWriteOutput(int(inputStats.Size()), 3, 5, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 6, 13, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 14, 20, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 21, 22, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 23, 24, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 25, 25, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 26, 40, totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
+	assert.NoError(t, err)
+
+	err = EncryptWriteOutput(int(inputStats.Size()), 41, int(inputStats.Size()-1), totalSegments, percentageDecrypt, randomSlices, input, output1, encryptor)
+	assert.NoError(t, err)
+
+	_, err = input.Seek(0, 0)
 	assert.NoError(t, err)
 
 	err = output1.Close()
 	assert.NoError(t, err)
 
-	err = output2.Close()
-	assert.NoError(t, err)
-
-	err = output3.Close()
-	assert.NoError(t, err)
-
-	err = ConcatenateFiles(outputFinalFile, []string{outputFilePart1, outputFilePart2, outputFilePart3})
+	err = ConcatenateFiles(outputFinalFile, []string{outputFilePart1})
 	assert.NoError(t, err)
 
 	// reopen output file
@@ -312,12 +342,11 @@ func TestEncryptDecryption(t *testing.T) {
 
 	outputStats, err := output.Stat()
 	assert.NoError(t, err)
-
 	start = time.Now()
 	err = DecryptFileSegments(int(outputStats.Size()), totalSegments, percentageDecrypt, randomSlices, output, outputOriginalRestored, encryptor, false)
+	assert.NoError(t, err)
 	elapsed = time.Since(start)
 	log.Printf("DecryptFileSegments took %s", elapsed)
-	assert.NoError(t, err)
 
 	hashOfOriginalFile, err := crypto.Sha1File(inputFile)
 	assert.NoError(t, err)
@@ -532,4 +561,48 @@ func TestConcatenateFiles(t *testing.T) {
 	if err := ConcatenateFiles(nonexistentOutputFile, inputFiles); err == nil {
 		t.Fatalf("expected error when creating output file in non-existent directory, but no error was returned")
 	}
+}
+
+func TestGetBytesRangesToEncryptAndSend(t *testing.T) {
+	fileBlockRanges := []FileBlockRange{
+		{
+			mustEncrypt: true,
+			from:        0,
+			to:          3,
+		},
+		{
+			mustEncrypt: false,
+			from:        4,
+			to:          7,
+		},
+		{
+			mustEncrypt: true,
+			from:        8,
+			to:          11,
+		},
+		{
+			mustEncrypt: false,
+			from:        12,
+			to:          15,
+		},
+		{
+			mustEncrypt: false,
+			from:        16,
+			to:          18,
+		},
+	}
+
+	ranges := getBytesRangesToEncryptAndSend(6, 10, 4, fileBlockRanges)
+	assert.Len(t, ranges, 2)
+	assert.Equal(t, false, ranges[0].encrypt)
+	assert.Equal(t, 4, ranges[0].fromPartStart)
+	assert.Equal(t, 7, ranges[0].toPartEnd)
+	assert.Equal(t, 6, ranges[0].fromSendData)
+	assert.Equal(t, 7, ranges[0].to)
+
+	assert.Equal(t, true, ranges[1].encrypt)
+	assert.Equal(t, 8, ranges[1].fromPartStart)
+	assert.Equal(t, 11, ranges[1].toPartEnd)
+	assert.Equal(t, 8, ranges[1].fromSendData)
+	assert.Equal(t, 10, ranges[1].to)
 }

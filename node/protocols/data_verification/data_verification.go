@@ -1185,7 +1185,7 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 
 	buf := make([]byte, bufferSize)
 	totalFileBytesTransfered := uint64(0)
-	for totalFileBytesTransfered != request.FileSize {
+	for {
 		n, err := s.Read(buf)
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])

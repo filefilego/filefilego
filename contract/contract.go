@@ -32,6 +32,7 @@ type Interface interface {
 	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
 	IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
+	DecrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
@@ -109,6 +110,31 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, c
 	}
 
 	bytesStats += count
+	c.bytesTransfered[contractHash][fh] = bytesStats
+}
+
+// DecrementTransferedBytes decrements the number of bytes transfered for a file if an error happened.
+func (c *Store) DecrementTransferedBytes(contractHash string, fileHash []byte, count uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fh := hexutil.EncodeNoPrefix(fileHash)
+	_, ok := c.bytesTransfered[contractHash]
+
+	if !ok {
+		c.bytesTransfered[contractHash] = make(map[string]uint64)
+		c.bytesTransfered[contractHash][fh] = 0
+		return
+	}
+
+	bytesStats, ok := c.bytesTransfered[contractHash][fh]
+	if !ok {
+		c.bytesTransfered[contractHash][fh] = 0
+		return
+	}
+
+	bytesStats -= count
+
 	c.bytesTransfered[contractHash][fh] = bytesStats
 }
 
@@ -434,10 +460,16 @@ func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string
 		fileInfoSlice := c.fileContracts[contractHash]
 		fileInfoSlice = append(fileInfoSlice, fileInfo)
 		c.fileContracts[contractHash] = fileInfoSlice
+		_ = c.persistToDB()
 		return nil
 	}
 
 	v := c.fileContracts[contractHash][foundFileContractIndex]
+
+	if len(v.Key) > 0 {
+		return errors.New("encryption data is already set")
+	}
+
 	v.Key = make([]byte, len(key))
 	copy(v.Key, key)
 
