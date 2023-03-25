@@ -5,7 +5,7 @@ services:
     volumes: 
       - /var/run/docker.sock:/tmp/docker.sock
       - /etc/hosts:/tmp/hosts
-  node1:
+  node1storage:
     hostname: node1.local
     depends_on: 
       - nameresolver
@@ -18,8 +18,8 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego account create_node_key admin
-          ./filefilego --rpc_services="*" --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
-  node2:
+          ./filefilego --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/ --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+  node2storage:
     hostname: node2.local
     image: ffg
     extra_hosts:
@@ -30,9 +30,9 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego account create_node_key admin
-          ./filefilego --rpc_services="*" --node_identity_passphrase=admin --storage_token="admintoken" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
+          ./filefilego --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/ --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX"
     depends_on:
-      - node1
+      - node1storage
       
   # verifier:
   #   hostname: verifier.local
@@ -45,6 +45,6 @@ services:
   #       - /bin/bash
   #       - -c
   #       - |
-  #         ./filefilego --http --http_port=8090 --http_addr=0.0.0.0 --bootstrap_nodes="/dns/host.docker.internal/tcp/10209/p2p/16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX" --rpcservices="channel,transaction,account,block,ffg" --binlayer --binlayerdir="/home" --binlayer_token="1234" --logpathline --downloadpath="/root/" --nodepass="admin"
+  #         ./filefilego --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --verify --data_verification_fees="0x9" data_verification_transaction_fees="0x1"
   #   depends_on:
-  #     - node2
+  #     - node2storage
