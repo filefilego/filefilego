@@ -419,15 +419,14 @@ func DownloadFile(ctx *cli.Context) error {
 			BarEnd:        "]",
 		}))
 
-	bytesTransfered := 0
-	for bytesTransfered < int(sizeOfFile) {
+	bytesTransfered := uint64(0)
+	for bytesTransfered < sizeOfFile {
 		prog, err := ffgclient.DownloadFileProgress(ctx.Context, downloadContractHash, fileHash)
 		if err != nil {
 			log.Errorf("failed to get file progress: %v", err)
 		}
-
-		_ = bar.Add(int(prog.BytesTransfered))
-		bytesTransfered += int(prog.BytesTransfered)
+		_ = bar.Set(int(prog.BytesTransfered))
+		bytesTransfered += prog.BytesTransfered
 		time.Sleep(5 * time.Millisecond)
 	}
 
