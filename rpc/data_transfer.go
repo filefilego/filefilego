@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/filefilego/filefilego/transaction"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -365,8 +367,6 @@ type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
 	FileHash     string `json:"file_hash"`
 	FileSize     uint64 `json:"file_size"`
-	From         int64  `json:"from"`
-	To           int64  `json:"to"`
 }
 
 // DownloadFileArgs represents a response.
@@ -394,24 +394,99 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	// trigger a file initialization by seting the size of the file
 	api.contractStore.SetFileSize(args.ContractHash, fileHash, args.FileSize)
 
-	request := &messages.FileTransferInfoProto{
-		ContractHash: downloadContract.ContractHash,
-		FileHash:     fileHash,
-		FileSize:     args.FileSize,
-		From:         args.From,
-		To:           args.To,
-	}
-
 	go func() {
-		_, err := api.dataVerificationProtocol.RequestFileTransfer(context.Background(), fileHoster, request)
+		fileRanges := createFileRanges(int64(args.FileSize))
+		wg := sync.WaitGroup{}
+		for _, v := range fileRanges {
+			v := v
+			wg.Add(1)
+			go func(fileRange FileRanges) {
+				request := &messages.FileTransferInfoProto{
+					ContractHash: downloadContract.ContractHash,
+					FileHash:     fileHash,
+					FileSize:     args.FileSize,
+					From:         fileRange.from,
+					To:           fileRange.to,
+				}
+
+				_, err := api.dataVerificationProtocol.RequestFileTransfer(context.Background(), fileHoster, request)
+				if err != nil {
+					fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
+					fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
+					api.contractStore.SetFilePartDownloadError(args.ContractHash, fileHash, fileNameWithPart, err.Error())
+				}
+				wg.Done()
+			}(v)
+		}
+		wg.Wait()
+		// check if all file parts have been downloaded
+		totalDownloaded := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		if totalDownloaded != args.FileSize {
+			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("total downloaded parts size (%d) is not equal to the file size (%d)", totalDownloaded, args.FileSize))
+			return
+		}
+
+		// reassemble all file parts
+		fileParts := api.contractStore.GetDownoadedFilePartNames(args.ContractHash, fileHash)
+		outputFilePath := filepath.Join(filepath.Dir(fileParts[0]), args.FileHash)
+		log.Info("outputfile path ", outputFilePath)
+		err = common.ConcatenateFiles(outputFilePath, fileParts)
 		if err != nil {
-			api.contractStore.SetError(args.ContractHash, fileHash, err.Error())
+			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("failed to concatenate downloaded file parts: %s", err.Error()))
+			return
+		}
+
+		// delete the part files
+		for _, v := range fileParts {
+			err := os.Remove(v)
+			if err != nil {
+				log.Warnf("failed to remove file %s : %v", v, err)
+			}
 		}
 	}()
 
 	response.Status = "started"
 
 	return nil
+}
+
+type FileRanges struct {
+	from int64
+	to   int64
+	idx  int
+}
+
+func createFileRanges(fileSize int64) []FileRanges {
+	numWorkers := int64(4)
+	chunkSize := fileSize / numWorkers
+	ranges := make([]FileRanges, 0)
+
+	if chunkSize == 0 {
+		ranges = append(ranges, FileRanges{
+			from: 0,
+			to:   fileSize - 1,
+			idx:  0,
+		})
+		return ranges
+	}
+
+	for i := 0; i < int(numWorkers); i++ {
+		start := int64(i) * chunkSize
+		end := int64(0)
+		if i == int(numWorkers-1) {
+			end = fileSize - 1
+		} else {
+			end = start + chunkSize - 1
+		}
+
+		ranges = append(ranges, FileRanges{
+			from: start,
+			to:   end,
+			idx:  i,
+		})
+	}
+
+	return ranges
 }
 
 // DownloadFileProgressArgs represent args.

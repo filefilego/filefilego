@@ -257,7 +257,7 @@ func (cli *Client) RequestDataQueryResponseFromVerifiers(ctx context.Context, da
 }
 
 // DownloadFile requests a file download from file hoster given the file segments start and end.
-func (cli *Client) DownloadFile(ctx context.Context, contractHash, fileHash string, fileSize uint64, from, to int64) (string, error) {
+func (cli *Client) DownloadFile(ctx context.Context, contractHash, fileHash string, fileSize uint64) (string, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "data_transfer.DownloadFile",
@@ -265,8 +265,6 @@ func (cli *Client) DownloadFile(ctx context.Context, contractHash, fileHash stri
 			ContractHash: contractHash,
 			FileHash:     fileHash,
 			FileSize:     fileSize,
-			From:         from,
-			To:           to,
 		}},
 		ID: 1,
 	}

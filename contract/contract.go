@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/filefilego/filefilego/common"
@@ -31,12 +32,13 @@ type Interface interface {
 	ReleaseContractFees(contractHash string)
 	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
-	IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
-	DecrementTransferedBytes(contractHash string, fileHash []byte, count uint64)
+	IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange int64, count uint64)
+	SetFilePartDownloadError(contractHash string, fileHash []byte, fileNamePart, errorMessage string)
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
 	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
+	GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string
 }
 
 // FileInfo represents a contract with the file information.
@@ -55,13 +57,21 @@ type FileInfo struct {
 	FileDecryptionStatus                  FileDecryptionStatus
 }
 
+type bytesTransferStats struct {
+	FromByteRange       int64
+	DestinationFilePath string
+	FilePartName        string
+	BytesTransfer       uint64
+	ErrorMessage        string
+}
+
 // Store represents the contract stores.
 type Store struct {
 	db                   database.Database
 	fileContracts        map[string][]FileInfo
 	contracts            map[string]*messages.DownloadContractProto
 	releasedContractFees map[string]struct{}
-	bytesTransfered      map[string]map[string]uint64
+	bytesTransfered      map[string]map[string]map[string]bytesTransferStats
 	mu                   sync.RWMutex
 	muRC                 sync.RWMutex
 }
@@ -83,14 +93,14 @@ func New(db database.Database) (*Store, error) {
 		fileContracts:        make(map[string][]FileInfo),
 		contracts:            make(map[string]*messages.DownloadContractProto),
 		releasedContractFees: make(map[string]struct{}),
-		bytesTransfered:      make(map[string]map[string]uint64),
+		bytesTransfered:      make(map[string]map[string]map[string]bytesTransferStats),
 	}
 
 	return store, nil
 }
 
-// IncrementTransferedBytes increments the number of bytes transfered for a file.
-func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, count uint64) {
+// SetFilePartDownloadError sets an error for a file part download.
+func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, fileNamePart, errorMessage string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -98,23 +108,38 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, c
 	_, ok := c.bytesTransfered[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]uint64)
-		c.bytesTransfered[contractHash][fh] = count
+		c.bytesTransfered[contractHash] = make(map[string]map[string]bytesTransferStats)
+		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+			FilePartName: fileNamePart,
+			ErrorMessage: errorMessage,
+		}}
 		return
 	}
 
-	bytesStats, ok := c.bytesTransfered[contractHash][fh]
+	_, ok = c.bytesTransfered[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = count
+		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+			FilePartName: fileNamePart,
+			ErrorMessage: errorMessage,
+		}}
 		return
 	}
 
-	bytesStats += count
-	c.bytesTransfered[contractHash][fh] = bytesStats
+	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
+	if !ok {
+		c.bytesTransfered[contractHash][fh][fileNamePart] = bytesTransferStats{
+			FilePartName: fileNamePart,
+			ErrorMessage: errorMessage,
+		}
+		return
+	}
+
+	filePartStats.ErrorMessage = errorMessage
+	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
 }
 
-// DecrementTransferedBytes decrements the number of bytes transfered for a file if an error happened.
-func (c *Store) DecrementTransferedBytes(contractHash string, fileHash []byte, count uint64) {
+// IncrementTransferedBytes increments the number of bytes transfered for a file.
+func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange int64, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -122,20 +147,65 @@ func (c *Store) DecrementTransferedBytes(contractHash string, fileHash []byte, c
 	_, ok := c.bytesTransfered[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]uint64)
-		c.bytesTransfered[contractHash][fh] = 0
+		c.bytesTransfered[contractHash] = make(map[string]map[string]bytesTransferStats)
+		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+			FromByteRange:       filePartFromRange,
+			FilePartName:        fileNamePart,
+			DestinationFilePath: destinationFilePath,
+			BytesTransfer:       count,
+		}}
 		return
 	}
 
-	bytesStats, ok := c.bytesTransfered[contractHash][fh]
+	_, ok = c.bytesTransfered[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = 0
+		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+			FromByteRange:       filePartFromRange,
+			FilePartName:        fileNamePart,
+			DestinationFilePath: destinationFilePath,
+			BytesTransfer:       count,
+		}}
 		return
 	}
 
-	bytesStats -= count
+	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
+	if !ok {
+		c.bytesTransfered[contractHash][fh][fileNamePart] = bytesTransferStats{
+			FromByteRange:       filePartFromRange,
+			FilePartName:        fileNamePart,
+			DestinationFilePath: destinationFilePath,
+			BytesTransfer:       count,
+		}
+		return
+	}
 
-	c.bytesTransfered[contractHash][fh] = bytesStats
+	filePartStats.BytesTransfer += count
+
+	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
+}
+
+// GetDownoadedFilePartNames gets the downloaded file parts names in order.
+func (c *Store) GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	fh := hexutil.EncodeNoPrefix(fileHash)
+
+	d := c.bytesTransfered[contractHash][fh]
+
+	allFiles := make([]bytesTransferStats, 0)
+
+	for _, v := range d {
+		allFiles = append(allFiles, v)
+	}
+	sort.Slice(allFiles, func(i, j int) bool { return allFiles[i].FromByteRange < allFiles[j].FromByteRange })
+
+	finalPartNames := make([]string, len(allFiles))
+	for i, v := range allFiles {
+		finalPartNames[i] = v.DestinationFilePath
+	}
+
+	return finalPartNames
 }
 
 // GetTransferedBytes gets the transfered bytes for a file.
@@ -146,7 +216,13 @@ func (c *Store) GetTransferedBytes(contractHash string, fileHash []byte) uint64 
 	fh := hexutil.EncodeNoPrefix(fileHash)
 
 	d := c.bytesTransfered[contractHash][fh]
-	return d
+
+	total := uint64(0)
+	for _, v := range d {
+		total += v.BytesTransfer
+	}
+
+	return total
 }
 
 // ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.

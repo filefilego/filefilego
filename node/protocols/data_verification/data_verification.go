@@ -1032,11 +1032,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 		randomizedSegments[i] = int(v)
 	}
 
-	err = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, keyIVRandomizedFileSegmentsEnvelope.Key, keyIVRandomizedFileSegmentsEnvelope.Iv, keyIVRandomizedFileSegmentsEnvelope.MerkleRootHash, common.EncryptionType(keyIVRandomizedFileSegmentsEnvelope.EncryptionType), randomizedSegments, keyIVRandomizedFileSegmentsEnvelope.FileSize)
-	if err != nil {
-		log.Errorf("failed to update key, iv and random segments of file contract: %v", err)
-		return
-	}
+	_ = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, keyIVRandomizedFileSegmentsEnvelope.FileHash, keyIVRandomizedFileSegmentsEnvelope.Key, keyIVRandomizedFileSegmentsEnvelope.Iv, keyIVRandomizedFileSegmentsEnvelope.MerkleRootHash, common.EncryptionType(keyIVRandomizedFileSegmentsEnvelope.EncryptionType), randomizedSegments, keyIVRandomizedFileSegmentsEnvelope.FileSize)
 
 	contractHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.ContractHash)
 	err = common.CreateDirectory(filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex))
@@ -1143,8 +1139,19 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 
 // RequestFileTransfer requests a file download from the file hoster.
 // Request is initiated from the downloader peer.
-// TODO: handle network failure and resumable file transfer.
 func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error) {
+	if request.FileSize == 0 {
+		return "", errors.New("file size in the request is zero")
+	}
+
+	if len(request.ContractHash) == 0 {
+		return "", errors.New("contract hash is empty")
+	}
+
+	if len(request.FileHash) == 0 {
+		return "", errors.New("file hash is empty")
+	}
+
 	s, err := d.host.NewStream(ctx, fileHosterID, FileTransferProtocolID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create new file download stream to file hoster: %w", err)
@@ -1176,7 +1183,8 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 	}
 
 	fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
-	destinationFilePath := filepath.Join(d.downloadDirectory, contractHashHex, fileHashHex)
+	fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
+	destinationFilePath := filepath.Join(d.downloadDirectory, contractHashHex, fileNameWithPart)
 	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to open a file for downloading its content from hoster: %w", err)
@@ -1184,17 +1192,14 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 	defer destinationFile.Close()
 
 	buf := make([]byte, bufferSize)
-	totalFileBytesTransfered := uint64(0)
 	for {
 		n, err := s.Read(buf)
 		if n > 0 {
 			wroteN, err := destinationFile.Write(buf[:n])
 			if wroteN != n || err != nil {
-				d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err).Error())
 				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 			}
-			totalFileBytesTransfered += uint64(wroteN)
-			d.contractStore.IncrementTransferedBytes(contractHashHex, request.FileHash, uint64(wroteN))
+			d.contractStore.IncrementTransferedBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, uint64(wroteN))
 		}
 
 		if err == io.EOF {
@@ -1202,7 +1207,6 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 		}
 
 		if err != nil {
-			d.contractStore.SetError(contractHashHex, request.FileHash, fmt.Errorf("fialed to read file content to buffer: %w", err).Error())
 			return "", fmt.Errorf("fialed to read file content to buffer: %w", err)
 		}
 	}
@@ -1388,11 +1392,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 		howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage)
 		randomSlices := common.GenerateRandomIntSlice(howManySegments)
 
-		err = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, fileTransferRequest.FileHash, key, iv, fileMerkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileMetadata.Size))
-		if err != nil {
-			log.Errorf("failed set the key encryption data of file in handleIncomingFileTransfer: %v", err)
-			return
-		}
+		_ = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, fileTransferRequest.FileHash, key, iv, fileMerkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileMetadata.Size))
 
 		// reload fileContractInfo
 		fileContractInfo, err = d.contractStore.GetContractFileInfo(contractHash, fileTransferRequest.FileHash)

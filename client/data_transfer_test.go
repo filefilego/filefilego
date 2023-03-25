@@ -77,7 +77,7 @@ func TestDownloadFile(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	status, err := c.DownloadFile(context.TODO(), "0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae", "0585084bc6e0c76af2d4b7f19e6020126d", 123224, 0, 1024)
+	status, err := c.DownloadFile(context.TODO(), "0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae", "0585084bc6e0c76af2d4b7f19e6020126d", 123224)
 	assert.NoError(t, err)
 	assert.Equal(t, "started", status)
 }
