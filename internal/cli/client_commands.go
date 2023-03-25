@@ -23,89 +23,88 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var (
-	ClientCommand = &cli.Command{
-		Name:     "client",
-		Usage:    "JSONRPC Client commands",
-		Category: "Client",
-		Description: `
-					Interact with node using JSONRPC client`,
-		Subcommands: []*cli.Command{
-			{
-				Name:   "endpoint",
-				Usage:  "endpoint http://localhost:8090/rpc",
-				Action: SetEndpoint,
-				Flags:  []cli.Flag{},
-				Description: `
-				Sets the jsonrpc endpoint address`,
-			},
-			{
-				Name:   "balance",
-				Usage:  "balance <address>",
-				Action: GetBalance,
-				Flags:  []cli.Flag{},
-				Description: `
-				Get the balance of address`,
-			},
-			{
-				Name:   "unlock_node_identity",
-				Usage:  "unlock_node_identity <passphrase>",
-				Action: UnlockNodeIdentity,
-				Flags:  []cli.Flag{},
-				Description: `
-				Unlock node identity key and return a jwt token`,
-			},
-			{
-				Name:   "query",
-				Usage:  "query filehash1,filehash2,filehash3",
-				Action: SendDataQuery,
-				Flags:  []cli.Flag{},
-				Description: `
-				Sends a data query request`,
-			},
-			{
-				Name:   "responses",
-				Usage:  "responses <data_query_request_hash>",
-				Action: CheckDataQueryResponses,
-				Flags:  []cli.Flag{},
-				Description: `
-				Checks for data query responses given the data query request hash`,
-			},
-			{
-				Name:   "responses",
-				Usage:  "responses <data_query_request_hash>",
-				Action: CheckDataQueryResponses,
-				Flags:  []cli.Flag{},
-				Description: `
-				Checks for data query responses given the data query request hash`,
-			},
-			{
-				Name:   "create_contracts",
-				Usage:  "create_contracts <data_query_request_hash>",
-				Action: CreateContractsFromDataQueryResponses,
-				Flags:  []cli.Flag{},
-				Description: `
-				Creates a list of download contracts and prints their hashes`,
-			},
-			{
-				Name:   "create_send_tx_with_contracts",
-				Usage:  "create_send_tx_with_contracts <contract_hash1,contract_hash2> <jwt_access_token> <current_nounce> <each_tx_fee>",
-				Action: CreateSendTXContracts,
-				Flags:  []cli.Flag{},
-				Description: `
-				Prepares a tx with all the contracts`,
-			},
-			{
-				Name:   "download",
-				Usage:  "download <contract_hash1> <file_hash> <file_size>",
-				Action: DownloadFile,
-				Flags:  []cli.Flag{},
-				Description: `
-				Downloads a file given the contract hash and file hash`,
-			},
+// ClientCommand is exposes the client functionality to the cli
+var ClientCommand = &cli.Command{
+	Name:     "client",
+	Usage:    "JSONRPC Client commands",
+	Category: "Client",
+	Description: `
+	Interact with node using JSONRPC client`,
+	Subcommands: []*cli.Command{
+		{
+			Name:   "endpoint",
+			Usage:  "endpoint http://localhost:8090/rpc",
+			Action: SetEndpoint,
+			Flags:  []cli.Flag{},
+			Description: `
+			Sets the jsonrpc endpoint address`,
 		},
-	}
-)
+		{
+			Name:   "balance",
+			Usage:  "balance <address>",
+			Action: GetBalance,
+			Flags:  []cli.Flag{},
+			Description: `
+			Get the balance of address`,
+		},
+		{
+			Name:   "unlock_node_identity",
+			Usage:  "unlock_node_identity <passphrase>",
+			Action: UnlockNodeIdentity,
+			Flags:  []cli.Flag{},
+			Description: `
+			Unlock node identity key and return a jwt token`,
+		},
+		{
+			Name:   "query",
+			Usage:  "query filehash1,filehash2,filehash3",
+			Action: SendDataQuery,
+			Flags:  []cli.Flag{},
+			Description: `
+			Sends a data query request`,
+		},
+		{
+			Name:   "responses",
+			Usage:  "responses <data_query_request_hash>",
+			Action: CheckDataQueryResponses,
+			Flags:  []cli.Flag{},
+			Description: `
+			Checks for data query responses given the data query request hash`,
+		},
+		{
+			Name:   "responses",
+			Usage:  "responses <data_query_request_hash>",
+			Action: CheckDataQueryResponses,
+			Flags:  []cli.Flag{},
+			Description: `
+			Checks for data query responses given the data query request hash`,
+		},
+		{
+			Name:   "create_contracts",
+			Usage:  "create_contracts <data_query_request_hash>",
+			Action: CreateContractsFromDataQueryResponses,
+			Flags:  []cli.Flag{},
+			Description: `
+			Creates a list of download contracts and prints their hashes`,
+		},
+		{
+			Name:   "create_send_tx_with_contracts",
+			Usage:  "create_send_tx_with_contracts <contract_hash1,contract_hash2> <jwt_access_token> <current_nounce> <each_tx_fee>",
+			Action: CreateSendTXContracts,
+			Flags:  []cli.Flag{},
+			Description: `
+			Prepares a tx with all the contracts`,
+		},
+		{
+			Name:   "download",
+			Usage:  "download <contract_hash1> <file_hash> <file_size>",
+			Action: DownloadFile,
+			Flags:  []cli.Flag{},
+			Description: `
+			Downloads a file given the contract hash and file hash`,
+		},
+	},
+}
 
 // SetEndpoint sets the endpoint to be used across the client commands.
 func SetEndpoint(ctx *cli.Context) error {
@@ -195,7 +194,7 @@ func CheckDataQueryResponses(ctx *cli.Context) error {
 	fmt.Printf("\nData query hash: %s\n\n", dataQueryRequestHash)
 
 	s := spinner.New(spinner.CharSets[43], 100*time.Millisecond)
-	s.Color("blue")
+	_ = s.Color("blue")
 	s.Reverse()
 	s.Prefix = "getting data responses from the network"
 	s.Start()
@@ -245,7 +244,7 @@ func SendDataQuery(ctx *cli.Context) error {
 	fileHashes := strings.Split(commadSeparatedFiles, ",")
 
 	s := spinner.New(spinner.CharSets[43], 100*time.Millisecond)
-	s.Color("green")
+	_ = s.Color("green")
 	s.Prefix = "sending data query request to the network"
 	s.Start()
 	dataQueryRequestHash, err := ffgclient.SendDataQueryRequest(ctx.Context, fileHashes)
@@ -258,7 +257,7 @@ func SendDataQuery(ctx *cli.Context) error {
 	fmt.Printf("\nData query hash: %s\n\n", dataQueryRequestHash)
 
 	s = spinner.New(spinner.CharSets[43], 100*time.Millisecond)
-	s.Color("blue")
+	_ = s.Color("blue")
 	s.Reverse()
 	s.Prefix = "getting data responses from the network"
 	s.Start()
@@ -370,7 +369,7 @@ func CreateSendTXContracts(ctx *cli.Context) error {
 	for _, v := range jsonEncodedRawTransactions {
 		txResponse, err := ffgclient.SendRawTransaction(ctx.Context, v)
 		if err != nil {
-			log.Errorf("failed to send raw transaction: %w", err)
+			log.Errorf("failed to send raw transaction: %v", err)
 		}
 
 		fmt.Printf("Transaction sent: %s\n", txResponse.Transaction.Hash)
@@ -427,7 +426,7 @@ func DownloadFile(ctx *cli.Context) error {
 			log.Errorf("failed to get file progress: %v", err)
 		}
 
-		bar.Add(int(prog.BytesTransfered))
+		_ = bar.Add(int(prog.BytesTransfered))
 		bytesTransfered += int(prog.BytesTransfered)
 		time.Sleep(5 * time.Millisecond)
 	}
