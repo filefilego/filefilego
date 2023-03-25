@@ -490,10 +490,10 @@ func TestE2E(t *testing.T) {
 	err = n2.Sync(context.TODO())
 	assert.NoError(t, err)
 	// fileDownloader1 downloads the files and asks the data verifier for decryption keys and restores the original files
-	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash, uint64(file1UploadResponse.Size), 0, int64(file1UploadResponse.Size-1))
+	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash, uint64(file1UploadResponse.Size))
 	assert.NoError(t, err)
 	assert.Equal(t, "started", stats1)
-	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash, uint64(file2UploadResponse.Size), 0, int64(file2UploadResponse.Size-1))
+	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash, uint64(file2UploadResponse.Size))
 	assert.NoError(t, err)
 	assert.Equal(t, "started", stats2)
 	time.Sleep(400 * time.Millisecond)

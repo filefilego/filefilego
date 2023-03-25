@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -315,6 +316,26 @@ func TestGetFilesNeededFromDataQueryResponses(t *testing.T) {
 
 	assert.Equal(t, 3, foundNumbers)
 	assert.ElementsMatch(t, filesList, request.FileHashes)
+}
+
+func TestCreateFileRanges(t *testing.T) {
+	tests := []struct {
+		fileSize       int64
+		expectedRanges []FileRanges
+	}{
+		{100, []FileRanges{{0, 24, 0}, {25, 49, 1}, {50, 74, 2}, {75, 99, 3}}},
+		{50, []FileRanges{{0, 11, 0}, {12, 23, 1}, {24, 35, 2}, {36, 49, 3}}},
+		{1, []FileRanges{{0, 0, 0}}},
+		{4, []FileRanges{{0, 0, 0}, {1, 1, 1}, {2, 2, 2}, {3, 3, 3}}},
+		{5, []FileRanges{{0, 0, 0}, {1, 1, 1}, {2, 2, 2}, {3, 4, 3}}},
+	}
+
+	for _, test := range tests {
+		ranges := createFileRanges(test.fileSize)
+		if !reflect.DeepEqual(ranges, test.expectedRanges) {
+			t.Errorf("createFileRanges(%d) returned %v, expected %v", test.fileSize, ranges, test.expectedRanges)
+		}
+	}
 }
 
 type networkMessagePublisherNodesFinderStub struct {
