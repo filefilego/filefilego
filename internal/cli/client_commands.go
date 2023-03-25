@@ -406,7 +406,6 @@ func DownloadFile(ctx *cli.Context) error {
 
 	fmt.Println("Download stats: ", stats)
 	bar := progressbar.NewOptions64(int64(sizeOfFile),
-		// progressbar.OptionSetWriter(ansi.NewAnsiStdout()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowBytes(true),
 		progressbar.OptionSetWidth(15),
