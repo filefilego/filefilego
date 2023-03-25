@@ -565,6 +565,8 @@ func TestE2E(t *testing.T) {
 	shaOfFile2New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile2_again.txt"))
 	assert.NoError(t, err)
 	assert.Equal(t, shaOfFile2New, file2UploadResponse.FileHash)
+
+	time.Sleep(20 * time.Second)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
