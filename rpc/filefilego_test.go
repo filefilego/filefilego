@@ -35,10 +35,13 @@ import (
 
 func TestNewFilefilegoAPI(t *testing.T) {
 	t.Parallel()
+	h := newHost(t, "3405")
+
 	cases := map[string]struct {
 		conf       *ffgconfig.Config
 		node       node.Interface
 		blockchain blockchain.Interface
+		host       host.Host
 		expErr     string
 	}{
 		"no config": {
@@ -53,10 +56,17 @@ func TestNewFilefilegoAPI(t *testing.T) {
 			node:   &node.Node{},
 			expErr: "blockchain is nil",
 		},
+		"no host": {
+			conf:       &ffgconfig.Config{},
+			node:       &node.Node{},
+			blockchain: &blockchain.Blockchain{},
+			expErr:     "host is nil",
+		},
 		"success": {
 			conf:       &ffgconfig.Config{},
 			node:       &node.Node{},
 			blockchain: &blockchain.Blockchain{},
+			host:       h,
 		},
 	}
 
@@ -64,7 +74,7 @@ func TestNewFilefilegoAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewFilefilegoAPI(tt.conf, tt.node, tt.blockchain)
+			api, err := NewFilefilegoAPI(tt.conf, tt.node, tt.blockchain, tt.host)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -78,8 +88,8 @@ func TestNewFilefilegoAPI(t *testing.T) {
 
 func TestFilefilegoAPIMethods(t *testing.T) {
 	ctx := context.Background()
-	n1, bhcain1, se1 := createNode(t, "65512", "node1search.bin", "mainchaindb1.bin")
-	n2, bhcain2, se2 := createNode(t, "65513", "node2search.bin", "mainchaindb2.bin")
+	n1, bhcain1, se1, host1 := createNode(t, "65512", "node1search.bin", "mainchaindb1.bin")
+	n2, bhcain2, se2, host2 := createNode(t, "65513", "node2search.bin", "mainchaindb2.bin")
 
 	assert.Equal(t, uint64(0), bhcain1.GetHeight())
 	assert.Equal(t, uint64(0), bhcain2.GetHeight())
@@ -142,11 +152,11 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	err = bhcain1.PerformStateUpdateFromBlock(*validBlock2)
 	assert.NoError(t, err)
 
-	api, err := NewFilefilegoAPI(&ffgconfig.Config{}, n1, bhcain1)
+	api, err := NewFilefilegoAPI(&ffgconfig.Config{}, n1, bhcain1, host1)
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 
-	api2, err := NewFilefilegoAPI(&ffgconfig.Config{}, n2, bhcain2)
+	api2, err := NewFilefilegoAPI(&ffgconfig.Config{}, n2, bhcain2, host2)
 	assert.NoError(t, err)
 	assert.NotNil(t, api2)
 
@@ -191,7 +201,7 @@ func newHost(t *testing.T, port string) host.Host {
 	return host
 }
 
-func createNode(t *testing.T, port string, searchDB string, blockchainDBPath string) (*node.Node, *blockchain.Blockchain, *search.Search) {
+func createNode(t *testing.T, port string, searchDB string, blockchainDBPath string) (*node.Node, *blockchain.Blockchain, *search.Search, host.Host) {
 	bgCtx := context.Background()
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
@@ -236,7 +246,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 
 	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader)
 	assert.NoError(t, err)
-	return node, bchain, searchEngine
+	return node, bchain, searchEngine, host
 }
 
 // generate a block and propagate the keypair used for the tx

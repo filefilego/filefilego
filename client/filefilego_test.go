@@ -23,3 +23,19 @@ func TestGetNodeStats(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(918), stats.BlockchainHeight)
 }
+
+func TestGetHostInfo(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{"peer_id":"16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX", "address":"0x1234", "peer_count":20},"error":null,"id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	stats, err := c.GetHostInfo(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, "0x1234", stats.Address)
+	assert.Equal(t, "16Uiu2HAmScD2pAgjQxQLpfgod2bfZyajmJR4J9rfJ11jJq7w66LX", stats.PeerID)
+	assert.Equal(t, 20, stats.PeerCount)
+}

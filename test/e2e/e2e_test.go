@@ -715,7 +715,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
-		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain)
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain, host)
 		assert.NoError(t, err)
 		err = s.RegisterService(filefilegoAPI, internalrpc.FilefilegoServiceNamespace)
 		assert.NoError(t, err)

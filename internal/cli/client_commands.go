@@ -40,12 +40,36 @@ var ClientCommand = &cli.Command{
 			Sets the jsonrpc endpoint address`,
 		},
 		{
+			Name:   "upload",
+			Usage:  "upload <filepath>",
+			Action: UploadFile,
+			Flags:  []cli.Flag{},
+			Description: `
+			Uploads a file to a node`,
+		},
+		{
+			Name:   "get_storage_token",
+			Usage:  "get_storage_token <admin_token>",
+			Action: GetStorageAccessToken,
+			Flags:  []cli.Flag{},
+			Description: `
+			Gets a storage access token derived from the admin token`,
+		},
+		{
 			Name:   "balance",
 			Usage:  "balance <address>",
 			Action: GetBalance,
 			Flags:  []cli.Flag{},
 			Description: `
 			Get the balance of address`,
+		},
+		{
+			Name:   "send_transaction",
+			Usage:  "send_transaction <access_token> <nounce> <data> <from_address> <to_address> <tx_value> <tx_fees>",
+			Action: SendTransaction,
+			Flags:  []cli.Flag{},
+			Description: `
+			Sends a transaction given the access token, nouce, data, from and to with the value and fees.`,
 		},
 		{
 			Name:   "unlock_node_identity",
@@ -62,14 +86,6 @@ var ClientCommand = &cli.Command{
 			Flags:  []cli.Flag{},
 			Description: `
 			Sends a data query request`,
-		},
-		{
-			Name:   "responses",
-			Usage:  "responses <data_query_request_hash>",
-			Action: CheckDataQueryResponses,
-			Flags:  []cli.Flag{},
-			Description: `
-			Checks for data query responses given the data query request hash`,
 		},
 		{
 			Name:   "responses",
@@ -106,6 +122,71 @@ var ClientCommand = &cli.Command{
 	},
 }
 
+// UploadFile uploads a file.
+func UploadFile(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	filePath := ctx.Args().First()
+	if filePath == "" {
+		return errors.New("file path is empty")
+	}
+
+	storageAccessToken := ctx.Args().Get(1)
+	if storageAccessToken == "" {
+		return errors.New("storage access token is empty")
+	}
+	nodeHash := ctx.Args().Get(2)
+
+	response, err := ffgclient.UploadFile(ctx.Context, filePath, nodeHash, storageAccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	fmt.Println("FileName: ", response.FileName)
+	fmt.Println("FileHash: ", response.FileHash)
+	fmt.Println("MerkleRoot: ", response.MerkleRootHash)
+	fmt.Println("Size: ", response.Size)
+	fmt.Println("Error: ", response.Error)
+
+	return nil
+}
+
+func GetStorageAccessToken(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	adminToken := ctx.Args().First()
+	if adminToken == "" {
+		return errors.New("admin token is empty")
+	}
+
+	jwtToken, err := ffgclient.GetStorageAccessToken(ctx.Context, adminToken)
+	if err != nil {
+		return fmt.Errorf("failed to get storage token: %w", err)
+	}
+
+	fmt.Println("Access token: ", jwtToken)
+
+	return nil
+}
+
 // SetEndpoint sets the endpoint to be used across the client commands.
 func SetEndpoint(ctx *cli.Context) error {
 	conf := config.New(ctx)
@@ -113,6 +194,71 @@ func SetEndpoint(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to write endpoint to file")
 	}
+	return nil
+}
+
+// SendTransaction sends a transaction.
+func SendTransaction(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	accessToken := ctx.Args().First()
+	if accessToken == "" {
+		return errors.New("access token is empty")
+	}
+
+	nounce := ctx.Args().Get(1)
+	if nounce == "" {
+		return errors.New("nounce is empty")
+	}
+
+	data := ctx.Args().Get(2)
+	if data == "" {
+		return errors.New("data is empty")
+	}
+
+	from := ctx.Args().Get(3)
+	if from == "" {
+		return errors.New("from is empty")
+	}
+
+	to := ctx.Args().Get(4)
+	if to == "" {
+		return errors.New("to is empty")
+	}
+
+	txValue := ctx.Args().Get(5)
+	if txValue == "" {
+		return errors.New("transaction value is empty")
+	}
+
+	txFees := ctx.Args().Get(6)
+	if txFees == "" {
+		return errors.New("transaction fees is empty")
+	}
+
+	response, err := ffgclient.SendTransaction(ctx.Context, accessToken, client.SendTransaction{
+		Nounce:          nounce,
+		Data:            data,
+		From:            from,
+		To:              to,
+		Value:           txValue,
+		TransactionFees: txFees,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send transaction: %w", err)
+	}
+
+	fmt.Println("Transaction sent with hash: ", response.Transaction.Hash)
+
 	return nil
 }
 
@@ -423,10 +569,57 @@ func DownloadFile(ctx *cli.Context) error {
 		prog, err := ffgclient.DownloadFileProgress(ctx.Context, downloadContractHash, fileHash)
 		if err != nil {
 			log.Errorf("failed to get file progress: %v", err)
+			break
 		}
 		_ = bar.Set(int(prog.BytesTransfered))
-		bytesTransfered += prog.BytesTransfered
+		bytesTransfered = prog.BytesTransfered
 		time.Sleep(5 * time.Millisecond)
+	}
+
+	ok, err := ffgclient.SendFileMerkleTreeNodesToVerifier(ctx.Context, downloadContractHash, fileHash)
+	if err != nil || !ok {
+		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
+	}
+
+	return nil
+}
+
+func DecryptAllFiles(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	downloadContractHash := ctx.Args().First()
+	if downloadContractHash == "" {
+		return fmt.Errorf("contract hash is empty")
+	}
+
+	fileHashes := ctx.Args().Get(1)
+	if fileHashes == "" {
+		return fmt.Errorf("files hashes are empty")
+	}
+	fileHashesAll := strings.Split(fileHashes, ",")
+
+	restoreFiles := ctx.Args().Get(2)
+	if restoreFiles == "" {
+		return fmt.Errorf("restoring file paths are empty")
+	}
+
+	restoredFilesPaths := strings.Split(restoreFiles, ",")
+	restoredPaths, err := ffgclient.RequestEncryptionDataFromVerifierAndDecrypt(ctx.Context, downloadContractHash, fileHashesAll, restoredFilesPaths)
+	if err != nil {
+		return fmt.Errorf("failed to request encryption data from verifier: %w", err)
+	}
+
+	for _, v := range restoredPaths {
+		fmt.Println("File decrypted: ", v)
 	}
 
 	return nil

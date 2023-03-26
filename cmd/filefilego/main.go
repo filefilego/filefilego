@@ -326,7 +326,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
-		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain)
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain, host)
 		if err != nil {
 			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
 		}

@@ -2,12 +2,15 @@ package rpc
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/config"
+	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node"
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 // FilefilegoAPI represents the filefilego rpc service.
@@ -15,10 +18,11 @@ type FilefilegoAPI struct {
 	conf       *config.Config
 	node       node.Interface
 	blockchain blockchain.Interface
+	host       host.Host
 }
 
 // NewFilefilegoAPI creates a new filefilego API to be served using JSONRPC.
-func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockchain.Interface) (*FilefilegoAPI, error) {
+func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockchain.Interface, host host.Host) (*FilefilegoAPI, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -31,10 +35,15 @@ func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockc
 		return nil, errors.New("blockchain is nil")
 	}
 
+	if host == nil {
+		return nil, errors.New("host is nil")
+	}
+
 	return &FilefilegoAPI{
 		conf:       cfg,
 		node:       node,
 		blockchain: blockchain,
+		host:       host,
 	}, nil
 }
 
@@ -69,6 +78,31 @@ func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *Stat
 			PublicKey: v.PublicKey,
 		}
 	}
+
+	return nil
+}
+
+// HostInfoResponse represents a response.
+type HostInfoResponse struct {
+	PeerID    string `json:"peer_id"`
+	Address   string `json:"address"`
+	PeerCount int    `json:"peer_count"`
+}
+
+// HostInfo returns the node's addresses.
+func (api *FilefilegoAPI) HostInfo(r *http.Request, args *EmptyArgs, response *HostInfoResponse) error {
+	response.PeerCount = api.node.Peers().Len()
+	publicKey := api.host.Peerstore().PubKey(api.host.ID())
+	publicKeyBytes, err := publicKey.Raw()
+	if err != nil {
+		return fmt.Errorf("failed to get public key bytes: %w", err)
+	}
+	nodeAddress, err := crypto.RawPublicToAddress(publicKeyBytes)
+	if err != nil {
+		return fmt.Errorf("failed to get address from public key bytes: %w", err)
+	}
+	response.Address = nodeAddress
+	response.PeerID = api.node.GetID()
 
 	return nil
 }

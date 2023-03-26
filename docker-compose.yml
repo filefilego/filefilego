@@ -68,7 +68,7 @@ services:
         - /bin/bash
         - -c
         - |
-          ./filefilego --verify --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --data_verification_fees="0x9" --data_verification_transaction_fees="0x1" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
+          ./filefilego --verify --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --data_verification_fees="8" --data_verification_transaction_fees="0x1" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
   dataverifier2:
     hostname: dataverifier2.local
@@ -86,7 +86,7 @@ services:
         - /bin/bash
         - -c
         - |
-          ./filefilego --verify --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --data_verification_fees="0x9" --data_verification_transaction_fees="0x1" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
+          ./filefilego --verify --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --data_verification_fees="9" --data_verification_transaction_fees="0x1" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
   superlightnode:
     hostname: superlightnode.local
