@@ -112,6 +112,7 @@ message MerkleTreeNodesOfFileContractProto {
 message KeyIVProto {
     bytes contract_hash = 1;
     bytes file_hash = 2;
+    bytes file_merkle_root_hash = 3;
 }
 
 // KeyIVRequestProto is a message that represents a list of data encryption payloads to verifier node.

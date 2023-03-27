@@ -65,10 +65,11 @@ func TestE2E(t *testing.T) {
 		os.RemoveAll("datadownloader")
 		os.RemoveAll("restored_files")
 	})
+
 	fileContent := "this is ffg network a decentralized data sharing network+"
 	fileContent2 := "Whoever would overthrow the liberty of a nation must begin by subduing the freeness of speech."
-	inputFile := "uploadedFile.txt"
-	inputFile2 := "uploadedFile2.txt"
+	inputFile := "uploadedFile.bin"
+	inputFile2 := "uploadedFile2.bin"
 
 	currentDir, err := os.Getwd()
 	assert.NoError(t, err)
@@ -80,7 +81,6 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	// verifier
 	conf1 := config.New(&cli.Context{})
-	conf1.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf1.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf1.Global.DataDir = "v1"
 	conf1.Global.DataDownloadsPath = path.Join("v1", "downloads")
@@ -121,7 +121,6 @@ func TestE2E(t *testing.T) {
 
 	// n1 file hoster with file 1 and 2
 	conf2 := config.New(&cli.Context{})
-	conf2.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf2.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf2.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf2.Global.Storage = true
@@ -151,20 +150,23 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	file1UploadResponse, err := n1Client.UploadFile(context.TODO(), uploadedFilepath, "", storageAccess)
 	assert.NoError(t, err)
-	assert.Equal(t, "uploadedFile.txt", file1UploadResponse.FileName)
+	assert.Equal(t, "uploadedFile.bin", file1UploadResponse.FileName)
 	assert.NotEmpty(t, file1UploadResponse.FileHash)
 	assert.NotEmpty(t, file1UploadResponse.MerkleRootHash)
-	assert.Equal(t, 57, file1UploadResponse.Size)
+	file1Size, err := common.FileSize(uploadedFilepath)
+	assert.NoError(t, err)
+	assert.Equal(t, int(file1Size), file1UploadResponse.Size)
 	file2UploadResponse, err := n1Client.UploadFile(context.TODO(), uploadedFile2path, "", storageAccess)
 	assert.NoError(t, err)
-	assert.Equal(t, "uploadedFile2.txt", file2UploadResponse.FileName)
+	assert.Equal(t, "uploadedFile2.bin", file2UploadResponse.FileName)
 	assert.NotEmpty(t, file2UploadResponse.FileHash)
 	assert.NotEmpty(t, file2UploadResponse.MerkleRootHash)
-	assert.Equal(t, 94, file2UploadResponse.Size)
+	file2Size, err := common.FileSize(uploadedFile2path)
+	assert.NoError(t, err)
+	assert.Equal(t, int(file2Size), file2UploadResponse.Size)
 
 	// n2 file hoster with file 1
 	conf3 := config.New(&cli.Context{})
-	conf3.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf3.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf3.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf3.Global.Storage = true
@@ -193,14 +195,13 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	file1UploadResponseN2, err := n2Client.UploadFile(context.TODO(), uploadedFilepath, "", storageAccessN2)
 	assert.NoError(t, err)
-	assert.Equal(t, "uploadedFile.txt", file1UploadResponseN2.FileName)
+	assert.Equal(t, "uploadedFile.bin", file1UploadResponseN2.FileName)
 	assert.NotEmpty(t, file1UploadResponseN2.FileHash)
 	assert.NotEmpty(t, file1UploadResponseN2.MerkleRootHash)
-	assert.Equal(t, 57, file1UploadResponseN2.Size)
+	assert.Equal(t, int(file1Size), file1UploadResponseN2.Size)
 
 	// dataverifier1
 	conf4 := config.New(&cli.Context{})
-	conf4.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf4.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf4.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf4.Global.Storage = true
@@ -233,7 +234,6 @@ func TestE2E(t *testing.T) {
 
 	// dataverifier2
 	conf5 := config.New(&cli.Context{})
-	conf5.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf5.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf5.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf5.Global.Storage = true
@@ -265,7 +265,6 @@ func TestE2E(t *testing.T) {
 	// file downloader
 	conf6 := config.New(&cli.Context{})
 	conf6.Global.SuperLightNode = true
-	conf6.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf6.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf6.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf6.Global.DataDir = "datadownloader"
@@ -496,7 +495,7 @@ func TestE2E(t *testing.T) {
 	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash, uint64(file2UploadResponse.Size))
 	assert.NoError(t, err)
 	assert.Equal(t, "started", stats2)
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	file1Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
 	assert.NoError(t, err)
 	assert.Empty(t, file1Progress.Error)
@@ -514,7 +513,7 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	time.Sleep(200 * time.Millisecond)
-	restoredPaths, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{filepath.Join("restored_files", "randomfile1.txt"), filepath.Join("restored_files", "randomfile2.txt")})
+	restoredPaths, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{file1UploadResponse.MerkleRootHash, file2UploadResponse.MerkleRootHash}, []string{filepath.Join("restored_files", "randomfile1.txt"), filepath.Join("restored_files", "randomfile2.txt")})
 	assert.NoError(t, err)
 	assert.Len(t, restoredPaths, 2)
 	shaOfFile1, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile1.txt"))
@@ -556,7 +555,7 @@ func TestE2E(t *testing.T) {
 	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), n1Balance.BalanceHex)
 
 	// perform another file decryption to see how system behaves
-	restoredPaths2, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{filepath.Join("restored_files", "randomfile1_again.txt"), filepath.Join("restored_files", "randomfile2_again.txt")})
+	restoredPaths2, err := fileDownloader1Client.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), downloadContract.Contract.ContractHash, []string{file1UploadResponse.FileHash, file2UploadResponse.FileHash}, []string{file1UploadResponse.MerkleRootHash, file2UploadResponse.MerkleRootHash}, []string{filepath.Join("restored_files", "randomfile1_again.txt"), filepath.Join("restored_files", "randomfile2_again.txt")})
 	assert.NoError(t, err)
 	assert.Len(t, restoredPaths2, 2)
 	shaOfFile1New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile1_again.txt"))
@@ -565,8 +564,6 @@ func TestE2E(t *testing.T) {
 	shaOfFile2New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile2_again.txt"))
 	assert.NoError(t, err)
 	assert.Equal(t, shaOfFile2New, file2UploadResponse.FileHash)
-
-	time.Sleep(20 * time.Second)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {

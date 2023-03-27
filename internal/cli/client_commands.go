@@ -119,7 +119,48 @@ var ClientCommand = &cli.Command{
 			Description: `
 			Downloads a file given the contract hash and file hash`,
 		},
+		{
+			Name:   "decrypt_files",
+			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <restore_full_path_file1,restore_full_path_file2>",
+			Action: DecryptAllFiles,
+			Flags:  []cli.Flag{},
+			Description: `
+			Decrypts and restores the given files to the supplied destinations`,
+		},
+		{
+			Name:   "host_info",
+			Usage:  "host_info",
+			Action: GetHostInfo,
+			Flags:  []cli.Flag{},
+			Description: `
+			Gets the host information including addresses, peerID and peer count`,
+		},
 	},
+}
+
+// GetHostInfo gets host's info
+func GetHostInfo(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	response, err := ffgclient.GetHostInfo(ctx.Context)
+	if err != nil {
+		return fmt.Errorf("failed to get node's host info: %w", err)
+	}
+
+	fmt.Println("Address: ", response.Address)
+	fmt.Println("PeersID: ", response.PeerID)
+	fmt.Println("Peers count: ", response.PeerCount)
+
+	return nil
 }
 
 // UploadFile uploads a file.
@@ -607,13 +648,19 @@ func DecryptAllFiles(ctx *cli.Context) error {
 	}
 	fileHashesAll := strings.Split(fileHashes, ",")
 
-	restoreFiles := ctx.Args().Get(2)
+	fileMerkleHashes := ctx.Args().Get(2)
+	if fileMerkleHashes == "" {
+		return fmt.Errorf("files merkle root hashes are empty")
+	}
+	fileMerkleRootHashesAll := strings.Split(fileMerkleHashes, ",")
+
+	restoreFiles := ctx.Args().Get(3)
 	if restoreFiles == "" {
 		return fmt.Errorf("restoring file paths are empty")
 	}
 
 	restoredFilesPaths := strings.Split(restoreFiles, ",")
-	restoredPaths, err := ffgclient.RequestEncryptionDataFromVerifierAndDecrypt(ctx.Context, downloadContractHash, fileHashesAll, restoredFilesPaths)
+	restoredPaths, err := ffgclient.RequestEncryptionDataFromVerifierAndDecrypt(ctx.Context, downloadContractHash, fileHashesAll, fileMerkleRootHashesAll, restoredFilesPaths)
 	if err != nil {
 		return fmt.Errorf("failed to request encryption data from verifier: %w", err)
 	}

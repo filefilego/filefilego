@@ -102,4 +102,4 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
-          ./filefilego --super_light_node --node_identity_passphrase=admin --rpc_services="data_transfer,transaction,address" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
+          ./filefilego --super_light_node --node_identity_passphrase=admin --rpc_services="data_transfer,transaction,address,filefilego" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"

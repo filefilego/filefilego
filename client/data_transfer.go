@@ -441,14 +441,15 @@ func (cli *Client) SendFileMerkleTreeNodesToVerifier(ctx context.Context, contra
 }
 
 // RequestEncryptionDataFromVerifierAndDecrypt requests decryption data from verifier and decrypts the files to the provides output paths.
-func (cli *Client) RequestEncryptionDataFromVerifierAndDecrypt(ctx context.Context, contractHash string, fileHashes, restoredFilePaths []string) ([]string, error) {
+func (cli *Client) RequestEncryptionDataFromVerifierAndDecrypt(ctx context.Context, contractHash string, fileHashes, fileMerkleRootHashes, restoredFilePaths []string) ([]string, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "data_transfer.RequestEncryptionDataFromVerifierAndDecrypt",
 		Params: []interface{}{rpc.RequestEncryptionDataFromVerifierArgs{
-			ContractHash:      contractHash,
-			FileHashes:        fileHashes,
-			RestoredFilePaths: restoredFilePaths,
+			ContractHash:         contractHash,
+			FileHashes:           fileHashes,
+			FileMerkleRootHashes: fileMerkleRootHashes,
+			RestoredFilePaths:    restoredFilePaths,
 		}},
 		ID: 1,
 	}

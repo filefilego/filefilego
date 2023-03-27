@@ -597,7 +597,7 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 		return fmt.Errorf("failed to get verifier's peer id: %w", err)
 	}
 
-	err = api.dataVerificationProtocol.SendFileMerkleTreeNodesToVerifier(r.Context(), verifierID, merkleRequest)
+	err = api.dataVerificationProtocol.SendFileMerkleTreeNodesToVerifier(context.Background(), verifierID, merkleRequest)
 	if err != nil {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
 	}
@@ -609,9 +609,10 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 
 // RequestEncryptionDataFromVerifierArgs represents args.
 type RequestEncryptionDataFromVerifierArgs struct {
-	ContractHash      string   `json:"contract_hash"`
-	FileHashes        []string `json:"file_hashes"`
-	RestoredFilePaths []string `json:"restored_file_paths"`
+	ContractHash         string   `json:"contract_hash"`
+	FileHashes           []string `json:"file_hashes"`
+	FileMerkleRootHashes []string `json:"file_merkle_root_hashes"`
+	RestoredFilePaths    []string `json:"restored_file_paths"`
 }
 
 // RequestEncryptionDataFromVerifierResponse represents the response.
@@ -621,6 +622,9 @@ type RequestEncryptionDataFromVerifierResponse struct {
 
 // RequestEncryptionDataFromVerifierAndDecrypt requires encryption data from verifier and decrypts.
 func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.Request, args *RequestEncryptionDataFromVerifierArgs, response *RequestEncryptionDataFromVerifierResponse) error {
+	if len(args.FileHashes) != len(args.FileMerkleRootHashes) {
+		return errors.New("size of merkle root hashes and the file hashes are not equal")
+	}
 	downloadContract, err := api.contractStore.GetContract(args.ContractHash)
 	if err != nil {
 		return fmt.Errorf("contract not found: %w", err)
@@ -630,7 +634,7 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		KeyIvs: make([]*messages.KeyIVProto, 0),
 	}
 
-	for _, v := range args.FileHashes {
+	for idx, v := range args.FileHashes {
 		fileHash, err := hexutil.DecodeNoPrefix(v)
 		if err != nil {
 			return fmt.Errorf("failed to decode file hash: %w", err)
@@ -654,9 +658,16 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		if err != nil {
 			return fmt.Errorf("failed to decode contract hash: %w", err)
 		}
+
+		merkleRootHash, err := hexutil.Decode(args.FileMerkleRootHashes[idx])
+		if err != nil {
+			return fmt.Errorf("failed to decode merkle root hash: %w", err)
+		}
+
 		encRequest.KeyIvs = append(encRequest.KeyIvs, &messages.KeyIVProto{
-			ContractHash: contractHashBytes,
-			FileHash:     fileHash,
+			ContractHash:       contractHashBytes,
+			FileHash:           fileHash,
+			FileMerkleRootHash: merkleRootHash,
 		})
 	}
 
