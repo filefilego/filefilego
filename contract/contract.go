@@ -3,8 +3,10 @@ package contract
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"sync"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/database"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	log "github.com/sirupsen/logrus"
 )
 
 // TODO: purge if old using a time window of x days
@@ -660,4 +663,57 @@ func (c *Store) LoadFromDB() error {
 	c.releasedContractFees = pd.ReleasedContractFees
 
 	return nil
+}
+
+// Debug serves the internal state
+func (c *Store) Debug(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	type contractFiles struct {
+		Hash      string
+		Message   *messages.DownloadContractProto
+		FileInfos []FileInfo
+	}
+
+	allContracts := make([]contractFiles, 0)
+	log.Info("geting all contracts and their files")
+
+	for contractHash, v := range c.contracts {
+		ctrct := contractFiles{
+			Hash:    contractHash,
+			Message: v,
+		}
+		fileInfos, err := c.GetContractFiles(contractHash)
+		if err == nil {
+			ctrct.FileInfos = make([]FileInfo, len(fileInfos))
+			copy(ctrct.FileInfos, fileInfos)
+		}
+		allContracts = append(allContracts, ctrct)
+	}
+
+	log.Info("marshaling all contracts")
+
+	j, err := json.Marshal(allContracts)
+	if err != nil {
+		writeHeaderPayload(w, http.StatusOK, ``)
+		return
+	}
+
+	writeHeaderPayload(w, http.StatusOK, string(j))
+}
+
+func writeHeaderPayload(w http.ResponseWriter, status int, payload string) {
+	w.WriteHeader(status)
+	// nolint:errcheck
+	w.Write([]byte(payload))
 }

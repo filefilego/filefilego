@@ -116,6 +116,11 @@ var (
 		Usage: "Runs a super light node",
 	}
 
+	DebugMode = cli.BoolFlag{
+		Name:  "debug",
+		Usage: "Runs a node with debugging",
+	}
+
 	RPCWhitelistFlag = cli.StringFlag{
 		Name:  "rpc_whitelist",
 		Usage: "Allow IP addresses to access the RPC servers",
@@ -243,6 +248,7 @@ var AppFlags = []cli.Flag{
 	&DataVerifierTransactionFees,
 	&DataDownloadsPath,
 	&SuperLightNode,
+	&DebugMode,
 
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,

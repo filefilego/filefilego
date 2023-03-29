@@ -491,7 +491,6 @@ func CreateContractsFromDataQueryResponses(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
 	dataQueryRequestHash := ctx.Args().First()
-	fmt.Printf("\nData query hash: %s\n\n", dataQueryRequestHash)
 
 	contractHashes, err := ffgclient.CreateContractsFromDataQueryResponses(ctx.Context, dataQueryRequestHash)
 	if err != nil {

@@ -81,6 +81,7 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	// verifier
 	conf1 := config.New(&cli.Context{})
+	conf1.Global.Debug = true
 	conf1.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf1.Global.DataDir = "v1"
 	conf1.Global.DataDownloadsPath = path.Join("v1", "downloads")
@@ -121,6 +122,7 @@ func TestE2E(t *testing.T) {
 
 	// n1 file hoster with file 1 and 2
 	conf2 := config.New(&cli.Context{})
+	conf2.Global.Debug = true
 	conf2.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf2.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf2.Global.Storage = true
@@ -167,6 +169,7 @@ func TestE2E(t *testing.T) {
 
 	// n2 file hoster with file 1
 	conf3 := config.New(&cli.Context{})
+	conf3.Global.Debug = true
 	conf3.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf3.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf3.Global.Storage = true
@@ -202,6 +205,7 @@ func TestE2E(t *testing.T) {
 
 	// dataverifier1
 	conf4 := config.New(&cli.Context{})
+	conf4.Global.Debug = true
 	conf4.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf4.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf4.Global.Storage = true
@@ -234,6 +238,7 @@ func TestE2E(t *testing.T) {
 
 	// dataverifier2
 	conf5 := config.New(&cli.Context{})
+	conf5.Global.Debug = true
 	conf5.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf5.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf5.Global.Storage = true
@@ -264,6 +269,7 @@ func TestE2E(t *testing.T) {
 
 	// file downloader
 	conf6 := config.New(&cli.Context{})
+	conf6.Global.Debug = true
 	conf6.Global.SuperLightNode = true
 	conf6.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf6.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
@@ -762,6 +768,10 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
+
+	if conf.Global.Debug {
+		r.HandleFunc("/internal/contracts/", contractStore.Debug)
+	}
 
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {

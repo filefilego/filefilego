@@ -397,6 +397,10 @@ func run(ctx *cli.Context) error {
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
 
+	if conf.Global.Debug {
+		r.HandleFunc("/internal/contracts/", contractStore.Debug)
+	}
+
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {
 		r.Handle("/uploads", storageEngine)
