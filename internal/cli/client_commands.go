@@ -120,12 +120,12 @@ var ClientCommand = &cli.Command{
 			Downloads a file given the contract hash and file hash`,
 		},
 		{
-			Name:   "send_merkle_nodes",
-			Usage:  "send_merkle_nodes <contract_hash1> <file_hash>",
+			Name:   "send_file_signature_to_verifier",
+			Usage:  "send_file_signature_to_verifier <contract_hash1> <file_hash>",
 			Action: SendFileMerkleTreeNodesToVerifier,
 			Flags:  []cli.Flag{},
 			Description: `
-			Creates a merkle tree nodes of downloaded file and sents to verifier`,
+			Creates a merkle tree nodes of downloaded file and sends to verifier`,
 		},
 		{
 			Name:   "decrypt_files",
@@ -646,6 +646,7 @@ func SendFileMerkleTreeNodesToVerifier(ctx *cli.Context) error {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
 	}
 
+	fmt.Println("successfully sent the file's signature")
 	return nil
 }
 
