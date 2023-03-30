@@ -1087,7 +1087,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	}
 }
 
-// handleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a node.
+// handleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a downloader node.
 // this protocol handler is used by a verifier.
 func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 	c := bufio.NewReader(s)

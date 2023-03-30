@@ -120,6 +120,14 @@ var ClientCommand = &cli.Command{
 			Downloads a file given the contract hash and file hash`,
 		},
 		{
+			Name:   "send_merkle_nodes",
+			Usage:  "send_merkle_nodes <contract_hash1> <file_hash>",
+			Action: SendFileMerkleTreeNodesToVerifier,
+			Flags:  []cli.Flag{},
+			Description: `
+			Creates a merkle tree nodes of downloaded file and sents to verifier`,
+		},
+		{
 			Name:   "decrypt_files",
 			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <restore_full_path_file1,restore_full_path_file2>",
 			Action: DecryptAllFiles,
@@ -616,6 +624,23 @@ func DownloadFile(ctx *cli.Context) error {
 		time.Sleep(5 * time.Millisecond)
 	}
 
+	return nil
+}
+
+func SendFileMerkleTreeNodesToVerifier(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+	if err != nil {
+		return fmt.Errorf("failed to read client endpoint file: %w", err)
+	}
+
+	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
+	if err != nil {
+		return fmt.Errorf("failed to setup client: %w", err)
+	}
+
+	downloadContractHash := ctx.Args().First()
+	fileHash := ctx.Args().Get(1)
 	ok, err := ffgclient.SendFileMerkleTreeNodesToVerifier(ctx.Context, downloadContractHash, fileHash)
 	if err != nil || !ok {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)

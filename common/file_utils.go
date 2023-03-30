@@ -681,7 +681,7 @@ func RetrieveMerkleTreeNodesFromFileWithRawData(encryptEverySegment int, randomi
 }
 
 // HashFileBlockSegments hashes all the file block segments and returns the merkle tree nodes.
-// default totalSegments is 4096
+// default totalSegments is 1024
 func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []int) ([]FileBlockHash, error) {
 	if totalSegments == 0 {
 		return nil, errors.New("total segments is zero")
@@ -936,9 +936,13 @@ func WriteToFile(data []byte, filePath string) (string, error) {
 		return "", fmt.Errorf("failed to create path: %w", err)
 	}
 	defer file.Close()
-	_, err = file.Write(data)
+	n, err := file.Write(data)
 	if err != nil {
 		return "", fmt.Errorf("failed to write data to path: %w", err)
+	}
+
+	if n != len(data) {
+		return "", errors.New("failed to write the size of data to file")
 	}
 	return filePath, nil
 }

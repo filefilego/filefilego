@@ -530,7 +530,7 @@ type SendFileMerkleTreeNodesToVerifierResponse struct {
 	Success bool `json:"success"`
 }
 
-// SendFileMerkleTreeNodesToVerifier sends the merkle tree nodes of a downloaded encrypted file to verifier.
+// SendFileMerkleTreeNodesToVerifier sends the merkle tree nodes of a downloaded encrypted file to verifier from the file downloader.
 func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, args *SendFileMerkleTreeNodesToVerifierArgs, response *SendFileMerkleTreeNodesToVerifierResponse) error {
 	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
 	if err != nil {
