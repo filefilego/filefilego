@@ -20,6 +20,9 @@ jobs:
       
     - name: Install golangci-lint
       run: wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.2
+    
+    - name: Add binary to path
+      run: export PATH="/bin:${PATH}"
       
     - name: Set up Go
       uses: actions/setup-go@v3
