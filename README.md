@@ -1,4 +1,4 @@
-# FileFileGo v2 Decentralized Network
+# FileFileGo v1 Decentralized Network
 
 The FileFileGo protocol is a peer-to-peer data-sharing network designed for the web3 era, with an incentive mechanism, full-text search, storage, and indexing/tracking. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
 
