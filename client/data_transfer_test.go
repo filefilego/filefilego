@@ -119,7 +119,7 @@ func TestSendRequestEncryptionDataFromVerifierAndDecrypt(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	outputFiles, err := c.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), "0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae", []string{"01"}, []string{"output.txt"})
+	outputFiles, err := c.RequestEncryptionDataFromVerifierAndDecrypt(context.TODO(), "0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae", []string{"01"}, []string{"0x1merklerootHash"}, []string{"output.txt"})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, outputFiles)
 	assert.Equal(t, "/home/output.txt", outputFiles[0])

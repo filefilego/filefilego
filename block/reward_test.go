@@ -11,6 +11,8 @@ func TestGetReward(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "40000000000000000000", reward.String())
 
+	assert.Equal(t, "22b1c8c1227a00000", reward.Text(16))
+
 	reward, err = GetReward(3153600*2 - 1)
 	assert.NoError(t, err)
 	assert.Equal(t, "40000000000000000000", reward.String())

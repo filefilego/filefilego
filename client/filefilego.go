@@ -68,3 +68,61 @@ func (cli *Client) GetNodeStats(ctx context.Context) (rpc.StatsResponse, error) 
 
 	return responseTx, nil
 }
+
+// GetHostInfo gets the node's info.
+func (cli *Client) GetHostInfo(ctx context.Context) (rpc.HostInfoResponse, error) {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "filefilego.HostInfo",
+		Params:  []interface{}{},
+		ID:      1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return rpc.HostInfoResponse{}, errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return rpc.HostInfoResponse{}, errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	responsePayload := rpc.HostInfoResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return rpc.HostInfoResponse{}, errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &responsePayload); err != nil {
+		return rpc.HostInfoResponse{}, fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return responsePayload, nil
+}

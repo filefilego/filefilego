@@ -61,6 +61,7 @@ func main() {
 	app.Commands = []*cli.Command{
 		ffgcli.AddressCommand,
 		ffgcli.StorageCommand,
+		ffgcli.ClientCommand,
 	}
 	app.Suggest = true
 
@@ -325,7 +326,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
-		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain)
+		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain, host)
 		if err != nil {
 			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
 		}
@@ -395,6 +396,10 @@ func run(ctx *cli.Context) error {
 
 	r := mux.NewRouter()
 	r.Handle("/rpc", s)
+
+	if conf.Global.Debug {
+		r.HandleFunc("/internal/contracts/", contractStore.Debug)
+	}
 
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {

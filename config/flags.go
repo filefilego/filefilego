@@ -46,8 +46,9 @@ var (
 	}
 
 	ValidatorPass = cli.StringFlag{
-		Name:  "validator_key_pass",
-		Usage: "Passphrase of keyfile",
+		Name:    "validator_key_pass",
+		Usage:   "Passphrase of keyfile",
+		EnvVars: []string{"FFG_VERIFIER_PASSPHRASE"},
 	}
 
 	SearchEngine = cli.BoolFlag{
@@ -113,6 +114,11 @@ var (
 	SuperLightNode = cli.BoolFlag{
 		Name:  "super_light_node",
 		Usage: "Runs a super light node",
+	}
+
+	DebugMode = cli.BoolFlag{
+		Name:  "debug",
+		Usage: "Runs a node with debugging",
 	}
 
 	RPCWhitelistFlag = cli.StringFlag{
@@ -242,6 +248,7 @@ var AppFlags = []cli.Flag{
 	&DataVerifierTransactionFees,
 	&DataDownloadsPath,
 	&SuperLightNode,
+	&DebugMode,
 
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,

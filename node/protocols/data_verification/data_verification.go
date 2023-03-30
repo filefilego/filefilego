@@ -733,7 +733,7 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 		}
 
 		if fileInfo.ReceivedUnencryptedDataFromFileHoster {
-			fileHashHex := hexutil.Encode(fileInfo.FileHash)
+			fileHashHex := hexutil.EncodeNoPrefix(fileInfo.FileHash)
 			destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
 			_, _, totalSegmentsToEncrypt, encryptEverySegment := common.FileSegmentsInfo(int(fileInfo.FileSize), d.merkleTreeTotalSegments, d.encryptionPercentage)
 			orderedSliceForRawfile := []int{}
@@ -772,6 +772,9 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 					log.Errorf("failed to set proof of transfer verified: %v", err)
 					return
 				}
+			} else {
+				log.Errorf("merkle root of file is: %s and the unencrypted: %s", hexutil.Encode(fileInfo.MerkleRootHash), hexutil.Encode(merkleOfReorderedMerkle))
+				return
 			}
 		}
 	}
@@ -809,7 +812,7 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 		}
 
 		if !fInfo.ProofOfTransferVerified {
-			log.Errorf("file hash: %s is not verified in handleIncomingEncryptionDataTransfer message", hexutil.Encode(keyIVrequest.FileHash))
+			log.Errorf("file hash: %s is not verified in handleIncomingEncryptionDataTransfer message", hexutil.EncodeNoPrefix(keyIVrequest.FileHash))
 			return
 		}
 
@@ -909,6 +912,10 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 	fileContractInfo, err := d.contractStore.GetContractFileInfo(contractHash, fileHash)
 	if err != nil {
 		return fmt.Errorf("failed to get contract and file info in sendKeyIVRandomizedFileSegmentsAndDataToVerifier: %w ", err)
+	}
+
+	if len(fileContractInfo.MerkleRootHash) == 0 {
+		return errors.New("file contract merkle root hash is empty")
 	}
 
 	s, err := d.host.NewStream(ctx, verifierID, ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID)
@@ -1041,7 +1048,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 		return
 	}
 
-	fileHashHex := hexutil.Encode(keyIVRandomizedFileSegmentsEnvelope.FileHash)
+	fileHashHex := hexutil.EncodeNoPrefix(keyIVRandomizedFileSegmentsEnvelope.FileHash)
 	destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
 	destinationFile, err := os.OpenFile(destinationFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
@@ -1080,7 +1087,7 @@ func (d *Protocol) handleIncomingKeyIVRandomizedFileSegmentsAndData(s network.St
 	}
 }
 
-// handleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a node.
+// handleIncomingMerkleTreeNodes handles incoming merkle tree nodes from a downloader node.
 // this protocol handler is used by a verifier.
 func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 	c := bufio.NewReader(s)
