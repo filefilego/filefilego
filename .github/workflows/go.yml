@@ -22,7 +22,7 @@ jobs:
       run: wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.2
     
     - name: Add binary to path
-      run: echo "/bin" >> $GITHUB_PATH
+      run: sudo ln -s /bin/golangci-lint /usr/bin/golangci-lint && sudo ln -s /bin/golangci-lint /usr/local/bin/golangci-lint
       
     - name: Set up Go
       uses: actions/setup-go@v3
