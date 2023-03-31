@@ -95,21 +95,21 @@ func TestProtocolMethods(t *testing.T) {
 	bchain1, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain1)
-	err = bchain1.InitOrLoad()
+	err = bchain1.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	// blockchain 2
 	bchain2, err := blockchain.New(driver2, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain2)
-	err = bchain2.InitOrLoad()
+	err = bchain2.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	// blockchain 3
 	bchain3, err := blockchain.New(driver3, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	assert.NotNil(t, bchain3)
-	err = bchain3.InitOrLoad()
+	err = bchain3.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	validBlock2, kp, _ := validBlock(t, 1)

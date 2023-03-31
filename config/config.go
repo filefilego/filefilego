@@ -37,6 +37,7 @@ type global struct {
 	DataDownloadsPath                       string
 	SuperLightNode                          bool
 	Debug                                   bool
+	VerifyBlocks                            bool
 }
 
 type p2p struct {
@@ -197,6 +198,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(DebugMode.Name) {
 		conf.Global.Debug = ctx.Bool(DebugMode.Name)
+	}
+
+	if ctx.IsSet(VerifyBlocks.Name) {
+		conf.Global.VerifyBlocks = ctx.Bool(VerifyBlocks.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {

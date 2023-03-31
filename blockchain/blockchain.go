@@ -125,12 +125,12 @@ func New(db database.Database, search search.IndexSearcher, genesisBlockHash []b
 }
 
 // InitOrLoad intializes or loads the blockchain from the database.
-func (b *Blockchain) InitOrLoad() error {
-	// reset height
-	b.SetHeight(0)
-
+func (b *Blockchain) InitOrLoad(verifyAllBlocks bool) error {
 	lastBlockHash := b.GetLastBlockHash()
 	if len(lastBlockHash) == 0 {
+		// reset height
+		b.SetHeight(0)
+
 		// init blockchain
 		genesisBlock, err := block.GetGenesisBlock()
 		if err != nil {
@@ -142,6 +142,15 @@ func (b *Blockchain) InitOrLoad() error {
 		if err != nil {
 			return fmt.Errorf("failed to perform block state update: %w", err)
 		}
+		return nil
+	}
+
+	if !verifyAllBlocks {
+		foundBlock, err := b.GetBlockByHash(lastBlockHash)
+		if err != nil {
+			return fmt.Errorf("failed to get block: %v with error: %w", hexutil.Encode(lastBlockHash), err)
+		}
+		b.SetHeight(foundBlock.Number)
 		return nil
 	}
 

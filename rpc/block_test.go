@@ -35,7 +35,7 @@ func TestBlockAPIMethods(t *testing.T) {
 	})
 	blockchain, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
-	err = blockchain.InitOrLoad()
+	err = blockchain.InitOrLoad(true)
 	assert.NoError(t, err)
 	api, err := NewBlockAPI(blockchain)
 	assert.NoError(t, err)

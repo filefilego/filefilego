@@ -90,7 +90,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 	// first run will be init
-	err = blockchain.InitOrLoad()
+	err = blockchain.InitOrLoad(true)
 	assert.NoError(t, err)
 	genBlock, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
@@ -204,7 +204,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	// last block hash should be validBlock3.Hash
 	blockchain2, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
-	err = blockchain2.InitOrLoad()
+	err = blockchain2.InitOrLoad(true)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(2), blockchain2.GetHeight())
 	assert.EqualValues(t, validBlock3.Hash, blockchain2.GetLastBlockHash())
@@ -340,7 +340,7 @@ func TestMemPoolBlockPoolMethods(t *testing.T) {
 	blockchain, err := New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
-	err = blockchain.InitOrLoad()
+	err = blockchain.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	transactions := blockchain.GetTransactionsFromPool()

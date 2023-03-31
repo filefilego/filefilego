@@ -86,7 +86,7 @@ func TestValidatorMethods(t *testing.T) {
 	assert.NoError(t, err)
 	bchain, err := blockchain.New(blockchainDB, &search.Search{}, genesisHash)
 	assert.NoError(t, err)
-	err = bchain.InitOrLoad()
+	err = bchain.InitOrLoad(true)
 	assert.NoError(t, err)
 	kp, err := keystore.NewKey()
 	assert.NoError(t, err)

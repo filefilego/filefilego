@@ -222,17 +222,17 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	blockchain1, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
-	err = blockchain1.InitOrLoad()
+	err = blockchain1.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	blockchain2, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
-	err = blockchain2.InitOrLoad()
+	err = blockchain2.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	blockchain3, err := blockchain.New(driver, &search.Search{}, genesisblockValid.Hash)
 	assert.NoError(t, err)
-	err = blockchain3.InitOrLoad()
+	err = blockchain3.InitOrLoad(true)
 	assert.NoError(t, err)
 
 	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "")
