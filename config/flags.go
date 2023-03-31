@@ -121,6 +121,11 @@ var (
 		Usage: "Runs a node with debugging",
 	}
 
+	VerifyBlocks = cli.BoolFlag{
+		Name:  "verify_blocks",
+		Usage: "Verifies all downloaded blocks",
+	}
+
 	RPCWhitelistFlag = cli.StringFlag{
 		Name:  "rpc_whitelist",
 		Usage: "Allow IP addresses to access the RPC servers",
@@ -249,6 +254,7 @@ var AppFlags = []cli.Flag{
 	&DataDownloadsPath,
 	&SuperLightNode,
 	&DebugMode,
+	&VerifyBlocks,
 
 	&RPCServicesFlag,
 	&RPCWhitelistFlag,

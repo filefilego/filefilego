@@ -687,7 +687,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		assert.NoError(t, err)
 
 		start := time.Now()
-		err = bchain.InitOrLoad()
+		err = bchain.InitOrLoad(conf.Global.VerifyBlocks)
 		assert.NoError(t, err)
 		elapsed := time.Since(start)
 		log.Infof("finished verifying local blockchain in %s", elapsed)

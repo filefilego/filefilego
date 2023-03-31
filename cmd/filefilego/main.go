@@ -195,7 +195,7 @@ func run(ctx *cli.Context) error {
 
 		log.Info("verifying local blockchain")
 		start := time.Now()
-		err = bchain.InitOrLoad()
+		err = bchain.InitOrLoad(conf.Global.VerifyBlocks)
 		if err != nil {
 			return fmt.Errorf("failed to start up blockchain: %w", err)
 		}
