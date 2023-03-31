@@ -155,7 +155,7 @@ A list of available CLI flags are available below or you can run `./filefilego h
   --keystore_dir value                                 Keystore directory (default: "/home/filefilego/.filefilego_data/keystore")
   --validator                                          Enable Validator (default: false)
   --validator_keypath value                            Path to the key for sealing blocks
-  --validator_key_pass value                           Passphrase of keyfile
+  --validator_key_pass value                           Passphrase of keyfile [$FFG_VERIFIER_PASSPHRASE]
   --search_engine                                      Enable full-text indexing (default: false)
   --search_engine_result_count value                   Max number of documents per search query (default: 0)
   --storage                                            Enable storage (default: false)
@@ -169,6 +169,8 @@ A list of available CLI flags are available below or you can run `./filefilego h
   --data_verification_transaction_fees value           Data verification transaction fees for releasing file hoster fees
   --data_downloads_path value                          Directory path for data downloads
   --super_light_node                                   Runs a super light node (default: false)
+  --debug                                              Runs a node with debugging (default: false)
+  --verify_blocks                                      Verifies all downloaded blocks (default: false)
   --rpc_services value                                 List of rpc services allowed
   --rpc_whitelist value                                Allow IP addresses to access the RPC servers
   --unix_socket                                        Enable IPC-RPC interface (default: false)
