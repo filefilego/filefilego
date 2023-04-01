@@ -145,14 +145,14 @@ func (ks *Store) UnlockKey(address string, passphrase string, nodeIdentityKey bo
 		}
 
 		atClaims := jwt.MapClaims{}
-		atClaims["address"] = address
+		atClaims["address"] = key.Address
 		atClaims["exp"] = time.Now().Add(time.Hour * jwtValidityHours).Unix()
 		at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 		token, err := at.SignedString(ks.nodeIdentityData)
 		if err != nil {
 			return "", fmt.Errorf("failed to sign jwt token with node's identity file: %w", err)
 		}
-		ks.unlockedKeys[address] = UnlockedKey{
+		ks.unlockedKeys[key.Address] = UnlockedKey{
 			Key: key,
 			JWT: token,
 		}
