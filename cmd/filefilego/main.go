@@ -74,7 +74,7 @@ func run(ctx *cli.Context) error {
 	conf := config.New(ctx)
 	nodeIdentityFile := filepath.Join(conf.Global.KeystoreDir, "node_identity.json")
 	if !common.FileExists(nodeIdentityFile) {
-		return fmt.Errorf("node identity key is not available. first run: `./filefilego account create_node_key yourpasswordhere`")
+		return fmt.Errorf("node identity key is not available. first run: `./filefilego address create_node_key yourpasswordhere`")
 	}
 
 	nodeIdentityData, err := os.ReadFile(nodeIdentityFile)
