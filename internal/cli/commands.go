@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -210,6 +212,41 @@ func AddFile(ctx *cli.Context) error {
 
 // ListAddresses list the addresses on this node.
 func ListAddresses(ctx *cli.Context) error {
+	conf := config.New(ctx)
+	if !common.DirExists(conf.Global.KeystoreDir) {
+		return errors.New("keystore directory doesn't exist")
+	}
+
+	f, err := os.Open(conf.Global.KeystoreDir)
+	if err != nil {
+		return fmt.Errorf("failed to read keystore directory: %w", err)
+	}
+	fileInfo, err := f.Readdir(-1)
+	f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to read keystore directory: %w", err)
+	}
+
+	for i, file := range fileInfo {
+		if file.Name() == "node_identity.json" {
+			fileData, err := os.ReadFile(filepath.Join(conf.Global.KeystoreDir, file.Name()))
+			if err != nil {
+				continue
+			}
+
+			nodeIDKeyaddrr := extractHex(string(fileData))
+			fmt.Printf("%d. Node Identity Key: 0x%s\n", i, nodeIDKeyaddrr)
+			continue
+		}
+
+		addrr := extractHex(file.Name())
+		if addrr == "" {
+			continue
+		}
+
+		fmt.Printf("%d. Address: 0x%s\n", i, addrr)
+	}
+
 	return nil
 }
 
@@ -277,4 +314,13 @@ func CreateNodeIDKey(ctx *cli.Context) error {
 	}
 
 	return nil
+}
+
+func extractHex(s string) string {
+	r := regexp.MustCompile(`0x([A-Fa-f0-9]{6,})`)
+	matches := r.FindStringSubmatch(s)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
 }
