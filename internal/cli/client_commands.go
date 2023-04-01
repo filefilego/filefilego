@@ -41,11 +41,11 @@ var ClientCommand = &cli.Command{
 		},
 		{
 			Name:   "upload",
-			Usage:  "upload <filepath>",
+			Usage:  "upload <filepath> <storage_access_token> <node_hash>",
 			Action: UploadFile,
 			Flags:  []cli.Flag{},
 			Description: `
-			Uploads a file to a node`,
+			Uploads a file to a node. The node_hash is optional, you can omit it if you dont want to reference a channel node item on the blockchain`,
 		},
 		{
 			Name:   "get_storage_token",
@@ -69,7 +69,7 @@ var ClientCommand = &cli.Command{
 			Action: SendTransaction,
 			Flags:  []cli.Flag{},
 			Description: `
-			Sends a transaction given the access token, nouce, data, from and to with the value and fees.`,
+			Sends a transaction given the access token, nouce, data, from and to with the value and fees`,
 		},
 		{
 			Name:   "unlock_node_identity",
@@ -85,7 +85,7 @@ var ClientCommand = &cli.Command{
 			Action: SendDataQuery,
 			Flags:  []cli.Flag{},
 			Description: `
-			Sends a data query request`,
+			Sends a data query request by a comma separate list of file hashes`,
 		},
 		{
 			Name:   "responses",
