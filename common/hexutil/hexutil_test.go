@@ -128,3 +128,23 @@ func TestXxx(t *testing.T) {
 	hexRepresentation := EncodeUint64BytesToHexString(bytesTwo)
 	assert.Equal(t, "0x2", hexRepresentation)
 }
+
+func TestExtractHex(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"This is a test string without hex values", ""},
+		{"This is a test string with a valid hex value 0xABCDEF", "0xABCDEF"},
+		{"This is a test string with an invalid hex value 0x12GHIJ", ""},
+		{"This is a test string with multiple valid hex values 0x123456 and 0xABCDEF", "0x123456"},
+		{"This is a test string with multiple invalid hex values 0x123 and 0xABC", ""},
+	}
+
+	for _, c := range cases {
+		actual := ExtractHex(c.input)
+		if actual != c.expected {
+			t.Errorf("ExtractHex(%q) == %q, expected %q", c.input, actual, c.expected)
+		}
+	}
+}

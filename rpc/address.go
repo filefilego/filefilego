@@ -16,9 +16,8 @@ const oneHex = "0x1"
 
 // UnlockAddressArgs arguments required for unlocking a key.
 type UnlockAddressArgs struct {
-	NodeIdentityKey bool   `json:"node_identity_key"`
-	Address         string `json:"address"`
-	Passphrase      string `json:"passphrase"`
+	Address    string `json:"address"`
+	Passphrase string `json:"passphrase"`
 }
 
 // UnlockAddressResponse is a key unlock response.
@@ -74,7 +73,7 @@ func NewAddressAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interfac
 
 // Unlock a key given an address and a passphrase.
 func (api *AddressAPI) Unlock(r *http.Request, args *UnlockAddressArgs, response *UnlockAddressResponse) error {
-	jwtToken, err := api.keystore.UnlockKey(args.Address, args.Passphrase, args.NodeIdentityKey)
+	jwtToken, err := api.keystore.UnlockKey(args.Address, args.Passphrase)
 	if err != nil {
 		return err
 	}

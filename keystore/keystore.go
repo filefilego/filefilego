@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -19,7 +20,7 @@ const jwtValidityHours = 2160
 // KeyLockUnlocker is an interface with locking and unlocking key functionality.
 type KeyLockUnlocker interface {
 	LockKey(address string, jwt string) (bool, error)
-	UnlockKey(address string, passphrase string, nodeIdentityKey bool) (string, error)
+	UnlockKey(address string, passphrase string) (string, error)
 }
 
 // KeyAuthorizer is an interface with auth mechanism of a key.
@@ -109,7 +110,7 @@ func (ks *Store) LockKey(address string, jwt string) (bool, error) {
 
 // UnlockKey unlocks a key by address.
 // it will try to unlock the node_identity_key first and if not then it will proceed with the keystore dir.
-func (ks *Store) UnlockKey(address string, passphrase string, nodeIdentityKey bool) (string, error) {
+func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
@@ -124,11 +125,20 @@ func (ks *Store) UnlockKey(address string, passphrase string, nodeIdentityKey bo
 	}
 
 	for _, file := range fileInfo {
-		if nodeIdentityKey {
-			if !strings.Contains(file.Name(), "node_identity.json") {
+		nodeIDKey := false
+		if file.Name() == "node_identity.json" {
+			nodeIDKey = true
+			fileData, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
+			if err != nil {
+				continue
+			}
+
+			nodeIDAddress := hexutil.ExtractHex(string(fileData))
+			if nodeIDAddress == "" {
 				continue
 			}
 		} else {
+			nodeIDKey = false
 			fileNameContainsAddress := strings.Contains(file.Name(), address)
 			if !fileNameContainsAddress {
 				continue
@@ -139,7 +149,12 @@ func (ks *Store) UnlockKey(address string, passphrase string, nodeIdentityKey bo
 		if err != nil {
 			return "", fmt.Errorf("failed to read keystore file: %w", err)
 		}
+
 		key, err := UnmarshalKey(bts, passphrase)
+		if nodeIDKey && err != nil {
+			continue
+		}
+
 		if err != nil {
 			return "", fmt.Errorf("failed to unmarshal keystore file: %w", err)
 		}

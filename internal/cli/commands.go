@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -234,17 +233,17 @@ func ListAddresses(ctx *cli.Context) error {
 				continue
 			}
 
-			nodeIDKeyaddrr := extractHex(string(fileData))
-			fmt.Printf("%d. Node Identity Key: 0x%s\n", i, nodeIDKeyaddrr)
+			nodeIDKeyaddrr := hexutil.ExtractHex(string(fileData))
+			fmt.Printf("%d. Node Identity Key: %s\n", i, nodeIDKeyaddrr)
 			continue
 		}
 
-		addrr := extractHex(file.Name())
+		addrr := hexutil.ExtractHex(file.Name())
 		if addrr == "" {
 			continue
 		}
 
-		fmt.Printf("%d. Address: 0x%s\n", i, addrr)
+		fmt.Printf("%d. Address: %s\n", i, addrr)
 	}
 
 	return nil
@@ -314,13 +313,4 @@ func CreateNodeIDKey(ctx *cli.Context) error {
 	}
 
 	return nil
-}
-
-func extractHex(s string) string {
-	r := regexp.MustCompile(`0x([A-Fa-f0-9]{6,})`)
-	matches := r.FindStringSubmatch(s)
-	if len(matches) > 1 {
-		return matches[1]
-	}
-	return ""
 }
