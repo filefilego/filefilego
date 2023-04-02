@@ -328,11 +328,6 @@ func UnlockAddress(ctx *cli.Context) error {
 		return fmt.Errorf("failed to read client endpoint file: %w", err)
 	}
 
-	endpointBackup := ctx.Args().Get(1)
-	if endpointBackup != "" {
-		endpoint = []byte(endpointBackup)
-	}
-
 	ffgclient, err := client.New(string(endpoint), http.DefaultClient)
 	if err != nil {
 		return fmt.Errorf("failed to setup client: %w", err)
