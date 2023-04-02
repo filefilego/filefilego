@@ -481,7 +481,7 @@ func TestE2E(t *testing.T) {
 	currentAddressNounce := kpFileDownloader1Balance.Nounce
 	// nolint:goconst
 	eachTransactionFee := "0x1"
-	accessTokenForNodeIDKeyUnlock, err := fileDownloader1Client.UnlockAddress(context.TODO(), kpFileDownloader1.Address, "1234", true)
+	accessTokenForNodeIDKeyUnlock, err := fileDownloader1Client.UnlockAddress(context.TODO(), kpFileDownloader1.Address, "1234")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, accessTokenForNodeIDKeyUnlock)
 	jsonEncodedRawTransactions, totalFeesForTransactionsNeeded, err := fileDownloader1Client.CreateTransactionsWithDataPayloadFromContractHashes(context.TODO(), []string{downloadContract.Contract.ContractHash}, accessTokenForNodeIDKeyUnlock, currentAddressNounce, eachTransactionFee)

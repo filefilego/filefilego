@@ -72,12 +72,12 @@ var ClientCommand = &cli.Command{
 			Sends a transaction given the access token, nouce, data, from and to with the value and fees`,
 		},
 		{
-			Name:   "unlock_node_identity",
-			Usage:  "unlock_node_identity <passphrase>",
-			Action: UnlockNodeIdentity,
+			Name:   "unlock_address",
+			Usage:  "unlock_address <address> <passphrase>",
+			Action: UnlockAddress,
 			Flags:  []cli.Flag{},
 			Description: `
-			Unlock node identity key and return a jwt token`,
+			Unlock an address with the given passphrase and returns a jwt token`,
 		},
 		{
 			Name:   "query",
@@ -129,7 +129,7 @@ var ClientCommand = &cli.Command{
 		},
 		{
 			Name:   "decrypt_files",
-			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <restore_full_path_file1,restore_full_path_file2>",
+			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <file1_merkle_root_hash,file2_merkle_root_hash> <restore_full_path_file1,restore_full_path_file2>",
 			Action: DecryptAllFiles,
 			Flags:  []cli.Flag{},
 			Description: `
@@ -193,6 +193,7 @@ func UploadFile(ctx *cli.Context) error {
 	if storageAccessToken == "" {
 		return errors.New("storage access token is empty")
 	}
+
 	nodeHash := ctx.Args().Get(2)
 
 	response, err := ffgclient.UploadFile(ctx.Context, filePath, nodeHash, storageAccessToken)
@@ -200,11 +201,14 @@ func UploadFile(ctx *cli.Context) error {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
+	if response.Error != "" {
+		return fmt.Errorf("failed to upload file: %s", response.Error)
+	}
+
 	fmt.Println("FileName: ", response.FileName)
 	fmt.Println("FileHash: ", response.FileHash)
 	fmt.Println("MerkleRoot: ", response.MerkleRootHash)
 	fmt.Println("Size: ", response.Size)
-	fmt.Println("Error: ", response.Error)
 
 	return nil
 }
@@ -239,7 +243,13 @@ func GetStorageAccessToken(ctx *cli.Context) error {
 // SetEndpoint sets the endpoint to be used across the client commands.
 func SetEndpoint(ctx *cli.Context) error {
 	conf := config.New(ctx)
-	_, err := common.WriteToFile([]byte(ctx.Args().First()), filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
+
+	endPoint := ctx.Args().First()
+	if endPoint == "" {
+		return errors.New("endpoint is empty")
+	}
+
+	_, err := common.WriteToFile([]byte(endPoint), filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
 	if err != nil {
 		return fmt.Errorf("failed to write endpoint to file")
 	}
@@ -311,7 +321,7 @@ func SendTransaction(ctx *cli.Context) error {
 	return nil
 }
 
-func UnlockNodeIdentity(ctx *cli.Context) error {
+func UnlockAddress(ctx *cli.Context) error {
 	conf := config.New(ctx)
 	endpoint, err := os.ReadFile(filepath.Join(conf.Global.DataDir, "client_jsonrpc_endpoint.txt"))
 	if err != nil {
@@ -327,10 +337,20 @@ func UnlockNodeIdentity(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
-	passphrase := ctx.Args().First()
-	jwt, err := ffgclient.UnlockAddress(ctx.Context, "", passphrase, true)
+
+	address := ctx.Args().First()
+	if address == "" {
+		return errors.New("address is empty")
+	}
+
+	passphrase := ctx.Args().Get(1)
+	if passphrase == "" {
+		return errors.New("passphrase is empty")
+	}
+
+	jwt, err := ffgclient.UnlockAddress(ctx.Context, "", passphrase)
 	if err != nil {
-		return fmt.Errorf("failed to unlock node identity key: %w", err)
+		return fmt.Errorf("failed to unlock address: %w", err)
 	}
 
 	fmt.Printf("Access token: %s\n", jwt)
@@ -356,6 +376,9 @@ func GetBalance(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
 	address := ctx.Args().First()
+	if address == "" {
+		return errors.New("address is empty")
+	}
 	balance, err := ffgclient.Balance(ctx.Context, address)
 	if err != nil {
 		return fmt.Errorf("failed to get address balance: %w", err)
@@ -386,6 +409,10 @@ func CheckDataQueryResponses(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
 	dataQueryRequestHash := ctx.Args().First()
+	if dataQueryRequestHash == "" {
+		return errors.New("data query request hash is empty")
+	}
+
 	fmt.Printf("\nData query hash: %s\n\n", dataQueryRequestHash)
 
 	s := spinner.New(spinner.CharSets[43], 100*time.Millisecond)
@@ -435,8 +462,13 @@ func SendDataQuery(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
+
 	commadSeparatedFiles := ctx.Args().First()
 	fileHashes := strings.Split(commadSeparatedFiles, ",")
+
+	if len(fileHashes) == 0 {
+		return errors.New("file hashes in the request is empty")
+	}
 
 	s := spinner.New(spinner.CharSets[43], 100*time.Millisecond)
 	_ = s.Color("green")
@@ -498,7 +530,12 @@ func CreateContractsFromDataQueryResponses(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup client: %w", err)
 	}
+
 	dataQueryRequestHash := ctx.Args().First()
+
+	if dataQueryRequestHash == "" {
+		return errors.New("data query request hash is empty")
+	}
 
 	contractHashes, err := ffgclient.CreateContractsFromDataQueryResponses(ctx.Context, dataQueryRequestHash)
 	if err != nil {
@@ -526,6 +563,11 @@ func CreateSendTXContracts(ctx *cli.Context) error {
 	}
 
 	downloadContractHashes := ctx.Args().First()
+	contractHashes := strings.Split(downloadContractHashes, ",")
+	if len(contractHashes) == 0 {
+		return errors.New("contract hashes are empty")
+	}
+
 	accessToken := ctx.Args().Get(1)
 	if accessToken == "" {
 		return errors.New("access token is empty")
@@ -539,12 +581,6 @@ func CreateSendTXContracts(ctx *cli.Context) error {
 	eachTxFees := ctx.Args().Get(3)
 	if eachTxFees == "" {
 		return errors.New("each tx fees is empty")
-	}
-
-	contractHashes := strings.Split(downloadContractHashes, ",")
-
-	if len(contractHashes) == 0 {
-		return errors.New("contract hashes are empty")
 	}
 
 	for _, v := range contractHashes {
@@ -585,8 +621,19 @@ func DownloadFile(ctx *cli.Context) error {
 	}
 
 	downloadContractHash := ctx.Args().First()
+	if downloadContractHash == "" {
+		return errors.New("contract hash is empty")
+	}
+
 	fileHash := ctx.Args().Get(1)
+	if fileHash == "" {
+		return errors.New("file hash is empty")
+	}
+
 	fileSize := ctx.Args().Get(2)
+	if fileSize == "" {
+		return errors.New("file size is empty")
+	}
 
 	sizeOfFile, err := strconv.ParseUint(fileSize, 10, 64)
 	if err != nil {
@@ -640,7 +687,14 @@ func SendFileMerkleTreeNodesToVerifier(ctx *cli.Context) error {
 	}
 
 	downloadContractHash := ctx.Args().First()
+	if downloadContractHash == "" {
+		return errors.New("contract hash is empty")
+	}
 	fileHash := ctx.Args().Get(1)
+	if fileHash == "" {
+		return errors.New("file hash is empty")
+	}
+
 	ok, err := ffgclient.SendFileMerkleTreeNodesToVerifier(ctx.Context, downloadContractHash, fileHash)
 	if err != nil || !ok {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)

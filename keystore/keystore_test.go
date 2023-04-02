@@ -74,17 +74,17 @@ func TestStore(t *testing.T) {
 	// UnlockKey
 
 	// wrong passphrase
-	jwtToken, err := keystore.UnlockKey(key.Address, "23", false)
+	jwtToken, err := keystore.UnlockKey(key.Address, "23")
 	assert.EqualError(t, err, "failed to unmarshal keystore file: mac mismatch")
 	assert.Empty(t, jwtToken)
 
 	// wrong address
-	jwtToken, err = keystore.UnlockKey("0x1323", passphrase, false)
+	jwtToken, err = keystore.UnlockKey("0x1323", passphrase)
 	assert.EqualError(t, err, "key not found on this node")
 	assert.Empty(t, jwtToken)
 
 	// valid
-	jwtToken, err = keystore.UnlockKey(key.Address, passphrase, false)
+	jwtToken, err = keystore.UnlockKey(key.Address, passphrase)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, jwtToken)
 

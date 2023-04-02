@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strconv"
 )
 
@@ -175,6 +176,17 @@ func DecodeBig(input string) (*big.Int, error) {
 	}
 	dec := new(big.Int).SetBits(words)
 	return dec, nil
+}
+
+// ExtractHex hexadecimal value out of a string.
+func ExtractHex(s string) string {
+	r := regexp.MustCompile(`0x([A-Fa-f0-9]{6,})`)
+	matches := r.FindStringSubmatch(s)
+	if len(matches) > 1 {
+		return "0x" + matches[1]
+	}
+
+	return ""
 }
 
 func checkNumber(input string) (raw string, err error) {
