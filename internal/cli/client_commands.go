@@ -165,7 +165,7 @@ func GetHostInfo(ctx *cli.Context) error {
 	}
 
 	fmt.Println("Address: ", response.Address)
-	fmt.Println("PeersID: ", response.PeerID)
+	fmt.Println("PeerID: ", response.PeerID)
 	fmt.Println("Peers count: ", response.PeerCount)
 
 	return nil
