@@ -129,7 +129,7 @@ var ClientCommand = &cli.Command{
 		},
 		{
 			Name:   "decrypt_files",
-			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <restore_full_path_file1,restore_full_path_file2>",
+			Usage:  "decrypt_files <contract_hash> <file_hash1,file_hash2> <file1_merkle_root_hash,file2_merkle_root_hash> <restore_full_path_file1,restore_full_path_file2>",
 			Action: DecryptAllFiles,
 			Flags:  []cli.Flag{},
 			Description: `
