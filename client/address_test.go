@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestListAddresses(t *testing.T) {
+	bodyReader := strings.NewReader(`{ "result": { "addresses": ["0x0121123123123123123"] }, "error": null, "id": 143 }`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	addresses, err := c.ListAddresses(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, "0x0121123123123123123", addresses[0])
+}
+
 func TestUnlockAddress(t *testing.T) {
 	bodyReader := strings.NewReader(`{ "result": { "token": "tokenvalue" }, "error": null, "id": 143 }`)
 	stringReadCloser := io.NopCloser(bodyReader)

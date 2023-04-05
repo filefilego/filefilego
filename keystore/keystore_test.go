@@ -96,7 +96,7 @@ func TestStore(t *testing.T) {
 	// list keys in the keys directory
 	keys, err := keystore.ListKeys()
 	assert.NoError(t, err)
-	assert.Contains(t, keys, key.Address+".json")
+	assert.Contains(t, keys, key.Address)
 
 	// check if jwt is authorized
 

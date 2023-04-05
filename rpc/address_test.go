@@ -18,7 +18,7 @@ import (
 func TestNewAccountAPI(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		keystore   keystore.KeyLockUnlocker
+		keystore   keystore.KeyLockUnlockLister
 		blockchain blockchain.Interface
 		expErr     string
 	}{
@@ -132,4 +132,9 @@ func TestAccountAPIMethods(t *testing.T) {
 	err = api.Balance(&http.Request{}, balanceArgs, balanceResponse)
 	assert.NoError(t, err)
 	assert.Equal(t, BalanceOfAddressResponse{Balance: "40.000000000000000000", BalanceHex: "0x22b1c8c1227a00000", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)
+
+	listAddresses := &ListAddressesResponse{}
+	err = api.List(&http.Request{}, &EmptyArgs{}, listAddresses)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, listAddresses.Addresses)
 }
