@@ -180,7 +180,7 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 
 // ListKeys lists the keys in the keysDir.
 func (ks *Store) ListKeys() ([]string, error) {
-	var addresses []string
+	addresses := make([]string, 0)
 
 	f, err := os.Open(ks.keysDir)
 	if err != nil {
