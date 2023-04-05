@@ -51,12 +51,17 @@ type BalanceOfAddressResponse struct {
 
 // AddressAPI represents address service
 type AddressAPI struct {
-	keystore   keystore.KeyLockUnlocker
+	keystore   keystore.KeyLockUnlockLister
 	blockchain blockchain.Interface
 }
 
+// ListAddressesResponse is a key unlock response.
+type ListAddressesResponse struct {
+	Addresses []string `json:"addresses"`
+}
+
 // NewAddressAPI creates a new address API to be served using JSONRPC.
-func NewAddressAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interface) (*AddressAPI, error) {
+func NewAddressAPI(keystore keystore.KeyLockUnlockLister, bchain blockchain.Interface) (*AddressAPI, error) {
 	if keystore == nil {
 		return nil, errors.New("keystore is nil")
 	}
@@ -69,6 +74,17 @@ func NewAddressAPI(keystore keystore.KeyLockUnlocker, bchain blockchain.Interfac
 		keystore:   keystore,
 		blockchain: bchain,
 	}, nil
+}
+
+// List the addresses of the node.
+func (api *AddressAPI) List(r *http.Request, args *EmptyArgs, response *ListAddressesResponse) error {
+	addresses, err := api.keystore.ListKeys()
+	if err != nil {
+		return err
+	}
+	response.Addresses = make([]string, len(addresses))
+	copy(response.Addresses, addresses)
+	return nil
 }
 
 // Unlock a key given an address and a passphrase.

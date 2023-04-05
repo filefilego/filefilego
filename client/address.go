@@ -19,6 +19,64 @@ type BalanceOfAddress struct {
 	NextNounce string
 }
 
+// ListAddresses lists the available addresses
+func (cli *Client) ListAddresses(ctx context.Context) ([]string, error) {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "address.List",
+		Params:  []interface{}{rpc.EmptyArgs{}},
+		ID:      1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return nil, errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return nil, errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	listAddresses := rpc.ListAddressesResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return nil, errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &listAddresses); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return listAddresses.Addresses, nil
+}
+
 // UnlockAddress unlocks an address or a node identity key.
 func (cli *Client) UnlockAddress(ctx context.Context, address, passphrase string) (string, error) {
 	payload := JSONRPCRequest{

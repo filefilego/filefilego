@@ -17,10 +17,11 @@ import (
 
 const jwtValidityHours = 2160
 
-// KeyLockUnlocker is an interface with locking and unlocking key functionality.
-type KeyLockUnlocker interface {
+// KeyLockUnlockLister is an interface with locking, unlocking and listing key functionality.
+type KeyLockUnlockLister interface {
 	LockKey(address string, jwt string) (bool, error)
 	UnlockKey(address string, passphrase string) (string, error)
+	ListKeys() ([]string, error)
 }
 
 // KeyAuthorizer is an interface with auth mechanism of a key.
@@ -179,18 +180,28 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 
 // ListKeys lists the keys in the keysDir.
 func (ks *Store) ListKeys() ([]string, error) {
-	var files []string
-	err := filepath.Walk(ks.keysDir, func(path string, info os.FileInfo, err error) error {
-		if strings.Contains(path, "UTC") {
-			prts := strings.Split(path, "--")
-			files = append(files, prts[2])
-		}
-		return nil
-	})
+	var addresses []string
+
+	f, err := os.Open(ks.keysDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read keys directory content: %w", err)
+		return nil, fmt.Errorf("failed to read keystore directory: %w", err)
 	}
-	return files, nil
+	fileInfo, err := f.Readdir(-1)
+	f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read keystore directory: %w", err)
+	}
+
+	for _, file := range fileInfo {
+		fileData, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
+		if err != nil {
+			continue
+		}
+		address := hexutil.ExtractHex(string(fileData))
+		addresses = append(addresses, address)
+	}
+
+	return addresses, nil
 }
 
 // Authorized checks if a token is authorized and valid.
