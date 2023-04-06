@@ -117,18 +117,18 @@ func (c *Store) PurgeInactiveContracts(purgeAfterSeconds int64) error {
 
 	contracts := make([]contractTime, 0)
 	for contractHash, timestamp := range c.contractsCreatedAt {
-		contracts = append(contracts, contractTime{
-			contractHash: contractHash,
-			timestamp:    timestamp,
-		})
+		if now-timestamp > purgeAfterSeconds {
+			contracts = append(contracts, contractTime{
+				contractHash: contractHash,
+				timestamp:    timestamp,
+			})
+		}
 	}
 
 	for _, v := range contracts {
-		if now-v.timestamp > purgeAfterSeconds {
-			err := c.DeleteContract(v.contractHash)
-			if err != nil {
-				log.Warnf("failed to purge contract %s : %s", v.contractHash, err.Error())
-			}
+		err := c.DeleteContract(v.contractHash)
+		if err != nil {
+			log.Warnf("failed to purge contract %s : %s", v.contractHash, err.Error())
 		}
 	}
 
