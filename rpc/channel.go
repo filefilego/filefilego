@@ -40,10 +40,10 @@ type ListArgs struct {
 
 // ListResponse is a list response.
 type ListResponse struct {
-	Total    uint64                 `json:"total"`
-	Limit    int                    `json:"limit"`
-	Offset   int                    `json:"offset"`
-	Channels []*blockchain.NodeItem `json:"channels"`
+	Total    uint64         `json:"total"`
+	Limit    int            `json:"limit"`
+	Offset   int            `json:"offset"`
+	Channels []NodeItemJSON `json:"channels"`
 }
 
 // List returns a list of channels.
@@ -56,7 +56,10 @@ func (api *ChannelAPI) List(r *http.Request, args *ListArgs, response *ListRespo
 	response.Total = api.blockchain.GetChannelsCount()
 	response.Limit = args.Limit
 	response.Offset = args.Offset
-	response.Channels = channels
+	response.Channels = make([]NodeItemJSON, len(channels))
+	for i, v := range channels {
+		response.Channels[i] = transformNodeItemToJSON(v)
+	}
 	return nil
 }
 
@@ -70,7 +73,7 @@ type SearchArgs struct {
 
 // SearchResponse is a response with the search results.
 type SearchResponse struct {
-	Nodes []*blockchain.NodeItem `json:"nodes"`
+	Nodes []NodeItemJSON `json:"nodes"`
 }
 
 // Search search in nodes.
@@ -80,7 +83,7 @@ func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *Searc
 		return fmt.Errorf("failed to perform search: %w", err)
 	}
 
-	response.Nodes = make([]*blockchain.NodeItem, 0)
+	response.Nodes = make([]NodeItemJSON, 0)
 
 	for _, v := range nodeHashes {
 		nodeHash, err := hexutil.Decode(v)
@@ -91,7 +94,7 @@ func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *Searc
 		if err != nil {
 			continue
 		}
-		response.Nodes = append(response.Nodes, node)
+		response.Nodes = append(response.Nodes, transformNodeItemToJSON(node))
 	}
 
 	return nil
@@ -102,9 +105,28 @@ type GetNodeItemArgs struct {
 	NodeHash string `json:"node_hash"`
 }
 
+// NodeItemJSON represents a node item json.
+type NodeItemJSON struct {
+	Name        string   `json:"name"`
+	NodeHash    string   `json:"node_hash"`
+	Owner       string   `json:"owner"`
+	Enabled     bool     `json:"enabled"`
+	NodeType    string   `json:"node_type"`
+	Attributes  []string `json:"attributes"`
+	Admins      []string `json:"admins"`
+	Posters     []string `json:"posters"`
+	Timestamp   int64    `json:"timestamp"`
+	Description string   `json:"description"`
+	MerkleRoot  string   `json:"merkle_root"`
+	FileHash    string   `json:"file_hash"`
+	Size        uint64   `json:"size"`
+	ParentHash  string   `json:"parent_hash"`
+	ContentType string   `json:"content_type"`
+}
+
 // GetNodeItemResponse is a response.
 type GetNodeItemResponse struct {
-	Node *blockchain.NodeItem `json:"node"`
+	Node NodeItemJSON `json:"node"`
 }
 
 // GetNodeItem gets a node item.
@@ -119,7 +141,7 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 		return fmt.Errorf("failed to find node: %w", err)
 	}
 
-	response.Node = item
+	response.Node = transformNodeItemToJSON(item)
 
 	return nil
 }
@@ -165,4 +187,47 @@ func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEn
 	}
 
 	return nil
+}
+
+func transformNodeItemToJSON(item *blockchain.NodeItem) NodeItemJSON {
+	transformed := NodeItemJSON{
+		Name:       item.Name,
+		NodeHash:   hexutil.Encode(item.NodeHash),
+		Owner:      hexutil.Encode(item.Owner),
+		Enabled:    item.Enabled,
+		NodeType:   item.NodeType.String(),
+		Timestamp:  item.Timestamp,
+		MerkleRoot: hexutil.Encode(item.MerkleRoot),
+		FileHash:   hexutil.EncodeNoPrefix(item.FileHash),
+		ParentHash: hexutil.Encode(item.ParentHash),
+		Attributes: make([]string, len(item.Attributes)),
+		Admins:     make([]string, len(item.Admins)),
+		Posters:    make([]string, len(item.Posters)),
+	}
+
+	if item.Description != nil {
+		transformed.Description = *item.Description
+	}
+
+	if item.Size != nil {
+		transformed.Size = *item.Size
+	}
+
+	if item.ContentType != nil {
+		transformed.ContentType = *item.ContentType
+	}
+
+	for i, v := range item.Attributes {
+		transformed.Attributes[i] = string(v)
+	}
+
+	for i, v := range item.Admins {
+		transformed.Admins[i] = hexutil.Encode(v)
+	}
+
+	for i, v := range item.Posters {
+		transformed.Posters[i] = hexutil.Encode(v)
+	}
+
+	return transformed
 }
