@@ -7,9 +7,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestCreateChannelNodeItemsTxDataPayload(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{"transaction_data_payload_hex":"0x01", "total_fees_required":"0x9"},"error":null,"id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	hexData, fees, err := c.CreateChannelNodeItemsTxDataPayload(context.TODO(), []rpc.NodeItemJSON{})
+	assert.NoError(t, err)
+	assert.Equal(t, "0x01", hexData)
+	assert.Equal(t, "0x9", fees)
+}
 
 func TestListChannels(t *testing.T) {
 	bodyReader := strings.NewReader(`{"result":{"total":1,"limit":100,"offset":100,"channels":[{"name":"ffg channel"}]},"error":null,"id":1}`)

@@ -38,9 +38,13 @@ const (
 	nodeNodesPrefix           = "nn"
 	channelPrefix             = "ch"
 	channelsCountPrefix       = "channels_count"
+)
 
-	channelCreationFeesFFG               = 20000
-	remainingChannelOperationFeesMiliFFG = 50
+var (
+	// ChannelCreationFeesFFG required amount to register a channel.
+	ChannelCreationFeesFFG = int64(20000)
+	// RemainingChannelOperationFeesMiliFFG any other channel node item creation fees.
+	RemainingChannelOperationFeesMiliFFG = int64(50)
 )
 
 // Interface wraps the functionality of a blockchain.
@@ -673,7 +677,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
 		}
 
-		totalActionsFees := calculateChannelActionsFees(nodesEnvelope.Nodes)
+		totalActionsFees := CalculateChannelActionsFees(nodesEnvelope.Nodes)
 		if txFees.Cmp(totalActionsFees) == -1 {
 			return fmt.Errorf("total cost of channel actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
 		}
@@ -1437,19 +1441,20 @@ func applyChannelStructureConstraints(parentNode, node *NodeItem) (bool, error) 
 	return true, nil
 }
 
-func calculateChannelActionsFees(nodes []*NodeItem) *big.Int {
+// CalculateChannelActionsFees given a list of node items it calculates the amount of fees required.
+func CalculateChannelActionsFees(nodes []*NodeItem) *big.Int {
 	totalFees := big.NewInt(0)
 	for _, n := range nodes {
 		switch n.NodeType {
 		case NodeItemType_CHANNEL:
 			{
 				oneFFG := currency.FFG()
-				totalFees = totalFees.Add(totalFees, oneFFG.Mul(oneFFG, big.NewInt(channelCreationFeesFFG)))
+				totalFees = totalFees.Add(totalFees, oneFFG.Mul(oneFFG, big.NewInt(ChannelCreationFeesFFG)))
 			}
 		default:
 			{
 				oneMiliFFG := currency.MiliFFG()
-				totalFees = totalFees.Add(totalFees, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(remainingChannelOperationFeesMiliFFG)))
+				totalFees = totalFees.Add(totalFees, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(RemainingChannelOperationFeesMiliFFG)))
 			}
 		}
 	}

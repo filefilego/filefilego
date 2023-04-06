@@ -300,7 +300,7 @@ func TestE2E(t *testing.T) {
 	conf6.P2P.ListenPort = 10214
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095
-	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction", "address"}
+	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction", "address", "channel"}
 	fileDownloader1, _, _, kpFileDownloader1 := createNode(t, "blockchain6.db", conf6, false)
 	assert.NotNil(t, fileDownloader1)
 	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -330,7 +330,7 @@ func TestE2E(t *testing.T) {
 		Data:            []byte{0},
 		From:            kpV1.Address,
 		To:              kpFileDownloader1.Address,
-		Value:           hexutil.EncodeBig(currency.FFG()),
+		Value:           hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))),
 		TransactionFees: "0x1",
 		Chain:           mainChain,
 	}
@@ -363,7 +363,7 @@ func TestE2E(t *testing.T) {
 	assert.Equal(t, uint64(2), v1Bchain.GetHeight())
 	fileDownloader1Balance, err := v1Client.Balance(context.TODO(), kpFileDownloader1.Address)
 	assert.NoError(t, err)
-	assert.Equal(t, "0x"+currency.FFG().Text(16), fileDownloader1Balance.BalanceHex)
+	assert.Equal(t, "0x"+currency.FFG().Mul(currency.FFG(), big.NewInt(5)).Text(16), fileDownloader1Balance.BalanceHex)
 	// fileDownloader1 sends data query request of both files
 	hashOfDataQuery, err := fileDownloader1Client.SendDataQueryRequest(context.TODO(), []string{file2UploadResponse.FileHash, file1UploadResponse.FileHash})
 	assert.NoError(t, err)
@@ -488,10 +488,62 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, jsonEncodedRawTransactions, 1)
 	assert.Equal(t, JSONTx2.Value, totalFeesForTransactionsNeeded)
+
+	// test if the manually constructed transaction matches the result of CreateTransactionsWithDataPayloadFromContractHashes
 	assert.Equal(t, string(JSONTx2Bytes), jsonEncodedRawTransactions[0])
 	tx2Response, err := fileDownloader1Client.SendRawTransaction(context.TODO(), jsonEncodedRawTransactions[0])
 	assert.NoError(t, err)
 	assert.Equal(t, tx2Response.Transaction, JSONTx2)
+
+	// create a channel item
+	blockchain.ChannelCreationFeesFFG = 1
+	channelBytesStr, fees, err := fileDownloader1Client.CreateChannelNodeItemsTxDataPayload(context.TODO(), []internalrpc.NodeItemJSON{
+		{
+			Name:        "Filefilego Official Channel",
+			Owner:       kpFileDownloader1.Address,
+			Enabled:     true,
+			NodeType:    blockchain.NodeItemType_value["CHANNEL"],
+			Timestamp:   time.Now().Unix(),
+			Description: "Official Filefilego channel updates",
+		},
+	})
+	assert.NoError(t, err)
+	channelBytes, err := hexutil.Decode(channelBytesStr)
+	assert.NoError(t, err)
+	tx3 := transaction.Transaction{
+		PublicKey:       publicKeyBytesOfFileDownloader,
+		Nounce:          []byte{2},
+		Data:            channelBytes,
+		From:            kpFileDownloader1.Address,
+		To:              dataverifierAddr,
+		Value:           "0x1",
+		TransactionFees: fees,
+		Chain:           mainChain,
+	}
+	err = tx3.Sign(kpFileDownloader1.PrivateKey)
+	assert.NoError(t, err)
+	ok, err = tx3.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	JSONTx3 := internalrpc.JSONTransaction{
+		Hash:            hexutil.Encode(tx3.Hash),
+		Signature:       hexutil.Encode(tx3.Signature),
+		PublicKey:       hexutil.Encode(tx3.PublicKey),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx3.Nounce),
+		Data:            hexutil.Encode(tx3.Data),
+		From:            tx3.From,
+		To:              tx3.To,
+		Value:           tx3.Value,
+		TransactionFees: tx3.TransactionFees,
+		Chain:           hexutil.Encode(mainChain),
+	}
+
+	JSONTx3Bytes, err := encjson.Marshal(JSONTx3)
+	assert.NoError(t, err)
+	tx3Response, err := fileDownloader1Client.SendRawTransaction(context.TODO(), string(JSONTx3Bytes))
+	assert.NoError(t, err)
+	assert.Equal(t, JSONTx3.Hash, tx3Response.Transaction.Hash)
+
 	time.Sleep(200 * time.Millisecond)
 	mempoolTransactions := v1Bchain.GetTransactionsFromPool()
 	found := false
@@ -515,6 +567,12 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	err = n2.Sync(context.TODO())
 	assert.NoError(t, err)
+
+	// check if channel was created
+	channels, err := v1Client.ListChannels(context.TODO(), 10, 0)
+	assert.NoError(t, err)
+	assert.Len(t, channels.Channels, 1)
+	assert.Equal(t, "Filefilego Official Channel", channels.Channels[0].Name)
 
 	// fileDownloader1 downloads the files and asks the data verifier for decryption keys and restores the original files
 	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
