@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -16,8 +17,6 @@ import (
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	log "github.com/sirupsen/logrus"
 )
-
-// TODO: purge if old using a time window of x days
 
 const dataPrefix = "contract_data"
 
@@ -42,6 +41,7 @@ type Interface interface {
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
 	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
 	GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string
+	PurgeInactiveContracts(int64) error
 }
 
 // FileInfo represents a contract with the file information.
@@ -72,6 +72,7 @@ type bytesTransferStats struct {
 type Store struct {
 	db                   database.Database
 	fileContracts        map[string][]FileInfo
+	contractsCreatedAt   map[string]int64
 	contracts            map[string]*messages.DownloadContractProto
 	releasedContractFees map[string]struct{}
 	bytesTransfered      map[string]map[string]map[string]bytesTransferStats
@@ -83,6 +84,7 @@ type persistedData struct {
 	FileContracts        map[string][]FileInfo
 	Contracts            map[string]*messages.DownloadContractProto
 	ReleasedContractFees map[string]struct{}
+	ContractsCreatedAt   map[string]int64
 }
 
 // New constructs a contract store.
@@ -94,12 +96,43 @@ func New(db database.Database) (*Store, error) {
 	store := &Store{
 		db:                   db,
 		fileContracts:        make(map[string][]FileInfo),
+		contractsCreatedAt:   make(map[string]int64),
 		contracts:            make(map[string]*messages.DownloadContractProto),
 		releasedContractFees: make(map[string]struct{}),
 		bytesTransfered:      make(map[string]map[string]map[string]bytesTransferStats),
 	}
 
 	return store, nil
+}
+
+type contractTime struct {
+	contractHash string
+	timestamp    int64
+}
+
+// PurgeInactiveContracts removes inactive contracts
+// Purge after 5 days (60 * 60 * 24 * 5)
+func (c *Store) PurgeInactiveContracts(purgeAfterSeconds int64) error {
+	now := time.Now().Unix()
+
+	contracts := make([]contractTime, 0)
+	for contractHash, timestamp := range c.contractsCreatedAt {
+		if now-timestamp > purgeAfterSeconds {
+			contracts = append(contracts, contractTime{
+				contractHash: contractHash,
+				timestamp:    timestamp,
+			})
+		}
+	}
+
+	for _, v := range contracts {
+		err := c.DeleteContract(v.contractHash)
+		if err != nil {
+			log.Warnf("failed to purge contract %s : %s", v.contractHash, err.Error())
+		}
+	}
+
+	return nil
 }
 
 // SetFilePartDownloadError sets an error for a file part download.
@@ -259,6 +292,7 @@ func (c *Store) DeleteContract(contractHash string) error {
 	delete(c.fileContracts, contractHash)
 	delete(c.bytesTransfered, contractHash)
 	delete(c.releasedContractFees, contractHash)
+	delete(c.contractsCreatedAt, contractHash)
 
 	_ = c.persistToDB()
 
@@ -276,6 +310,8 @@ func (c *Store) CreateContract(contract *messages.DownloadContractProto) error {
 		return fmt.Errorf("contract already exists with %s hash", contractHash)
 	}
 
+	// use local unix time
+	c.contractsCreatedAt[contractHash] = time.Now().Unix()
 	c.contracts[contractHash] = contract
 	c.fileContracts[contractHash] = make([]FileInfo, 0)
 
@@ -619,6 +655,7 @@ func (c *Store) persistToDB() error {
 	enc := gob.NewEncoder(&buf)
 	data := persistedData{
 		FileContracts:        c.fileContracts,
+		ContractsCreatedAt:   c.contractsCreatedAt,
 		Contracts:            c.contracts,
 		ReleasedContractFees: c.releasedContractFees,
 	}
@@ -659,6 +696,7 @@ func (c *Store) LoadFromDB() error {
 	}
 
 	c.contracts = pd.Contracts
+	c.contractsCreatedAt = pd.ContractsCreatedAt
 	c.fileContracts = pd.FileContracts
 	c.releasedContractFees = pd.ReleasedContractFees
 

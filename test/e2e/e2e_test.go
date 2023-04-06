@@ -107,7 +107,7 @@ func TestE2E(t *testing.T) {
 	conf1.RPC.HTTP.Enabled = true
 	conf1.RPC.HTTP.ListenPort = 8090
 	conf1.RPC.EnabledServices = []string{"*"}
-	v1, v1Bchain, validator, kpV1 := createNode(t, "blockchain1.db", conf1, true)
+	v1, v1Bchain, validator, kpV1, _ := createNode(t, "blockchain1.db", conf1, true)
 	assert.NotNil(t, v1)
 	assert.Equal(t, uint64(0), v1Bchain.GetHeight())
 	assert.NotEmpty(t, kpV1.Address)
@@ -155,7 +155,7 @@ func TestE2E(t *testing.T) {
 	conf2.RPC.HTTP.Enabled = true
 	conf2.RPC.HTTP.ListenPort = 8091
 	conf2.RPC.EnabledServices = []string{"*"}
-	n1, n1Bchain, _, kpN1 := createNode(t, "blockchain2.db", conf2, false)
+	n1, n1Bchain, _, kpN1, _ := createNode(t, "blockchain2.db", conf2, false)
 	assert.NotNil(t, n1)
 	assert.Equal(t, uint64(0), n1Bchain.GetHeight())
 	assert.Len(t, n1.Peers(), 2)
@@ -203,7 +203,7 @@ func TestE2E(t *testing.T) {
 	conf3.RPC.HTTP.Enabled = true
 	conf3.RPC.HTTP.ListenPort = 8092
 	conf3.RPC.EnabledServices = []string{"*"}
-	n2, n2Bchain, _, _ := createNode(t, "blockchain3.db", conf3, false)
+	n2, n2Bchain, _, _, _ := createNode(t, "blockchain3.db", conf3, false)
 	assert.NotNil(t, n2)
 	assert.Equal(t, uint64(0), n2Bchain.GetHeight())
 	n2Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf3.RPC.HTTP.ListenAddress, conf3.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -245,7 +245,7 @@ func TestE2E(t *testing.T) {
 	conf4.Global.DataVerifierTransactionFees = "0x1"
 	halfFFG := currency.FFG().Div(currency.FFG(), big.NewInt(2)).String()
 	conf4.Global.DataVerifierVerificationFees = halfFFG
-	dv1, dv1Bchain, _, _ := createNode(t, "blockchain4.db", conf4, true)
+	dv1, dv1Bchain, _, _, _ := createNode(t, "blockchain4.db", conf4, true)
 	assert.NotNil(t, dv1)
 	assert.Equal(t, uint64(0), dv1Bchain.GetHeight())
 	dv1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf4.RPC.HTTP.ListenAddress, conf4.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -277,7 +277,7 @@ func TestE2E(t *testing.T) {
 	conf5.Global.DataVerifier = true
 	conf5.Global.DataVerifierTransactionFees = "0x1"
 	conf5.Global.DataVerifierVerificationFees = halfFFG
-	dv2, dv2Bchain, _, _ := createNode(t, "blockchain5.db", conf5, true)
+	dv2, dv2Bchain, _, _, _ := createNode(t, "blockchain5.db", conf5, true)
 	assert.NotNil(t, dv2)
 	assert.Equal(t, uint64(0), dv2Bchain.GetHeight())
 	dv2Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf5.RPC.HTTP.ListenAddress, conf5.RPC.HTTP.ListenPort), http.DefaultClient)
@@ -301,7 +301,7 @@ func TestE2E(t *testing.T) {
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095
 	conf6.RPC.EnabledServices = []string{"data_transfer", "transaction", "address", "channel"}
-	fileDownloader1, _, _, kpFileDownloader1 := createNode(t, "blockchain6.db", conf6, false)
+	fileDownloader1, _, _, kpFileDownloader1, fileDownloaderContractStore := createNode(t, "blockchain6.db", conf6, false)
 	assert.NotNil(t, fileDownloader1)
 	fileDownloader1Client, err := client.New(fmt.Sprintf("http://%s:%d/rpc", conf6.RPC.HTTP.ListenAddress, conf6.RPC.HTTP.ListenPort), http.DefaultClient)
 	assert.NoError(t, err)
@@ -651,9 +651,30 @@ func TestE2E(t *testing.T) {
 	shaOfFile2New, err := crypto.Sha1File(filepath.Join("restored_files", "randomfile2_again.txt"))
 	assert.NoError(t, err)
 	assert.Equal(t, shaOfFile2New, file2UploadResponse.FileHash)
+
+	// check the contract store of file downloader
+	retrivedContract, err := fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrivedContract)
+
+	// big time window shouldnt purge anything
+	err = fileDownloaderContractStore.PurgeInactiveContracts(20)
+	assert.NoError(t, err)
+
+	retrivedContract, err = fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)
+	assert.NoError(t, err)
+	assert.NotNil(t, retrivedContract)
+
+	// should purge
+	err = fileDownloaderContractStore.PurgeInactiveContracts(-10)
+	assert.NoError(t, err)
+
+	retrivedContract, err = fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)
+	assert.Error(t, err)
+	assert.Nil(t, retrivedContract)
 }
 
-func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair) {
+func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair, *contract.Store) {
 	ctx := context.Background()
 	randomEntropy, err := crypto.RandomEntropy(40)
 	assert.NoError(t, err)
@@ -894,7 +915,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 
 	time.Sleep(100 * time.Millisecond)
 
-	return ffgNode, bchain, blockValidator, kp
+	return ffgNode, bchain, blockValidator, kp, contractStore
 }
 
 // if * it means all services are allowed, otherwise a list of services will be scanned

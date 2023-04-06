@@ -48,6 +48,10 @@ const blockValidatorIntervalSeconds = 10
 
 const syncIntervalSeconds = 18
 
+const purgeContractStoreIntervalSeconds = 60 * 60
+
+const purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
+
 const triggerSyncSinceLastUpdateSeconds = 15
 
 func main() {
@@ -362,6 +366,17 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup contract store: %w", err)
 	}
+
+	// periodically purge inactive contracts
+	go func() {
+		for {
+			<-time.After(purgeContractStoreIntervalSeconds * time.Second)
+			err := contractStore.PurgeInactiveContracts(purgeConstractStoreTimeWindowSeconds)
+			if err != nil {
+				log.Warnf("failed to purge contract store: %s", err.Error())
+			}
+		}
+	}()
 
 	dataVerificationProtocol, err := dataverification.New(
 		host,
