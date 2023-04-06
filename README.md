@@ -1,5 +1,7 @@
 # FileFileGo v1 Decentralized Network
 
+[![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/7190/badge)](https://bestpractices.coreinfrastructure.org/projects/7190)
+
 The FileFileGo protocol is a peer-to-peer data-sharing network designed for the web3 era, with an incentive mechanism, full-text search, storage, and indexing/tracking. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
 
 As the internet has grown, it has become increasingly vulnerable to censorship and control by large corporations and ISPs. Governments have also attempted to regulate the flow of information online, making it challenging for informational platforms to operate without interruption. The FileFileGo protocol was developed to address these issues and enable users to access and share information freely.
