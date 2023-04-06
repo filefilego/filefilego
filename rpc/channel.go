@@ -8,6 +8,8 @@ import (
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/search"
+	"github.com/filefilego/filefilego/transaction"
+	"google.golang.org/protobuf/proto"
 )
 
 // ChannelAPI represents the channel rpc service.
@@ -63,6 +65,138 @@ func (api *ChannelAPI) List(r *http.Request, args *ListArgs, response *ListRespo
 	return nil
 }
 
+// CreateNodeItemsTxDataPayloadArgs is a create channel node item request payload.
+type CreateNodeItemsTxDataPayloadArgs struct {
+	Nodes []NodeItemJSON `json:"nodes"`
+}
+
+// CreateNodeItemsTxDataPayloadResponse is a response which contains the transaction data payload for creating the channel node items.
+// It contains the required fees for creating the provided node items based on their type.
+type CreateNodeItemsTxDataPayloadResponse struct {
+	TransactionDataPayloadHex string `json:"transaction_data_payload_hex"`
+	TotalFeesRequired         string `json:"total_fees_required"`
+}
+
+// CreateNodeItemsTxDataPayload a channel node items that returns the transaction data payload, which in turn can be used in a transaction data payload.
+func (api *ChannelAPI) CreateNodeItemsTxDataPayload(r *http.Request, args *CreateNodeItemsTxDataPayloadArgs, response *CreateNodeItemsTxDataPayloadResponse) error {
+	if len(args.Nodes) == 0 {
+		return errors.New("empty node items")
+	}
+
+	nodesEnvelope := blockchain.NodeItems{
+		Nodes: make([]*blockchain.NodeItem, 0),
+	}
+
+	for _, v := range args.Nodes {
+		item := blockchain.NodeItem{
+			Name:       v.Name,
+			Enabled:    v.Enabled,
+			NodeType:   blockchain.NodeItemType(v.NodeType),
+			Timestamp:  v.Timestamp,
+			Admins:     make([][]byte, 0),
+			Posters:    make([][]byte, 0),
+			Attributes: make([][]byte, 0),
+		}
+
+		if v.NodeHash != "" {
+			nodeHash, err := hexutil.Decode(v.NodeHash)
+			if err != nil {
+				return fmt.Errorf("failed to decode node hash: %w", err)
+			}
+			item.NodeHash = nodeHash
+		}
+
+		if v.ParentHash != "" {
+			parentHash, err := hexutil.Decode(v.ParentHash)
+			if err != nil {
+				return fmt.Errorf("failed to decode parent hash: %w", err)
+			}
+			item.ParentHash = parentHash
+		}
+
+		if v.Owner != "" {
+			owner, err := hexutil.Decode(v.Owner)
+			if err != nil {
+				return fmt.Errorf("failed to decode owner: %w", err)
+			}
+			item.Owner = owner
+		}
+
+		if v.MerkleRoot != "" {
+			merkleRoot, err := hexutil.Decode(v.MerkleRoot)
+			if err != nil {
+				return fmt.Errorf("failed to decode merkle root hash: %w", err)
+			}
+			item.MerkleRoot = merkleRoot
+		}
+
+		if v.FileHash != "" {
+			fileHash, err := hexutil.Decode(v.FileHash)
+			if err != nil {
+				return fmt.Errorf("failed to decode file hash: %w", err)
+			}
+			item.FileHash = fileHash
+		}
+
+		if v.ContentType != "" {
+			item.ContentType = &v.ContentType
+		}
+
+		if v.Description != "" {
+			item.Description = &v.Description
+		}
+
+		if v.Size != 0 {
+			item.Size = &v.Size
+		}
+
+		for _, v := range v.Admins {
+			adm, err := hexutil.Decode(v)
+			if err != nil {
+				return fmt.Errorf("failed to decode admin address: %w", err)
+			}
+			item.Admins = append(item.Admins, adm)
+		}
+
+		for _, v := range v.Posters {
+			poster, err := hexutil.Decode(v)
+			if err != nil {
+				return fmt.Errorf("failed to decode poster address: %w", err)
+			}
+			item.Posters = append(item.Posters, poster)
+		}
+
+		for _, v := range v.Attributes {
+			item.Attributes = append(item.Attributes, []byte(v))
+		}
+
+		nodesEnvelope.Nodes = append(nodesEnvelope.Nodes, &item)
+	}
+
+	totalFeesRequired := blockchain.CalculateChannelActionsFees(nodesEnvelope.Nodes)
+	nodeEnvelopeBytes, err := proto.Marshal(&nodesEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed to marshal nodes envelope: %w", err)
+	}
+
+	dataPayload := transaction.DataPayload{
+		Type:    transaction.DataType_CREATE_NODE,
+		Payload: make([]byte, len(nodeEnvelopeBytes)),
+	}
+
+	copy(dataPayload.Payload, nodeEnvelopeBytes)
+
+	dataPayloadBytes, err := proto.Marshal(&dataPayload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal transaction data payload: %w", err)
+	}
+
+	response.TransactionDataPayloadHex = hexutil.Encode(dataPayloadBytes)
+	response.TotalFeesRequired = hexutil.EncodeBig(totalFeesRequired)
+
+	return nil
+}
+
 // SearchArgs is a search args.
 type SearchArgs struct {
 	Query       string `json:"query"`
@@ -111,7 +245,7 @@ type NodeItemJSON struct {
 	NodeHash    string   `json:"node_hash"`
 	Owner       string   `json:"owner"`
 	Enabled     bool     `json:"enabled"`
-	NodeType    string   `json:"node_type"`
+	NodeType    int32    `json:"node_type"`
 	Attributes  []string `json:"attributes"`
 	Admins      []string `json:"admins"`
 	Posters     []string `json:"posters"`
@@ -195,7 +329,7 @@ func transformNodeItemToJSON(item *blockchain.NodeItem) NodeItemJSON {
 		NodeHash:   hexutil.Encode(item.NodeHash),
 		Owner:      hexutil.Encode(item.Owner),
 		Enabled:    item.Enabled,
-		NodeType:   item.NodeType.String(),
+		NodeType:   int32(item.NodeType),
 		Timestamp:  item.Timestamp,
 		MerkleRoot: hexutil.Encode(item.MerkleRoot),
 		FileHash:   hexutil.EncodeNoPrefix(item.FileHash),

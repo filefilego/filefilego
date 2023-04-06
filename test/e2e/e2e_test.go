@@ -330,7 +330,7 @@ func TestE2E(t *testing.T) {
 		Data:            []byte{0},
 		From:            kpV1.Address,
 		To:              kpFileDownloader1.Address,
-		Value:           hexutil.EncodeBig(currency.FFG()),
+		Value:           hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))),
 		TransactionFees: "0x1",
 		Chain:           mainChain,
 	}
@@ -363,7 +363,7 @@ func TestE2E(t *testing.T) {
 	assert.Equal(t, uint64(2), v1Bchain.GetHeight())
 	fileDownloader1Balance, err := v1Client.Balance(context.TODO(), kpFileDownloader1.Address)
 	assert.NoError(t, err)
-	assert.Equal(t, "0x"+currency.FFG().Text(16), fileDownloader1Balance.BalanceHex)
+	assert.Equal(t, "0x"+currency.FFG().Mul(currency.FFG(), big.NewInt(5)).Text(16), fileDownloader1Balance.BalanceHex)
 	// fileDownloader1 sends data query request of both files
 	hashOfDataQuery, err := fileDownloader1Client.SendDataQueryRequest(context.TODO(), []string{file2UploadResponse.FileHash, file1UploadResponse.FileHash})
 	assert.NoError(t, err)
