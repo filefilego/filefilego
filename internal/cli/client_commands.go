@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -113,7 +112,7 @@ var ClientCommand = &cli.Command{
 		},
 		{
 			Name:   "download",
-			Usage:  "download <contract_hash1> <file_hash> <file_size>",
+			Usage:  "download <contract_hash1> <file_hash>",
 			Action: DownloadFile,
 			Flags:  []cli.Flag{},
 			Description: `
@@ -625,17 +624,19 @@ func DownloadFile(ctx *cli.Context) error {
 		return errors.New("file hash is empty")
 	}
 
-	fileSize := ctx.Args().Get(2)
-	if fileSize == "" {
-		return errors.New("file size is empty")
-	}
-
-	sizeOfFile, err := strconv.ParseUint(fileSize, 10, 64)
+	downloadContract, err := ffgclient.GetDownloadContract(ctx.Context, downloadContractHash)
 	if err != nil {
-		return fmt.Errorf("failed to parse file size: %w", err)
+		return fmt.Errorf("failed to get download contract: %w", err)
 	}
 
-	stats, err := ffgclient.DownloadFile(ctx.Context, downloadContractHash, fileHash, sizeOfFile)
+	sizeOfFile := uint64(0)
+	for i, v := range downloadContract.Contract.FileHashesNeeded {
+		if v == fileHash {
+			sizeOfFile = downloadContract.Contract.FileHashesNeededSizes[i]
+		}
+	}
+
+	stats, err := ffgclient.DownloadFile(ctx.Context, downloadContractHash, fileHash)
 	if err != nil {
 		return fmt.Errorf("failed to start downloading file: %w", err)
 	}

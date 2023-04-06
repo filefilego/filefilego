@@ -366,7 +366,6 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
 	FileHash     string `json:"file_hash"`
-	FileSize     uint64 `json:"file_size"`
 }
 
 // DownloadFileArgs represents a response.
@@ -391,11 +390,18 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		return fmt.Errorf("failed to decode file hoster's peer id: %w", err)
 	}
 
+	fileSize := uint64(0)
+	for i, v := range downloadContract.FileHashesNeeded {
+		if bytes.Equal(v, fileHash) {
+			fileSize = downloadContract.FileHashesNeededSizes[i]
+		}
+	}
+
 	// trigger a file initialization by seting the size of the file
-	api.contractStore.SetFileSize(args.ContractHash, fileHash, args.FileSize)
+	api.contractStore.SetFileSize(args.ContractHash, fileHash, fileSize)
 
 	go func() {
-		fileRanges := createFileRanges(int64(args.FileSize))
+		fileRanges := createFileRanges(int64(fileSize))
 		wg := sync.WaitGroup{}
 		for _, v := range fileRanges {
 			v := v
@@ -404,7 +410,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 				request := &messages.FileTransferInfoProto{
 					ContractHash: downloadContract.ContractHash,
 					FileHash:     fileHash,
-					FileSize:     args.FileSize,
+					FileSize:     fileSize,
 					From:         fileRange.from,
 					To:           fileRange.to,
 				}
@@ -421,8 +427,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		wg.Wait()
 		// check if all file parts have been downloaded
 		totalDownloaded := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
-		if totalDownloaded != args.FileSize {
-			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("total downloaded parts size (%d) is not equal to the file size (%d)", totalDownloaded, args.FileSize))
+		if totalDownloaded != fileSize {
+			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("total downloaded parts size (%d) is not equal to the file size (%d)", totalDownloaded, fileSize))
 			return
 		}
 
