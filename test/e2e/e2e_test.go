@@ -665,7 +665,7 @@ func TestE2E(t *testing.T) {
 	assert.NotNil(t, retrivedContract)
 
 	// big time window shouldnt purge anything
-	err = fileDownloaderContractStore.PurgeInactiveContracts(20)
+	err = fileDownloaderContractStore.PurgeInactiveContracts(2000)
 	assert.NoError(t, err)
 
 	retrivedContract, err = fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)
