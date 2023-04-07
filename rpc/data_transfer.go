@@ -366,6 +366,7 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
 	FileHash     string `json:"file_hash"`
+	ReDownload   bool   `json:"re_download"`
 }
 
 // DownloadFileArgs represents a response.
@@ -401,6 +402,26 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	api.contractStore.SetFileSize(args.ContractHash, fileHash, fileSize)
 
 	go func() {
+		if args.ReDownload {
+			// cancel all pending contexts
+			_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)
+
+			// delete all the downloaded file parts
+			fileParts := api.contractStore.GetDownoadedFilePartNames(args.ContractHash, fileHash)
+			for _, v := range fileParts {
+				err := os.Remove(v)
+				if err != nil {
+					log.Warnf("failed to remove old downloaded file part %s : %v", v, err)
+				}
+			}
+
+			// reset the file bytes transfered
+			err := api.contractStore.ResetTransferedBytes(args.ContractHash, fileHash)
+			if err != nil {
+				log.Warnf("failed to rest file transfered bytes: %v", err)
+			}
+		}
+
 		fileRanges := createFileRanges(int64(fileSize))
 		wg := sync.WaitGroup{}
 		for _, v := range fileRanges {
@@ -415,16 +436,27 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 					To:           fileRange.to,
 				}
 
-				_, err := api.dataVerificationProtocol.RequestFileTransfer(context.Background(), fileHoster, request)
-				if err != nil {
-					fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
+				ctxWithCancel, cancel := context.WithCancel(context.Background())
+				api.contractStore.SetContractFileDownloadContexts(args.ContractHash+args.FileHash, contract.ContextFileDownloadData{
+					From:   fileRange.from,
+					To:     fileRange.to,
+					Ctx:    ctxWithCancel,
+					Cancel: cancel,
+				})
+
+				_, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, fileHoster, request)
+				// if the context wasnt canceled set the error
+				if err != nil && !errors.Is(err, context.Canceled) {
+					fileHashHex := hexutil.EncodeNoPrefix(fileHash)
 					fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
 					api.contractStore.SetFilePartDownloadError(args.ContractHash, fileHash, fileNameWithPart, err.Error())
 				}
+
 				wg.Done()
 			}(v)
 		}
 		wg.Wait()
+
 		// check if all file parts have been downloaded
 		totalDownloaded := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
 		if totalDownloaded != fileSize {

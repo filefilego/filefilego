@@ -1206,7 +1206,8 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, fileHosterID peer.ID
 			if wroteN != n || err != nil {
 				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 			}
-			d.contractStore.IncrementTransferedBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, uint64(wroteN))
+
+			d.contractStore.IncrementTransferedBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, request.To, uint64(wroteN))
 		}
 
 		if err == io.EOF {
