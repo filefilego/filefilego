@@ -2,6 +2,7 @@ package contract
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -34,7 +35,7 @@ type Interface interface {
 	ReleaseContractFees(contractHash string)
 	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
-	IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange int64, count uint64)
+	IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64)
 	SetFilePartDownloadError(contractHash string, fileHash []byte, fileNamePart, errorMessage string)
 	GetTransferedBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
@@ -42,6 +43,9 @@ type Interface interface {
 	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
 	GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string
 	PurgeInactiveContracts(int64) error
+	SetContractFileDownloadContexts(key string, ctxData ContextFileDownloadData)
+	CancelContractFileDownloadContexts(key string) error
+	ResetTransferedBytes(contractHash string, fileHash []byte) error
 }
 
 // FileInfo represents a contract with the file information.
@@ -62,22 +66,33 @@ type FileInfo struct {
 
 type bytesTransferStats struct {
 	FromByteRange       int64
+	ToByteRange         int64
 	DestinationFilePath string
 	FilePartName        string
 	BytesTransfer       uint64
 	ErrorMessage        string
 }
 
+// ContextFileDownloadData
+type ContextFileDownloadData struct {
+	From   int64
+	To     int64
+	Ctx    context.Context
+	Cancel context.CancelFunc
+}
+
 // Store represents the contract stores.
 type Store struct {
-	db                   database.Database
-	fileContracts        map[string][]FileInfo
-	contractsCreatedAt   map[string]int64
-	contracts            map[string]*messages.DownloadContractProto
-	releasedContractFees map[string]struct{}
-	bytesTransfered      map[string]map[string]map[string]bytesTransferStats
-	mu                   sync.RWMutex
-	muRC                 sync.RWMutex
+	db            database.Database
+	fileContracts map[string][]FileInfo
+	// contractfileDownloadContxts map key is contractHash + fileHash
+	contractfileDownloadContxts map[string][]ContextFileDownloadData
+	contractsCreatedAt          map[string]int64
+	contracts                   map[string]*messages.DownloadContractProto
+	releasedContractFees        map[string]struct{}
+	bytesTransfered             map[string]map[string]map[string]bytesTransferStats
+	mu                          sync.RWMutex
+	muRC                        sync.RWMutex
 }
 
 type persistedData struct {
@@ -94,15 +109,51 @@ func New(db database.Database) (*Store, error) {
 	}
 
 	store := &Store{
-		db:                   db,
-		fileContracts:        make(map[string][]FileInfo),
-		contractsCreatedAt:   make(map[string]int64),
-		contracts:            make(map[string]*messages.DownloadContractProto),
-		releasedContractFees: make(map[string]struct{}),
-		bytesTransfered:      make(map[string]map[string]map[string]bytesTransferStats),
+		db:                          db,
+		fileContracts:               make(map[string][]FileInfo),
+		contractfileDownloadContxts: make(map[string][]ContextFileDownloadData),
+		contractsCreatedAt:          make(map[string]int64),
+		contracts:                   make(map[string]*messages.DownloadContractProto),
+		releasedContractFees:        make(map[string]struct{}),
+		bytesTransfered:             make(map[string]map[string]map[string]bytesTransferStats),
 	}
 
 	return store, nil
+}
+
+// CancelContractFileDownloadContexts cancels all the contexts file part downloads.
+func (c *Store) CancelContractFileDownloadContexts(key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	cfDownloadContexts, ok := c.contractfileDownloadContxts[key]
+	if !ok {
+		return errors.New("contractFileHash not found")
+	}
+
+	for _, v := range cfDownloadContexts {
+		v.Cancel()
+	}
+
+	delete(c.contractfileDownloadContxts, key)
+
+	return nil
+}
+
+// SetContractFileDownloadContexts stores the contexts for downloading file parts.
+// these contexts can be canceled in future.
+func (c *Store) SetContractFileDownloadContexts(key string, ctxData ContextFileDownloadData) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	cfDownloadContexts, ok := c.contractfileDownloadContxts[key]
+	if !ok {
+		c.contractfileDownloadContxts[key] = []ContextFileDownloadData{ctxData}
+		return
+	}
+
+	cfDownloadContexts = append(cfDownloadContexts, ctxData)
+	c.contractfileDownloadContxts[key] = cfDownloadContexts
 }
 
 type contractTime struct {
@@ -174,8 +225,24 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
 }
 
+// ResetTransferedBytes resets file transfer bytes to zero.
+func (c *Store) ResetTransferedBytes(contractHash string, fileHash []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fh := hexutil.EncodeNoPrefix(fileHash)
+	ch, ok := c.bytesTransfered[contractHash]
+	if !ok {
+		return errors.New("contract was not found")
+	}
+
+	delete(ch, fh)
+	c.bytesTransfered[contractHash] = ch
+	return nil
+}
+
 // IncrementTransferedBytes increments the number of bytes transfered for a file.
-func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange int64, count uint64) {
+func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -186,6 +253,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 		c.bytesTransfered[contractHash] = make(map[string]map[string]bytesTransferStats)
 		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
+			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
 			DestinationFilePath: destinationFilePath,
 			BytesTransfer:       count,
@@ -197,6 +265,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 	if !ok {
 		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
+			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
 			DestinationFilePath: destinationFilePath,
 			BytesTransfer:       count,
@@ -208,6 +277,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 	if !ok {
 		c.bytesTransfered[contractHash][fh][fileNamePart] = bytesTransferStats{
 			FromByteRange:       filePartFromRange,
+			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
 			DestinationFilePath: destinationFilePath,
 			BytesTransfer:       count,

@@ -575,11 +575,18 @@ func TestE2E(t *testing.T) {
 	assert.Equal(t, "Filefilego Official Channel", channels.Channels[0].Name)
 
 	// fileDownloader1 downloads the files and asks the data verifier for decryption keys and restores the original files
-	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
+	stats1, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "started", stats1)
+
+	// redownload file 1
+	time.Sleep(1 * time.Second)
+	stats1, err = fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash, true)
+	assert.NoError(t, err)
+	assert.Equal(t, "started", stats1)
+
 	time.Sleep(10 * time.Second)
-	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
+	stats2, err := fileDownloader1Client.DownloadFile(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "started", stats2)
 	time.Sleep(1 * time.Second)
@@ -658,7 +665,7 @@ func TestE2E(t *testing.T) {
 	assert.NotNil(t, retrivedContract)
 
 	// big time window shouldnt purge anything
-	err = fileDownloaderContractStore.PurgeInactiveContracts(20)
+	err = fileDownloaderContractStore.PurgeInactiveContracts(2000)
 	assert.NoError(t, err)
 
 	retrivedContract, err = fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)

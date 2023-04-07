@@ -636,7 +636,7 @@ func DownloadFile(ctx *cli.Context) error {
 		}
 	}
 
-	stats, err := ffgclient.DownloadFile(ctx.Context, downloadContractHash, fileHash)
+	stats, err := ffgclient.DownloadFile(ctx.Context, downloadContractHash, fileHash, false)
 	if err != nil {
 		return fmt.Errorf("failed to start downloading file: %w", err)
 	}
