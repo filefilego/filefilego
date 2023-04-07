@@ -44,15 +44,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const blockValidatorIntervalSeconds = 10
-
-const syncIntervalSeconds = 18
-
-const purgeContractStoreIntervalSeconds = 60 * 60
-
-const purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
-
-const triggerSyncSinceLastUpdateSeconds = 15
+const (
+	blockValidatorIntervalSeconds        = 10
+	syncIntervalSeconds                  = 18
+	purgeContractStoreIntervalSeconds    = 60 * 60
+	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
+	triggerSyncSinceLastUpdateSeconds    = 15
+)
 
 func main() {
 	app := &cli.App{}
