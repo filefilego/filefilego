@@ -41,7 +41,7 @@ type Interface interface {
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
 	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
-	GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string
+	GetDownoadedFilePartInfos(contractHash string, fileHash []byte) []BytesTransferStats
 	PurgeInactiveContracts(int64) error
 	SetContractFileDownloadContexts(key string, ctxData ContextFileDownloadData)
 	CancelContractFileDownloadContexts(key string) error
@@ -64,7 +64,8 @@ type FileInfo struct {
 	FileDecryptionStatus                  FileDecryptionStatus
 }
 
-type bytesTransferStats struct {
+// BytesTransferStats represents the metadata of a transfered data file part.
+type BytesTransferStats struct {
 	FromByteRange       int64
 	ToByteRange         int64
 	DestinationFilePath string
@@ -90,16 +91,27 @@ type Store struct {
 	contractsCreatedAt          map[string]int64
 	contracts                   map[string]*messages.DownloadContractProto
 	releasedContractFees        map[string]struct{}
-	bytesTransfered             map[string]map[string]map[string]bytesTransferStats
+	bytesTransfered             map[string]map[string]map[string]BytesTransferStats
 	mu                          sync.RWMutex
 	muRC                        sync.RWMutex
 }
+
+// FileDecryptionStatus represents the file decryption status.
+type FileDecryptionStatus string
+
+const (
+	FileNotDecrypted    FileDecryptionStatus = ""
+	FileDecrypted       FileDecryptionStatus = "decrypted"
+	FileDecrypting      FileDecryptionStatus = "decrypting"
+	FileDecryptionError FileDecryptionStatus = "decryption_error"
+)
 
 type persistedData struct {
 	FileContracts        map[string][]FileInfo
 	Contracts            map[string]*messages.DownloadContractProto
 	ReleasedContractFees map[string]struct{}
 	ContractsCreatedAt   map[string]int64
+	BytesTransfered      map[string]map[string]map[string]BytesTransferStats
 }
 
 // New constructs a contract store.
@@ -115,7 +127,7 @@ func New(db database.Database) (*Store, error) {
 		contractsCreatedAt:          make(map[string]int64),
 		contracts:                   make(map[string]*messages.DownloadContractProto),
 		releasedContractFees:        make(map[string]struct{}),
-		bytesTransfered:             make(map[string]map[string]map[string]bytesTransferStats),
+		bytesTransfered:             make(map[string]map[string]map[string]BytesTransferStats),
 	}
 
 	return store, nil
@@ -195,8 +207,8 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 	_, ok := c.bytesTransfered[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]map[string]bytesTransferStats)
-		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+		c.bytesTransfered[contractHash] = make(map[string]map[string]BytesTransferStats)
+		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}}
@@ -205,7 +217,7 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 
 	_, ok = c.bytesTransfered[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}}
@@ -214,7 +226,7 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 
 	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
 	if !ok {
-		c.bytesTransfered[contractHash][fh][fileNamePart] = bytesTransferStats{
+		c.bytesTransfered[contractHash][fh][fileNamePart] = BytesTransferStats{
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}
@@ -250,8 +262,8 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 	_, ok := c.bytesTransfered[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]map[string]bytesTransferStats)
-		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+		c.bytesTransfered[contractHash] = make(map[string]map[string]BytesTransferStats)
+		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -263,7 +275,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 
 	_, ok = c.bytesTransfered[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = map[string]bytesTransferStats{fileNamePart: {
+		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -275,7 +287,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 
 	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
 	if !ok {
-		c.bytesTransfered[contractHash][fh][fileNamePart] = bytesTransferStats{
+		c.bytesTransfered[contractHash][fh][fileNamePart] = BytesTransferStats{
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -285,13 +297,14 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 		return
 	}
 
+	filePartStats.FromByteRange += filePartFromRange
 	filePartStats.BytesTransfer += count
 
 	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
 }
 
-// GetDownoadedFilePartNames gets the downloaded file parts names in order.
-func (c *Store) GetDownoadedFilePartNames(contractHash string, fileHash []byte) []string {
+// GetDownoadedFilePartInfos gets the downloaded file part infos.
+func (c *Store) GetDownoadedFilePartInfos(contractHash string, fileHash []byte) []BytesTransferStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -299,19 +312,14 @@ func (c *Store) GetDownoadedFilePartNames(contractHash string, fileHash []byte) 
 
 	d := c.bytesTransfered[contractHash][fh]
 
-	allFiles := make([]bytesTransferStats, 0)
+	allFiles := make([]BytesTransferStats, 0)
 
 	for _, v := range d {
 		allFiles = append(allFiles, v)
 	}
-	sort.Slice(allFiles, func(i, j int) bool { return allFiles[i].FromByteRange < allFiles[j].FromByteRange })
+	sort.Slice(allFiles, func(i, j int) bool { return allFiles[i].ToByteRange < allFiles[j].ToByteRange })
 
-	finalPartNames := make([]string, len(allFiles))
-	for i, v := range allFiles {
-		finalPartNames[i] = v.DestinationFilePath
-	}
-
-	return finalPartNames
+	return allFiles
 }
 
 // GetTransferedBytes gets the transfered bytes for a file.
@@ -437,16 +445,6 @@ func (c *Store) GetContractFiles(contractHash string) ([]FileInfo, error) {
 
 	return filesInfos, nil
 }
-
-// FileDecryptionStatus represents the file decryption status.
-type FileDecryptionStatus string
-
-const (
-	FileNotDecrypted    FileDecryptionStatus = ""
-	FileDecrypted       FileDecryptionStatus = "decrypted"
-	FileDecrypting      FileDecryptionStatus = "decrypting"
-	FileDecryptionError FileDecryptionStatus = "decryption_error"
-)
 
 // SetFileDecryptionStatus sets a file encryption status.
 func (c *Store) SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus) {
@@ -728,6 +726,7 @@ func (c *Store) persistToDB() error {
 		ContractsCreatedAt:   c.contractsCreatedAt,
 		Contracts:            c.contracts,
 		ReleasedContractFees: c.releasedContractFees,
+		BytesTransfered:      c.bytesTransfered,
 	}
 	err := enc.Encode(data)
 	if err != nil {
@@ -769,8 +768,15 @@ func (c *Store) LoadFromDB() error {
 	c.contractsCreatedAt = pd.ContractsCreatedAt
 	c.fileContracts = pd.FileContracts
 	c.releasedContractFees = pd.ReleasedContractFees
+	c.bytesTransfered = pd.BytesTransfered
 
 	return nil
+}
+
+type contractFiles struct {
+	Hash      string
+	Message   *messages.DownloadContractProto
+	FileInfos []FileInfo
 }
 
 // Debug serves the internal state
@@ -786,12 +792,6 @@ func (c *Store) Debug(w http.ResponseWriter, r *http.Request) {
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	type contractFiles struct {
-		Hash      string
-		Message   *messages.DownloadContractProto
-		FileInfos []FileInfo
-	}
 
 	allContracts := make([]contractFiles, 0)
 	log.Info("geting all contracts and their files")

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -362,6 +363,34 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 	return nil
 }
 
+// PauseFileDownloadArgs represent args.
+type PauseFileDownloadArgs struct {
+	ContractHash string `json:"contract_hash"`
+	FileHash     string `json:"file_hash"`
+}
+
+// PauseFileDownloadResponse represent response.
+type PauseFileDownloadResponse struct {
+	Status string `json:"status"`
+}
+
+// PauseFileDownload pauses a file download.
+func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDownloadArgs, response *PauseFileDownloadResponse) error {
+	_, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	_, err = hexutil.DecodeNoPrefix(args.FileHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode file hash: %w", err)
+	}
+
+	_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)
+
+	return nil
+}
+
 // DownloadFileArgs represent args.
 type DownloadFileArgs struct {
 	ContractHash string `json:"contract_hash"`
@@ -398,6 +427,10 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		}
 	}
 
+	if fileSize == 0 {
+		return fmt.Errorf("file size is zero")
+	}
+
 	// trigger a file initialization by seting the size of the file
 	api.contractStore.SetFileSize(args.ContractHash, fileHash, fileSize)
 
@@ -407,11 +440,11 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 			_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)
 
 			// delete all the downloaded file parts
-			fileParts := api.contractStore.GetDownoadedFilePartNames(args.ContractHash, fileHash)
+			fileParts := api.contractStore.GetDownoadedFilePartInfos(args.ContractHash, fileHash)
 			for _, v := range fileParts {
-				err := os.Remove(v)
+				err := os.Remove(v.DestinationFilePath)
 				if err != nil {
-					log.Warnf("failed to remove old downloaded file part %s : %v", v, err)
+					log.Warnf("failed to remove old downloaded file part %s : %v", v.DestinationFilePath, err)
 				}
 			}
 
@@ -422,33 +455,58 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 			}
 		}
 
+		// create initial file ranges
 		fileRanges := createFileRanges(int64(fileSize))
+
+		// create file ranges from downloaded file parts
+		fileRangesFromDownloadedParts, err := getDownloadedPartsInfo(filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), args.ContractHash))
+		if err == nil && len(fileRanges) == len(fileRangesFromDownloadedParts) {
+			// if no error
+			for i, v := range fileRanges {
+				for _, fr := range fileRangesFromDownloadedParts {
+					if v.from == fr.from && v.to == fr.to {
+						fileRanges[i].availableSize = fr.availableSize
+					}
+				}
+			}
+		}
+
 		wg := sync.WaitGroup{}
 		for _, v := range fileRanges {
 			v := v
+
+			// skip the parts which are already downloaded
+			if v.to-v.from+1 == v.availableSize {
+				continue
+			}
+
 			wg.Add(1)
 			go func(fileRange FileRanges) {
 				request := &messages.FileTransferInfoProto{
 					ContractHash: downloadContract.ContractHash,
 					FileHash:     fileHash,
 					FileSize:     fileSize,
-					From:         fileRange.from,
+					From:         fileRange.from + fileRange.availableSize,
 					To:           fileRange.to,
 				}
 
 				ctxWithCancel, cancel := context.WithCancel(context.Background())
 				api.contractStore.SetContractFileDownloadContexts(args.ContractHash+args.FileHash, contract.ContextFileDownloadData{
-					From:   fileRange.from,
+					From:   fileRange.from + fileRange.availableSize,
 					To:     fileRange.to,
 					Ctx:    ctxWithCancel,
 					Cancel: cancel,
 				})
 
-				_, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, fileHoster, request)
+				fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
+				fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, fileRange.from, fileRange.to)
+				destinationFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(request.ContractHash), fileNameWithPart)
+
+				_, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, destinationFilePath, fileNameWithPart, fileHoster, request)
 				// if the context wasnt canceled set the error
 				if err != nil && !errors.Is(err, context.Canceled) {
 					fileHashHex := hexutil.EncodeNoPrefix(fileHash)
-					fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
+					fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, fileRange.from, fileRange.to)
 					api.contractStore.SetFilePartDownloadError(args.ContractHash, fileHash, fileNameWithPart, err.Error())
 				}
 
@@ -465,9 +523,13 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		}
 
 		// reassemble all file parts
-		fileParts := api.contractStore.GetDownoadedFilePartNames(args.ContractHash, fileHash)
-		outputFilePath := filepath.Join(filepath.Dir(fileParts[0]), args.FileHash)
+		filePartInfos := api.contractStore.GetDownoadedFilePartInfos(args.ContractHash, fileHash)
+		outputFilePath := filepath.Join(filepath.Dir(filePartInfos[0].DestinationFilePath), args.FileHash)
 		log.Info("outputfile path ", outputFilePath)
+		fileParts := make([]string, len(filePartInfos))
+		for i, v := range filePartInfos {
+			fileParts[i] = v.DestinationFilePath
+		}
 		err = common.ConcatenateFiles(outputFilePath, fileParts)
 		if err != nil {
 			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("failed to concatenate downloaded file parts: %s", err.Error()))
@@ -488,10 +550,52 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	return nil
 }
 
+func getDownloadedPartsInfo(downloadedPartsFolder string) ([]FileRanges, error) {
+	filesRanges := make([]FileRanges, 0)
+	f, err := os.Open(downloadedPartsFolder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open downloaded parts folder: %w", err)
+	}
+
+	fileInfo, err := f.Readdir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read downloaded parts folder content: %w", err)
+	}
+	f.Close()
+
+	for _, file := range fileInfo {
+		fileParts := strings.Split(file.Name(), "_part_")
+		if len(fileParts) == 2 {
+			fromToParts := strings.Split(fileParts[1], "_")
+			if len(fromToParts) == 2 {
+				from, err := strconv.ParseInt(fromToParts[0], 10, 64)
+				if err != nil {
+					continue
+				}
+				to, err := strconv.ParseInt(fromToParts[1], 10, 64)
+				if err != nil {
+					continue
+				}
+
+				tmpRange := FileRanges{
+					from:          from,
+					to:            to,
+					availableSize: file.Size(),
+				}
+				filesRanges = append(filesRanges, tmpRange)
+			}
+		}
+	}
+
+	sort.Slice(filesRanges, func(i, j int) bool { return filesRanges[i].to < filesRanges[j].to })
+
+	return filesRanges, nil
+}
+
 type FileRanges struct {
-	from int64
-	to   int64
-	idx  int
+	from          int64
+	to            int64
+	availableSize int64
 }
 
 func createFileRanges(fileSize int64) []FileRanges {
@@ -503,7 +607,6 @@ func createFileRanges(fileSize int64) []FileRanges {
 		ranges = append(ranges, FileRanges{
 			from: 0,
 			to:   fileSize - 1,
-			idx:  0,
 		})
 		return ranges
 	}
@@ -520,7 +623,6 @@ func createFileRanges(fileSize int64) []FileRanges {
 		ranges = append(ranges, FileRanges{
 			from: start,
 			to:   end,
-			idx:  i,
 		})
 	}
 
