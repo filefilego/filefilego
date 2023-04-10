@@ -318,6 +318,67 @@ func (cli *Client) DownloadFile(ctx context.Context, contractHash, fileHash stri
 	return responseData.Status, nil
 }
 
+// PauseFileDownload pauses a file download.
+func (cli *Client) PauseFileDownload(ctx context.Context, contractHash, fileHash string) error {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "data_transfer.PauseFileDownload",
+		Params: []interface{}{rpc.PauseFileDownloadArgs{
+			ContractHash: contractHash,
+			FileHash:     fileHash,
+		}},
+		ID: 1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	responseData := rpc.PauseFileDownloadResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &responseData); err != nil {
+		return fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return nil
+}
+
 // DownloadFileProgress reports the file download progress.
 func (cli *Client) DownloadFileProgress(ctx context.Context, contractHash, fileHash string) (rpc.DownloadFileProgressResponse, error) {
 	payload := JSONRPCRequest{

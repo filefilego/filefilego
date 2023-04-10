@@ -370,9 +370,7 @@ type PauseFileDownloadArgs struct {
 }
 
 // PauseFileDownloadResponse represent response.
-type PauseFileDownloadResponse struct {
-	Status string `json:"status"`
-}
+type PauseFileDownloadResponse struct{}
 
 // PauseFileDownload pauses a file download.
 func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDownloadArgs, response *PauseFileDownloadResponse) error {
@@ -386,7 +384,10 @@ func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDo
 		return fmt.Errorf("failed to decode file hash: %w", err)
 	}
 
-	_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)
+	err = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)
+	if err != nil {
+		return fmt.Errorf("failed to cancel download contexts: %w", err)
+	}
 
 	return nil
 }
