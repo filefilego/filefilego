@@ -433,7 +433,10 @@ func TestDataVerificationMethods(t *testing.T) {
 		From:         0,
 		To:           fileSize - 1,
 	}
-	res, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request)
+	fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
+	fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
+	destinationFilePath := filepath.Join(protocolH2.GetDownloadDirectory(), hexutil.Encode(request.ContractHash), fileNameWithPart)
+	res, err := protocolH2.RequestFileTransfer(context.TODO(), destinationFilePath, fileNameWithPart, h1.ID(), request)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
 	time.Sleep(200 * time.Millisecond)
@@ -493,7 +496,12 @@ func TestDataVerificationMethods(t *testing.T) {
 		From:         0,
 		To:           fileSize2 - 1,
 	}
-	res2, err := protocolH2.RequestFileTransfer(context.TODO(), h1.ID(), request2)
+
+	fileHashHex2 := hexutil.EncodeNoPrefix(request2.FileHash)
+	file2NameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex2, request2.From, request2.To)
+	destinationFile2Path := filepath.Join(protocolH2.GetDownloadDirectory(), hexutil.Encode(request2.ContractHash), file2NameWithPart)
+
+	res2, err := protocolH2.RequestFileTransfer(context.TODO(), destinationFile2Path, file2NameWithPart, h1.ID(), request2)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res2)
 	time.Sleep(200 * time.Millisecond)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/contract"
 	"github.com/filefilego/filefilego/crypto"
@@ -323,11 +324,11 @@ func TestCreateFileRanges(t *testing.T) {
 		fileSize       int64
 		expectedRanges []FileRanges
 	}{
-		{100, []FileRanges{{0, 24, 0}, {25, 49, 1}, {50, 74, 2}, {75, 99, 3}}},
-		{50, []FileRanges{{0, 11, 0}, {12, 23, 1}, {24, 35, 2}, {36, 49, 3}}},
+		{100, []FileRanges{{0, 24, 0}, {25, 49, 0}, {50, 74, 0}, {75, 99, 0}}},
+		{50, []FileRanges{{0, 11, 0}, {12, 23, 0}, {24, 35, 0}, {36, 49, 0}}},
 		{1, []FileRanges{{0, 0, 0}}},
-		{4, []FileRanges{{0, 0, 0}, {1, 1, 1}, {2, 2, 2}, {3, 3, 3}}},
-		{5, []FileRanges{{0, 0, 0}, {1, 1, 1}, {2, 2, 2}, {3, 4, 3}}},
+		{4, []FileRanges{{0, 0, 0}, {1, 1, 0}, {2, 2, 0}, {3, 3, 0}}},
+		{5, []FileRanges{{0, 0, 0}, {1, 1, 0}, {2, 2, 0}, {3, 4, 0}}},
 	}
 
 	for _, test := range tests {
@@ -336,6 +337,43 @@ func TestCreateFileRanges(t *testing.T) {
 			t.Errorf("createFileRanges(%d) returned %v, expected %v", test.fileSize, ranges, test.expectedRanges)
 		}
 	}
+}
+
+func TestGetDownloadedPartsInfo(t *testing.T) {
+	t.Cleanup(func() {
+		os.RemoveAll("fileparts")
+	})
+	currentDir, err := os.Getwd()
+	assert.NoError(t, err)
+
+	inputFileName := "0x02329292_part_0_3"
+	inputFileName2 := "0x02329292_part_4_7"
+	inputFileName3 := "0x02329292_part_8_11"
+	inputFileName4 := "0x02329292_part_12_15"
+
+	_, err = common.WriteToFile([]byte("abcd"), filepath.Join(currentDir, "fileparts", inputFileName))
+	assert.NoError(t, err)
+	_, err = common.WriteToFile([]byte("ef"), filepath.Join(currentDir, "fileparts", inputFileName2))
+	assert.NoError(t, err)
+	_, err = common.WriteToFile([]byte("ijk"), filepath.Join(currentDir, "fileparts", inputFileName3))
+	assert.NoError(t, err)
+	_, err = common.WriteToFile([]byte(""), filepath.Join(currentDir, "fileparts", inputFileName4))
+	assert.NoError(t, err)
+	fileRanges, err := getDownloadedPartsInfo(filepath.Join(currentDir, "fileparts"))
+	assert.NoError(t, err)
+	assert.Len(t, fileRanges, 4)
+	assert.Equal(t, int64(3), fileRanges[0].to)
+	assert.Equal(t, int64(4), fileRanges[0].availableSize)
+	// check if we have all the data
+	assert.Equal(t, true, fileRanges[0].to-fileRanges[0].from+1 == fileRanges[0].availableSize)
+	assert.Equal(t, int64(7), fileRanges[1].to)
+	assert.Equal(t, int64(2), fileRanges[1].availableSize)
+	assert.Equal(t, int64(6), fileRanges[1].from+fileRanges[1].availableSize)
+	assert.Equal(t, int64(11), fileRanges[2].to)
+	assert.Equal(t, int64(3), fileRanges[2].availableSize)
+	assert.Equal(t, int64(15), fileRanges[3].to)
+	assert.Equal(t, int64(0), fileRanges[3].availableSize)
+	assert.Equal(t, int64(12), fileRanges[3].from+fileRanges[3].availableSize)
 }
 
 type networkMessagePublisherNodesFinderStub struct {

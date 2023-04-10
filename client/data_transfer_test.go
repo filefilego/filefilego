@@ -10,6 +10,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPauseFileDownload(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{},"error":"internal error","id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	err = c.PauseFileDownload(context.TODO(), "0x01", "ss")
+	assert.EqualError(t, err, "internal error")
+}
+
 func TestGetDownloadContract(t *testing.T) {
 	bodyReader := strings.NewReader(`{"result":{"contract": {"contract_hash":"0x01","file_hoster_response":{"from_peer_addr":"idofpeer"}}},"error":null,"id":1}`)
 	stringReadCloser := io.NopCloser(bodyReader)
