@@ -145,6 +145,15 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		Chain:           txChain,
 	}
 
+	ok, err := tx.Validate()
+	if err != nil {
+		return fmt.Errorf("failed to validate raw transaction: %w", err)
+	}
+
+	if !ok {
+		return errors.New("failed to validate raw transaction with false result")
+	}
+
 	return api.validateBroadcastTxSetResponse(r.Context(), &tx, response)
 }
 

@@ -96,6 +96,16 @@ func TestTransactionAPIMethods(t *testing.T) {
 	assert.Equal(t, jsonTx.TransactionFees, sendRawResponse.Transaction.TransactionFees)
 	assert.Equal(t, jsonTx.Value, sendRawResponse.Transaction.Value)
 
+	// another raw tx
+	rawTX := `{"hash":"0xf843eb3045484c198a23ad19949dd31f1f01b00087c92895dadce0c7e31984b9","signature":"0x3045022100d2c6c2be2710d2e8f681a8410aad884efb39dbc9c398c574627e9f7455399322022043dcff73e0ccbe307cc8e9fb93daf40c43c0c3a14e308150515ce8bbc65b83e9","public_key":"0x02b4dbfc4d1c008687cb34b9bc736de86eace1a6a67f7248cdaacf7fb4cf548e8a","nounce":"0x1","data":"0x01","from":"0xc47418d2af83b80f10691434601474efd0549f6d","to":"0xbd372b1188350a99d433cec50f80f058bb9a614c","value":"0x1","transaction_fees":"0x1","chain":"0x01"}`
+	sendRawArgs2 := &SendRawTransactionArgs{
+		RawTransaction: rawTX,
+	}
+	// SendRawTransaction
+	sendRawResponse2 := &TransactionResponse{}
+	err = transactionAPI.SendRawTransaction(&http.Request{}, sendRawArgs2, sendRawResponse2)
+	assert.NoError(t, err)
+
 	// wrong access token
 	sendTransactionArgs := &SendTransactionArgs{
 		AccessToken:     accessToken,
