@@ -219,6 +219,11 @@ func (n *Node) Sync(ctx context.Context) error {
 			blockResponse, err := remotePeer.DownloadBlocksRange(ctx, &request)
 			if err != nil || blockResponse.Error {
 				n.blockDownloaderProtocol.RemoveRemotePeer(remotePeer)
+				continue
+			}
+
+			if blockResponse == nil {
+				continue
 			}
 
 			if len(blockResponse.Blocks) > 0 {
