@@ -1,5 +1,6 @@
 # FileFileGo v1 Decentralized Network
 
+[![GitHub release](https://img.shields.io/github/v/release/filefilego/filefilego.svg)](https://github.com/filefilego/filefilego/releases)
 [![Tests](https://github.com/filefilego/filefilego/actions/workflows/go.yml/badge.svg)](https://github.com/filefilego/filefilego/actions/workflows/go.yml)
 [![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/7190/badge)](https://bestpractices.coreinfrastructure.org/projects/7190)
 [![Discord](https://img.shields.io/discord/743492187349712896?style=plastic)](https://discord.gg/qhKkKZ9)
