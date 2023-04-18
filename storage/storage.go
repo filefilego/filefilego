@@ -347,8 +347,9 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	newPath := path.Join(folderPath, fHash)
 	err = os.Rename(old, newPath)
 	if err != nil {
+		log.Errorf("failed to move uploaded file: %v", err)
 		os.Remove(old)
-		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to rename file to node hash"}`)
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to move uploaded file"}`)
 		return
 	}
 
