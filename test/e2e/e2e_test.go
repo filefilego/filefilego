@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,8 +99,8 @@ func TestE2E(t *testing.T) {
 	conf1.Global.StorageFileMerkleTreeTotalSegments = 8
 	conf1.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf1.Global.DataDir = "v1"
-	conf1.Global.DataDownloadsPath = path.Join("v1", "downloads")
-	conf1.Global.KeystoreDir = path.Join("v1", "keystore")
+	conf1.Global.DataDownloadsPath = filepath.Join("v1", "downloads")
+	conf1.Global.KeystoreDir = filepath.Join("v1", "keystore")
 	conf1.Global.Validator = true
 	conf1.P2P.ListenPort = 10209
 	conf1.RPC.HTTP.Enabled = true
@@ -143,13 +142,13 @@ func TestE2E(t *testing.T) {
 	conf2.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf2.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf2.Global.Storage = true
-	conf2.Global.StorageDir = path.Join("filehoster", "file_storage")
+	conf2.Global.StorageDir = filepath.Join("filehoster", "file_storage")
 	conf2.Global.StorageFeesPerByte = "20"
 	conf2.Global.StorageToken = "1234"
 	conf2.Global.SearchEngine = true
 	conf2.Global.DataDir = "filehoster"
-	conf2.Global.DataDownloadsPath = path.Join("filehoster", "downloads")
-	conf2.Global.KeystoreDir = path.Join("filehoster", "keystore")
+	conf2.Global.DataDownloadsPath = filepath.Join("filehoster", "downloads")
+	conf2.Global.KeystoreDir = filepath.Join("filehoster", "keystore")
 	conf2.Global.Validator = false
 	conf2.P2P.ListenPort = 10210
 	conf2.RPC.HTTP.Enabled = true
@@ -191,13 +190,13 @@ func TestE2E(t *testing.T) {
 	conf3.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf3.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf3.Global.Storage = true
-	conf3.Global.StorageDir = path.Join("filehoster2", "file_storage")
+	conf3.Global.StorageDir = filepath.Join("filehoster2", "file_storage")
 	conf3.Global.StorageFeesPerByte = "10"
 	conf3.Global.StorageToken = "1234"
 	conf3.Global.SearchEngine = true
 	conf3.Global.DataDir = "filehoster2"
-	conf3.Global.DataDownloadsPath = path.Join("filehoster2", "downloads")
-	conf3.Global.KeystoreDir = path.Join("filehoster2", "keystore")
+	conf3.Global.DataDownloadsPath = filepath.Join("filehoster2", "downloads")
+	conf3.Global.KeystoreDir = filepath.Join("filehoster2", "keystore")
 	conf3.Global.Validator = false
 	conf3.P2P.ListenPort = 10211
 	conf3.RPC.HTTP.Enabled = true
@@ -228,13 +227,13 @@ func TestE2E(t *testing.T) {
 	conf4.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf4.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf4.Global.Storage = true
-	conf4.Global.StorageDir = path.Join("dataverifier1", "file_storage")
+	conf4.Global.StorageDir = filepath.Join("dataverifier1", "file_storage")
 	conf4.Global.StorageFeesPerByte = currency.FFG().String()
 	conf4.Global.StorageToken = "1234"
 	conf4.Global.SearchEngine = true
 	conf4.Global.DataDir = "dataverifier1"
-	conf4.Global.DataDownloadsPath = path.Join("dataverifier1", "downloads")
-	conf4.Global.KeystoreDir = path.Join("dataverifier1", "keystore")
+	conf4.Global.DataDownloadsPath = filepath.Join("dataverifier1", "downloads")
+	conf4.Global.KeystoreDir = filepath.Join("dataverifier1", "keystore")
 	conf4.Global.Validator = false
 	conf4.P2P.ListenPort = 10212
 	conf4.RPC.HTTP.Enabled = true
@@ -262,13 +261,13 @@ func TestE2E(t *testing.T) {
 	conf5.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf5.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf5.Global.Storage = true
-	conf5.Global.StorageDir = path.Join("dataverifier2", "file_storage")
+	conf5.Global.StorageDir = filepath.Join("dataverifier2", "file_storage")
 	conf5.Global.StorageFeesPerByte = currency.FFG().String()
 	conf5.Global.StorageToken = "1234"
 	conf5.Global.SearchEngine = true
 	conf5.Global.DataDir = "dataverifier2"
-	conf5.Global.DataDownloadsPath = path.Join("dataverifier2", "downloads")
-	conf5.Global.KeystoreDir = path.Join("dataverifier2", "keystore")
+	conf5.Global.DataDownloadsPath = filepath.Join("dataverifier2", "downloads")
+	conf5.Global.KeystoreDir = filepath.Join("dataverifier2", "keystore")
 	conf5.Global.Validator = false
 	conf5.P2P.ListenPort = 10213
 	conf5.RPC.HTTP.Enabled = true
@@ -295,8 +294,8 @@ func TestE2E(t *testing.T) {
 	conf6.Global.StorageFileSegmentsEncryptionPercentage = 5
 	conf6.P2P.Bootstraper.Nodes = []string{v1MultiAddr[0].String()}
 	conf6.Global.DataDir = "datadownloader"
-	conf6.Global.DataDownloadsPath = path.Join("datadownloader", "downloads")
-	conf6.Global.KeystoreDir = path.Join("datadownloader", "keystore")
+	conf6.Global.DataDownloadsPath = filepath.Join("datadownloader", "downloads")
+	conf6.Global.KeystoreDir = filepath.Join("datadownloader", "keystore")
 	conf6.P2P.ListenPort = 10214
 	conf6.RPC.HTTP.Enabled = true
 	conf6.RPC.HTTP.ListenPort = 8095

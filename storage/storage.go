@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -134,7 +133,7 @@ func (s *Storage) SetEnabled(val bool) {
 func (s *Storage) CreateSubfolders() (string, error) {
 	currentTime := time.Now()
 	folder := fmt.Sprintf("%d-%02d-%02d", currentTime.Year(), currentTime.Month(), currentTime.Day())
-	destinationPath := path.Join(s.storagePath, folder)
+	destinationPath := filepath.Join(s.storagePath, folder)
 	if err := common.CreateDirectory(destinationPath); err != nil {
 		return "", err
 	}
@@ -308,7 +307,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			tmpFileHex = hexutil.Encode(tmpFileName)
-			destFile, err := os.Create(path.Join(folderPath, tmpFileHex))
+			destFile, err := os.Create(filepath.Join(folderPath, tmpFileHex))
 			if err != nil {
 				writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to open file on the system"}`)
 				return
@@ -329,7 +328,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	old := path.Join(folderPath, tmpFileHex)
+	old := filepath.Join(folderPath, tmpFileHex)
 	fileSize, err := common.FileSize(old)
 	if err != nil {
 		os.Remove(old)
@@ -344,7 +343,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newPath := path.Join(folderPath, fHash)
+	newPath := filepath.Join(folderPath, fHash)
 	err = os.Rename(old, newPath)
 	if err != nil {
 		log.Errorf("failed to move uploaded file: %v", err)
