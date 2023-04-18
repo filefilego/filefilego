@@ -1,4 +1,4 @@
-# FileFileGo v1 Decentralized Network
+# FileFileGo v1 Decentralized Data Sharing Network
 
 [![GitHub release](https://img.shields.io/github/v/release/filefilego/filefilego.svg)](https://github.com/filefilego/filefilego/releases)
 [![Tests](https://github.com/filefilego/filefilego/actions/workflows/go.yml/badge.svg)](https://github.com/filefilego/filefilego/actions/workflows/go.yml)
