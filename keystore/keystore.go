@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -146,7 +145,7 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 			}
 		}
 
-		bts, err := os.ReadFile(path.Join(ks.keysDir, file.Name()))
+		bts, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
 		if err != nil {
 			return "", fmt.Errorf("failed to read keystore file: %w", err)
 		}
