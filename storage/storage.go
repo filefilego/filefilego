@@ -317,6 +317,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to copy from multipart reader"}`)
 				return
 			}
+			destFile.Close()
 		}
 		part.Close()
 	}
