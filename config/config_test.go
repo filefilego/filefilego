@@ -23,6 +23,7 @@ func TestNew(t *testing.T) {
 		RPC: rpc{
 			Whitelist:       []string{},
 			EnabledServices: []string{},
+			DisabledMethods: []string{},
 			HTTP: httpWSConfig{
 				Enabled:          false,
 				ListenPort:       8090,
