@@ -2,8 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -408,7 +411,7 @@ func run(ctx *cli.Context) error {
 	log.Infof("peerstore content: %v ", peers)
 
 	r := mux.NewRouter()
-	r.Handle("/rpc", addCorsHeaders(s))
+	r.Handle("/rpc", addCorsHeaders(s, conf.RPC.DisabledMethods))
 
 	if conf.Global.Debug {
 		r.HandleFunc("/internal/contracts/", contractStore.Debug)
@@ -452,18 +455,24 @@ func run(ctx *cli.Context) error {
 	return server.ListenAndServe()
 }
 
-// if * it means all services are allowed, otherwise a list of services will be scanned
-func contains(allowedServices []string, service string) bool {
-	for _, s := range allowedServices {
+func contains(elements []string, el string) bool {
+	for _, s := range elements {
 		s = strings.TrimSpace(s)
-		if s == service || s == "*" {
+		if s == el || s == "*" {
 			return true
 		}
 	}
 	return false
 }
 
-func addCorsHeaders(handler http.Handler) http.Handler {
+type rpcRequest struct {
+	JSONRPC string        `json:"jsonrpc"`
+	Method  string        `json:"method"`
+	Params  []interface{} `json:"params"`
+	ID      uint64        `json:"id"`
+}
+
+func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -474,6 +483,27 @@ func addCorsHeaders(handler http.Handler) http.Handler {
 			return
 		}
 
+		// 10 KB
+		r.Body = http.MaxBytesReader(w, r.Body, 1024*10)
+		requestBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		req := rpcRequest{}
+		err = jsonencoder.Unmarshal(requestBody, &req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if contains(disAllowedRPCMethods, req.Method) {
+			http.Error(w, "method not allowed", http.StatusBadRequest)
+			return
+		}
+
+		r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		handler.ServeHTTP(w, r)
 	})
 }
