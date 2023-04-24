@@ -136,6 +136,11 @@ var (
 		Usage: "List of rpc services allowed",
 	}
 
+	RPCDisabledMethodsFlag = cli.StringFlag{
+		Name:  "rpc_disabled_methods",
+		Usage: "List of rpc disabled methods",
+	}
+
 	// http
 	RPCHTTPEnabledFlag = cli.BoolFlag{
 		Name:  "http",
@@ -257,6 +262,7 @@ var AppFlags = []cli.Flag{
 	&VerifyBlocks,
 
 	&RPCServicesFlag,
+	&RPCDisabledMethodsFlag,
 	&RPCWhitelistFlag,
 	&RPCSocketEnabledFlag,
 	&RPCSocketPathFlag,

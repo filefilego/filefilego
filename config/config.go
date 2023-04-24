@@ -57,6 +57,7 @@ type bootstraper struct {
 type rpc struct {
 	Whitelist       []string
 	EnabledServices []string
+	DisabledMethods []string
 
 	HTTP      httpWSConfig
 	Websocket httpWSConfig
@@ -86,6 +87,7 @@ func New(ctx *cli.Context) *Config {
 		RPC: rpc{
 			Whitelist:       []string{},
 			EnabledServices: []string{},
+			DisabledMethods: []string{},
 			HTTP: httpWSConfig{
 				Enabled:          false,
 				ListenPort:       8090,
@@ -206,6 +208,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(RPCServicesFlag.Name) {
 		conf.RPC.EnabledServices = strings.Split(ctx.String(RPCServicesFlag.Name), ",")
+	}
+
+	if ctx.IsSet(RPCDisabledMethodsFlag.Name) {
+		conf.RPC.DisabledMethods = strings.Split(ctx.String(RPCDisabledMethodsFlag.Name), ",")
 	}
 
 	if ctx.IsSet(RPCWhitelistFlag.Name) {
