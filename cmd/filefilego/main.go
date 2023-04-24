@@ -408,7 +408,7 @@ func run(ctx *cli.Context) error {
 	log.Infof("peerstore content: %v ", peers)
 
 	r := mux.NewRouter()
-	r.Handle("/rpc", s)
+	r.Handle("/rpc", addCorsHeaders(s))
 
 	if conf.Global.Debug {
 		r.HandleFunc("/internal/contracts/", contractStore.Debug)
@@ -461,4 +461,19 @@ func contains(allowedServices []string, service string) bool {
 		}
 	}
 	return false
+}
+
+func addCorsHeaders(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		handler.ServeHTTP(w, r)
+	})
 }
