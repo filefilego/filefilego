@@ -201,7 +201,7 @@ func (b *blockchainStub) GetTransactionsFromPool() []transaction.Transaction {
 	return b.mempool
 }
 
-func (b *blockchainStub) GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error) {
+func (b *blockchainStub) GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error) {
 	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsErr
 }
 
