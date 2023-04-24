@@ -18,7 +18,7 @@ import (
 type Blockchain interface {
 	PutMemPool(tx transaction.Transaction) error
 	GetTransactionsFromPool() []transaction.Transaction
-	GetAddressTransactions(address []byte) ([]transaction.Transaction, []uint64, error)
+	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error)
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 }
 
@@ -298,7 +298,9 @@ func (api *TransactionAPI) Receipt(r *http.Request, args *ReceiptArgs, response 
 
 // ByAddressArgs get transactions by address arguments.
 type ByAddressArgs struct {
-	Address string `json:"address"`
+	Address     string `json:"address"`
+	CurrentPage int    `json:"current_page"`
+	Limit       int    `json:"limit"`
 }
 
 // ByAddress gets the list of transactions by address.
@@ -308,7 +310,7 @@ func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, respo
 		return err
 	}
 
-	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(addressBytes)
+	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(addressBytes, args.CurrentPage, args.Limit)
 	if err != nil {
 		return err
 	}

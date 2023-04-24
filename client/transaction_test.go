@@ -71,7 +71,7 @@ func TestGetTransactionByAddress(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	tx, err := c.GetTransactionByAddress(context.TODO(), "0xdd9a374e8dce9d656073ec153580301b7d2c3850")
+	tx, err := c.GetTransactionByAddress(context.TODO(), "0xdd9a374e8dce9d656073ec153580301b7d2c3850", 1, 10)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, tx.Transactions)
 }

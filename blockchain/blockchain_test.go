@@ -175,18 +175,28 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, validBlock3.Hash, block3ByHeight.Hash)
 
-	// GetAddressTransactions
+	// GetAddressTransactions and check pagination
 	addressOfBlock2Verifier, _ := hexutil.Decode(addrOfBlock2Verifier)
-	addressTransactions, blockNumbers, err := blockchain.GetAddressTransactions(addressOfBlock2Verifier)
+	addressTransactions, blockNumbers, err := blockchain.GetAddressTransactions(addressOfBlock2Verifier, 0, 1)
 	assert.NoError(t, err)
-	assert.Len(t, blockNumbers, 2)
+	assert.Len(t, blockNumbers, 1)
 	// both transactions are in the same block
 	assert.Equal(t, uint64(1), blockNumbers[0])
-	assert.Equal(t, uint64(1), blockNumbers[1])
-
-	assert.Len(t, addressTransactions, 2)
+	assert.Len(t, addressTransactions, 1)
 	assert.EqualValues(t, validBlock2.Transactions[0].Hash, addressTransactions[0].Hash)
-	assert.EqualValues(t, validBlock2.Transactions[1].Hash, addressTransactions[1].Hash)
+
+	addressTransactions, blockNumbers, err = blockchain.GetAddressTransactions(addressOfBlock2Verifier, 1, 1)
+	assert.NoError(t, err)
+	assert.Len(t, blockNumbers, 1)
+	// both transactions are in the same block
+	assert.Equal(t, uint64(1), blockNumbers[0])
+	assert.Len(t, addressTransactions, 1)
+	assert.EqualValues(t, validBlock2.Transactions[0].Hash, addressTransactions[0].Hash)
+
+	addressTransactions, blockNumbers, err = blockchain.GetAddressTransactions(addressOfBlock2Verifier, 3, 1)
+	assert.NoError(t, err)
+	assert.Len(t, blockNumbers, 0)
+	assert.Len(t, addressTransactions, 0)
 
 	// GetTransactionByHash
 	transactionsByHash, whichBlocksTheyBelongTo, err := blockchain.GetTransactionByHash(validBlock2.Transactions[1].Hash)
