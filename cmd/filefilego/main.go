@@ -6,7 +6,7 @@ import (
 	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -485,7 +485,7 @@ func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Ha
 
 		// 10 KB
 		r.Body = http.MaxBytesReader(w, r.Body, 1024*10)
-		requestBody, err := ioutil.ReadAll(r.Body)
+		requestBody, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -503,7 +503,7 @@ func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Ha
 			return
 		}
 
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(requestBody))
+		r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		handler.ServeHTTP(w, r)
 	})
 }
