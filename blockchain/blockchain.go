@@ -348,25 +348,45 @@ func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error 
 }
 
 // GetAddressTransactions returns a list of transaction given the address.
-func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error) {
-	if currentPage == 0 {
-		currentPage = 1
+func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSize int) ([]transaction.Transaction, []uint64, error) {
+	if currentPage < 0 {
+		currentPage = 0
 	}
 
-	if limit == 0 {
-		limit = 10
-	} else if limit > 100 {
-		limit = 100
+	if pageSize == 0 {
+		pageSize = 10
+	} else if pageSize > 100 {
+		pageSize = 100
 	}
+
+	start := (currentPage) * pageSize
+	if start < 0 {
+		start = 0
+	}
+
+	limit := pageSize
 
 	prefixWithAddress := append([]byte(addressTransactionPrefix), address...)
 	iter := b.db.NewIterator(util.BytesPrefix(prefixWithAddress), nil)
 
 	blockNumbers := make([]uint64, 0)
 	txIndexes := make([]int64, 0)
-	start := currentPage * limit
 	i := 0
-	for iter.Next() {
+	// go to last so we can start reading backwards
+	// we need to go back to the last element so we can include it
+	// in the transactions list.
+	if iter.Last() {
+		key := iter.Key()
+		i++
+		if len(key) != 0 && i > start {
+			blockNumAndTxIndex := key[len(prefixWithAddress):]
+			blockNumbers = append(blockNumbers, binary.BigEndian.Uint64(blockNumAndTxIndex[:8]))
+			txIndexes = append(txIndexes, int64(binary.BigEndian.Uint64(blockNumAndTxIndex[8:])))
+			limit--
+		}
+	}
+
+	for iter.Prev() {
 		i++
 		if limit == 0 {
 			break
@@ -377,11 +397,15 @@ func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, limit i
 		}
 
 		key := iter.Key()
+		if len(key) == 0 {
+			break
+		}
 		blockNumAndTxIndex := key[len(prefixWithAddress):]
 		blockNumbers = append(blockNumbers, binary.BigEndian.Uint64(blockNumAndTxIndex[:8]))
 		txIndexes = append(txIndexes, int64(binary.BigEndian.Uint64(blockNumAndTxIndex[8:])))
 		limit--
 	}
+
 	iter.Release()
 	err := iter.Error()
 	if err != nil {

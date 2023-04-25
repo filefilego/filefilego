@@ -207,14 +207,14 @@ func (cli *Client) TransactionPool(ctx context.Context, token string, tx SendTra
 }
 
 // GetTransactionByAddress given transactions of an address.
-func (cli *Client) GetTransactionByAddress(ctx context.Context, address string, currentPage, limit int) (rpc.TransactionsResponse, error) {
+func (cli *Client) GetTransactionByAddress(ctx context.Context, address string, currentPage, pageSize int) (rpc.TransactionsResponse, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "transaction.ByAddress",
 		Params: []interface{}{rpc.ByAddressArgs{
 			Address:     address,
 			CurrentPage: currentPage,
-			Limit:       limit,
+			PageSize:    pageSize,
 		}},
 		ID: 1,
 	}
