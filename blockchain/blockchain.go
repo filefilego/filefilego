@@ -68,7 +68,7 @@ type Interface interface {
 	GetBlockByNumber(blockNumber uint64) (*block.Block, error)
 	GetLastBlockUpdatedAt() int64
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
-	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error)
+	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
 	GetChannels(limit, offset int) ([]*NodeItem, error)
 	GetChannelsCount() uint64
 	GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error)
@@ -348,7 +348,7 @@ func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error 
 }
 
 // GetAddressTransactions returns a list of transaction given the address.
-func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSize int) ([]transaction.Transaction, []uint64, error) {
+func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSize int) ([]transaction.Transaction, []uint64, []int64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -409,21 +409,23 @@ func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSiz
 	iter.Release()
 	err := iter.Error()
 	if err != nil {
-		return nil, nil, fmt.Errorf("iterator error while getting transactions: %w", err)
+		return nil, nil, nil, fmt.Errorf("iterator error while getting transactions: %w", err)
 	}
 
 	transactions := make([]transaction.Transaction, len(txIndexes))
+	blockTimestamps := make([]int64, len(blockNumbers))
 
 	for i, blockNum := range blockNumbers {
 		validBlock, err := b.GetBlockByNumber(blockNum)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get block number %d in get transactions by address: %w", blockNum, err)
+			return nil, nil, nil, fmt.Errorf("failed to get block number %d in get transactions by address: %w", blockNum, err)
 		}
 
+		blockTimestamps[i] = validBlock.Timestamp
 		transactions[i] = validBlock.Transactions[txIndexes[i]]
 	}
 
-	return transactions, blockNumbers, nil
+	return transactions, blockNumbers, blockTimestamps, nil
 }
 
 // GetBlockByNumber returns a block by number.

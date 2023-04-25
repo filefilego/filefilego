@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -143,6 +144,8 @@ func TestTransactionAPIMethods(t *testing.T) {
 	transactionsResponse := &TransactionsResponse{}
 	bchain.addressTransactions = []transaction.Transaction{*validTx}
 	bchain.addressTransactionsBlockNumbers = []uint64{5}
+	bchain.addressTransactionsTimestamps = []int64{time.Now().Unix()}
+
 	err = transactionAPI.Receipt(&http.Request{}, receiptArgs, transactionsResponse)
 	assert.NoError(t, err)
 	assert.Equal(t, jsonTx, transactionsResponse.Transactions[0].Transaction)
@@ -190,6 +193,7 @@ type blockchainStub struct {
 	// GetAddressTransactions
 	addressTransactions             []transaction.Transaction
 	addressTransactionsBlockNumbers []uint64
+	addressTransactionsTimestamps   []int64
 	addressTransactionsErr          error
 }
 
@@ -201,8 +205,8 @@ func (b *blockchainStub) GetTransactionsFromPool() []transaction.Transaction {
 	return b.mempool
 }
 
-func (b *blockchainStub) GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error) {
-	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsErr
+func (b *blockchainStub) GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error) {
+	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsTimestamps, b.addressTransactionsErr
 }
 
 func (b *blockchainStub) GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error) {
