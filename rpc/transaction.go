@@ -300,7 +300,7 @@ func (api *TransactionAPI) Receipt(r *http.Request, args *ReceiptArgs, response 
 type ByAddressArgs struct {
 	Address     string `json:"address"`
 	CurrentPage int    `json:"current_page"`
-	Limit       int    `json:"limit"`
+	PageSize    int    `json:"page_size"`
 }
 
 // ByAddress gets the list of transactions by address.
@@ -310,7 +310,7 @@ func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, respo
 		return err
 	}
 
-	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(addressBytes, args.CurrentPage, args.Limit)
+	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(addressBytes, args.CurrentPage, args.PageSize)
 	if err != nil {
 		return err
 	}
