@@ -371,9 +371,12 @@ func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSiz
 	blockNumbers := make([]uint64, 0)
 	txIndexes := make([]int64, 0)
 	i := 0
-
+	// go to last so we can start reading backwards
 	iter.Last()
+
 	for iter.Prev() {
+		// we need to go back to the last element so we can include it
+		// in the transactions list.
 		if i == 0 {
 			iter.Next()
 		}
