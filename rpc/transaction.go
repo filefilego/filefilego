@@ -18,7 +18,7 @@ import (
 type Blockchain interface {
 	PutMemPool(tx transaction.Transaction) error
 	GetTransactionsFromPool() []transaction.Transaction
-	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, error)
+	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 }
 
@@ -40,6 +40,7 @@ type TransactionResponse struct {
 // JSONBlockTransaction represnts the block number and a transaction.
 type JSONBlockTransaction struct {
 	BlockNumber uint64          `json:"block_number"`
+	Timestamp   int64           `json:"timestamp"`
 	Transaction JSONTransaction `json:"transaction"`
 }
 
@@ -310,7 +311,7 @@ func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, respo
 		return err
 	}
 
-	transactions, blockNumbers, err := api.blockchain.GetAddressTransactions(addressBytes, args.CurrentPage, args.PageSize)
+	transactions, blockNumbers, timestamps, err := api.blockchain.GetAddressTransactions(addressBytes, args.CurrentPage, args.PageSize)
 	if err != nil {
 		return err
 	}
@@ -319,6 +320,7 @@ func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, respo
 		jtx := toJSONTransaction(tx)
 		receipt := JSONBlockTransaction{
 			BlockNumber: blockNumbers[i],
+			Timestamp:   timestamps[i],
 			Transaction: jtx,
 		}
 		response.Transactions = append(response.Transactions, receipt)
