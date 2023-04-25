@@ -191,7 +191,7 @@ func TestInitOrLoadAndPerformStateUpdateFromBlock(t *testing.T) {
 	// both transactions are in the same block
 	assert.Equal(t, uint64(1), blockNumbers[0])
 	assert.Len(t, addressTransactions, 1)
-	assert.EqualValues(t, validBlock2.Transactions[1].Hash, addressTransactions[0].Hash)
+	assert.EqualValues(t, validBlock2.Transactions[0].Hash, addressTransactions[0].Hash)
 
 	addressTransactions, blockNumbers, err = blockchain.GetAddressTransactions(addressOfBlock2Verifier, 3, 1)
 	assert.NoError(t, err)

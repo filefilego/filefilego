@@ -363,6 +363,7 @@ func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSiz
 	if start < 0 {
 		start = 0
 	}
+
 	limit := pageSize
 
 	prefixWithAddress := append([]byte(addressTransactionPrefix), address...)
@@ -372,15 +373,20 @@ func (b *Blockchain) GetAddressTransactions(address []byte, currentPage, pageSiz
 	txIndexes := make([]int64, 0)
 	i := 0
 	// go to last so we can start reading backwards
-	iter.Last()
+	// we need to go back to the last element so we can include it
+	// in the transactions list.
+	if iter.Last() {
+		key := iter.Key()
+		i++
+		if len(key) != 0 && i > start {
+			blockNumAndTxIndex := key[len(prefixWithAddress):]
+			blockNumbers = append(blockNumbers, binary.BigEndian.Uint64(blockNumAndTxIndex[:8]))
+			txIndexes = append(txIndexes, int64(binary.BigEndian.Uint64(blockNumAndTxIndex[8:])))
+			limit--
+		}
+	}
 
 	for iter.Prev() {
-		// we need to go back to the last element so we can include it
-		// in the transactions list.
-		if i == 0 {
-			iter.Next()
-		}
-
 		i++
 		if limit == 0 {
 			break
