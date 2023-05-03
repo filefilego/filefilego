@@ -199,6 +199,66 @@ func (cli *Client) LockAddress(ctx context.Context, address, token string) (bool
 	return lockedAddress.Success, nil
 }
 
+// Authorized checks if an access token is authorized.
+func (cli *Client) Authorized(ctx context.Context, token string) (bool, error) {
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "address.Lock",
+		Params: []interface{}{rpc.AuthorizedArgs{
+			Token: token,
+		}},
+		ID: 1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return false, fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return false, fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return false, errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return false, errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	authorizedResponse := rpc.AuthorizedResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return false, errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &authorizedResponse); err != nil {
+		return false, fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	return authorizedResponse.Authorized, nil
+}
+
 // Balance returns the balance and nounces of an address.
 func (cli *Client) Balance(ctx context.Context, address string) (BalanceOfAddress, error) {
 	payload := JSONRPCRequest{

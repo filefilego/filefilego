@@ -36,6 +36,16 @@ type LockAddressResponse struct {
 	Success bool `json:"success"`
 }
 
+// AuthorizedArgs arguments required for checking authorized token.
+type AuthorizedArgs struct {
+	Token string `json:"token"`
+}
+
+// AuthorizedResponse is a result of the authorization request.
+type AuthorizedResponse struct {
+	Authorized bool `json:"authorized"`
+}
+
 // BalanceOfAddressArgs arguments required for balance of an address.
 type BalanceOfAddressArgs struct {
 	Address string `json:"address"`
@@ -104,6 +114,17 @@ func (api *AddressAPI) Lock(r *http.Request, args *LockAddressArgs, response *Lo
 		return err
 	}
 	response.Success = locked
+	return nil
+}
+
+// Authorized checks if an access token is currently available.
+func (api *AddressAPI) Authorized(r *http.Request, args *AuthorizedArgs, response *AuthorizedResponse) error {
+	ok, _, err := api.keystore.Authorized(args.Token)
+	if err != nil {
+		response.Authorized = false
+		return nil
+	}
+	response.Authorized = ok
 	return nil
 }
 
