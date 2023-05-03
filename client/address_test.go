@@ -52,6 +52,20 @@ func TestLockAddress(t *testing.T) {
 	assert.True(t, success)
 }
 
+func TestAuthorized(t *testing.T) {
+	bodyReader := strings.NewReader(`{ "result": { "authorized": true }, "error": null, "id": 143 }`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	success, err := c.Authorized(context.TODO(), "jwttoken")
+	assert.NoError(t, err)
+	assert.True(t, success)
+}
+
 func TestBalance(t *testing.T) {
 	bodyReader := strings.NewReader(`{ "result": { "balance": "0", "balance_hex": "0x0", "nounce": "0x0", "next_nounce": "0x1" }, "error": null, "id": 143 }`)
 	stringReadCloser := io.NopCloser(bodyReader)

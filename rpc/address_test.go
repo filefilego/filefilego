@@ -99,6 +99,10 @@ func TestAccountAPIMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, unlockResp.Token)
 
+	authResponse := &AuthorizedResponse{}
+	err = api.Authorized(&http.Request{}, &AuthorizedArgs{Token: unlockResp.Token}, authResponse)
+	assert.NoError(t, err)
+	assert.True(t, authResponse.Authorized)
 	// Lock
 	// empty args
 	lockAccountArgs := &LockAddressArgs{}
@@ -112,6 +116,11 @@ func TestAccountAPIMethods(t *testing.T) {
 	err = api.Lock(&http.Request{}, lockAccountArgs, lockAccountResponse)
 	assert.NoError(t, err)
 	assert.True(t, lockAccountResponse.Success)
+
+	authResponse = &AuthorizedResponse{}
+	err = api.Authorized(&http.Request{}, &AuthorizedArgs{Token: unlockResp.Token}, authResponse)
+	assert.NoError(t, err)
+	assert.False(t, authResponse.Authorized)
 
 	// Balance
 	balanceArgs := &BalanceOfAddressArgs{}

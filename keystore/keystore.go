@@ -21,6 +21,7 @@ type KeyLockUnlockLister interface {
 	LockKey(address string, jwt string) (bool, error)
 	UnlockKey(address string, passphrase string) (string, error)
 	ListKeys() ([]string, error)
+	KeyAuthorizer
 }
 
 // KeyAuthorizer is an interface with auth mechanism of a key.
