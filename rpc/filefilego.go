@@ -49,12 +49,13 @@ func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockc
 
 // StatsResponse represents a syncing status
 type StatsResponse struct {
-	Syncing          bool       `json:"syncing"`
-	BlockchainHeight uint64     `json:"blockchain_height"`
-	PeerCount        int        `json:"peer_count"`
-	PeerID           string     `json:"peer_id"`
-	StorageEnabled   bool       `json:"storage_enabled"`
-	Verifiers        []verifier `json:"verifiers"`
+	Syncing                       bool       `json:"syncing"`
+	BlockchainHeight              uint64     `json:"blockchain_height"`
+	HeighestBlockNumberDiscovered uint64     `json:"heighest_block_number_discovered"`
+	PeerCount                     int        `json:"peer_count"`
+	PeerID                        string     `json:"peer_id"`
+	StorageEnabled                bool       `json:"storage_enabled"`
+	Verifiers                     []verifier `json:"verifiers"`
 }
 
 type verifier struct {
@@ -65,6 +66,7 @@ type verifier struct {
 // Stats reports the stats of the node.
 func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *StatsResponse) error {
 	response.Syncing = api.node.GetSyncing()
+	response.HeighestBlockNumberDiscovered = api.node.HeighestBlockNumberDiscovered()
 	response.BlockchainHeight = api.blockchain.GetHeight()
 	response.PeerCount = api.node.Peers().Len()
 	response.PeerID = api.node.GetID()
