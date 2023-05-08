@@ -37,6 +37,19 @@ func TestGetDownloadContract(t *testing.T) {
 	assert.Equal(t, "0x01", downloadContract.Contract.ContractHash)
 }
 
+func TestRebroadcastDataQueryRequest(t *testing.T) {
+	bodyReader := strings.NewReader(`{"result":{"success":true},"error":null,"id":1}`)
+	stringReadCloser := io.NopCloser(bodyReader)
+	c, err := New("http://localhost:8090/rpc", &httpClientStub{
+		response: &http.Response{
+			Body: stringReadCloser,
+		},
+	})
+	assert.NoError(t, err)
+	err = c.RebroadcastDataQueryRequest(context.TODO(), "0x1")
+	assert.NoError(t, err)
+}
+
 func TestSendDataQueryRequest(t *testing.T) {
 	bodyReader := strings.NewReader(`{"result":{"hash":"0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae"},"error":null,"id":1}`)
 	stringReadCloser := io.NopCloser(bodyReader)

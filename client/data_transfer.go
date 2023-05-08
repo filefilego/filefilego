@@ -72,6 +72,74 @@ func (cli *Client) GetDownloadContract(ctx context.Context, contractHash string)
 	return responseData, nil
 }
 
+// RebroadcastDataQueryRequest rebroadcasts a data query request.
+func (cli *Client) RebroadcastDataQueryRequest(ctx context.Context, dataQueryRequestHash string) error {
+	if dataQueryRequestHash == "" {
+		return errors.New("empty data query hash")
+	}
+
+	payload := JSONRPCRequest{
+		JSONRPC: "2.0",
+		Method:  "data_transfer.SendDataQueryRequest",
+		Params: []interface{}{rpc.RebroadcastDataQueryRequestArgs{
+			Hash: dataQueryRequestHash,
+		}},
+		ID: 1,
+	}
+
+	bodyBuf, err := encodeDataToJSON(payload)
+	if err != nil {
+		return fmt.Errorf("failed to encode body to json: %w", err)
+	}
+
+	req, err := cli.buildRequest(ctx, http.MethodPost, cli.url, bodyBuf, nil)
+	if err != nil {
+		return fmt.Errorf("failed to build request: %w", err)
+	}
+
+	response, err := cli.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to do request: %w", err)
+	}
+
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	jsonResponse := JSONRPCResponse{}
+	if err := json.Unmarshal(body, &jsonResponse); err != nil {
+		return fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	if jsonResponse.Error != "" {
+		return errors.New(jsonResponse.Error)
+	}
+
+	if jsonResponse.Result == nil {
+		return errors.New("empty result in json response")
+	}
+
+	// the result contains a map
+	// the best way to convert it to a struct is through the json marshal and unmarshal
+	responseData := rpc.RebroadcastDataQueryRequestResponse{}
+	dbByte, err := json.Marshal(jsonResponse.Result)
+	if err != nil {
+		return errors.New("failed to marshal the result of response")
+	}
+
+	if err := json.Unmarshal(dbByte, &responseData); err != nil {
+		return fmt.Errorf("failed to unmarshal the result of response back to a struct: %w", err)
+	}
+
+	if !responseData.Success {
+		return errors.New("data query request was not found")
+	}
+
+	return nil
+}
+
 // SendDataQueryRequest sends a data query request.
 func (cli *Client) SendDataQueryRequest(ctx context.Context, fileHashes []string) (string, error) {
 	if len(fileHashes) == 0 {
