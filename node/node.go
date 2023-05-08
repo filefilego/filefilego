@@ -145,6 +145,7 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 	}, nil
 }
 
+// HeighestBlockNumberDiscovered gets the heighest block discovered from other peers in the network.
 func (n *Node) HeighestBlockNumberDiscovered() uint64 {
 	n.heighestBlockNumberMu.RLock()
 	defer n.heighestBlockNumberMu.RUnlock()
