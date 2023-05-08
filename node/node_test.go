@@ -9,6 +9,7 @@ import (
 
 	block "github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgconfig "github.com/filefilego/filefilego/config"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
@@ -16,6 +17,7 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 	transaction "github.com/filefilego/filefilego/transaction"
@@ -56,6 +58,7 @@ func TestNew(t *testing.T) {
 		blockchain              blockchain.Interface
 		dataQueryProtocol       dataquery.Interface
 		blockDownloaderProtocol blockdownloader.Interface
+		storageProtocol         storageprotocol.Interface
 		config                  *ffgconfig.Config
 		expErr                  string
 	}{
@@ -134,6 +137,19 @@ func TestNew(t *testing.T) {
 			dataQueryProtocol: dataQueryProtocol,
 			expErr:            "blockDownloader is nil",
 		},
+		"no storage protocol": {
+			config:                  &ffgconfig.Config{},
+			host:                    h,
+			dht:                     kademliaDHT,
+			discovery:               &drouting.RoutingDiscovery{},
+			searchEngine:            &search.BleveSearch{},
+			storage:                 &storage.Storage{},
+			pubSub:                  &pubsub.PubSub{},
+			blockchain:              &blockchain.Blockchain{},
+			dataQueryProtocol:       dataQueryProtocol,
+			blockDownloaderProtocol: &blockdownloader.Protocol{},
+			expErr:                  "storageProtocol is nil",
+		},
 		"success": {
 			config:                  &ffgconfig.Config{},
 			host:                    h,
@@ -145,6 +161,7 @@ func TestNew(t *testing.T) {
 			blockchain:              &blockchain.Blockchain{},
 			dataQueryProtocol:       dataQueryProtocol,
 			blockDownloaderProtocol: &blockdownloader.Protocol{},
+			storageProtocol:         &storageprotocol.Protocol{},
 		},
 	}
 
@@ -152,7 +169,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.storage, tt.blockchain, tt.dataQueryProtocol, tt.blockDownloaderProtocol)
+			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.storage, tt.blockchain, tt.dataQueryProtocol, tt.blockDownloaderProtocol, tt.storageProtocol)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -342,23 +359,23 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Publish before the gossip network is active
-	err = n3.PublishMessageToNetwork(ctx, []byte("should fail"))
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, []byte("should fail"))
 	assert.EqualError(t, err, "pubsub topic is not available")
 
 	// HandleIncomingMessages
-	err = n1.JoinPubSubNetwork(ctx, "randevouz")
+	err = n1.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
-	err = n1.HandleIncomingMessages(ctx, "randevouz")
-	assert.NoError(t, err)
-
-	err = n2.JoinPubSubNetwork(ctx, "randevouz")
-	assert.NoError(t, err)
-	err = n2.HandleIncomingMessages(ctx, "randevouz")
+	err = n1.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
-	err = n3.JoinPubSubNetwork(ctx, "randevouz")
+	err = n2.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
-	err = n3.HandleIncomingMessages(ctx, "randevouz")
+	err = n2.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
+	assert.NoError(t, err)
+
+	err = n3.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	assert.NoError(t, err)
+	err = n3.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
 	// add delay just to propagate the changes to the nodes.
@@ -375,7 +392,7 @@ func TestNodeMethods(t *testing.T) {
 
 	// node3 publishes a message to network
 	// PublishMessageToNetwork
-	err = n3.PublishMessageToNetwork(ctx, []byte("hello world"))
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, []byte("hello world"))
 	time.Sleep(100 * time.Millisecond)
 	assert.NoError(t, err)
 
@@ -390,7 +407,7 @@ func TestNodeMethods(t *testing.T) {
 	}
 	blockData, err := proto.Marshal(&payload)
 	assert.NoError(t, err)
-	err = n3.PublishMessageToNetwork(ctx, blockData)
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, blockData)
 	assert.NoError(t, err)
 	time.Sleep(200 * time.Millisecond)
 
@@ -407,7 +424,7 @@ func TestNodeMethods(t *testing.T) {
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
 
-	err = n3.PublishMessageToNetwork(ctx, blockData)
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, blockData)
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -425,7 +442,7 @@ func TestNodeMethods(t *testing.T) {
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
-	err = n3.PublishMessageToNetwork(ctx, blockData)
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, blockData)
 	assert.NoError(t, err)
 	time.Sleep(200 * time.Millisecond)
 
@@ -446,7 +463,7 @@ func TestNodeMethods(t *testing.T) {
 	}
 	blockData, err = proto.Marshal(&payload)
 	assert.NoError(t, err)
-	err = n3.PublishMessageToNetwork(ctx, blockData)
+	err = n3.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, blockData)
 	assert.NoError(t, err)
 	// time.Sleep(200 * time.Millisecond)
 	// assert.Equal(t, uint64(1), n1.blockchain.GetHeight())
@@ -529,7 +546,10 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader)
+	storageProtocol, err := storageprotocol.New(host)
+	assert.NoError(t, err)
+
+	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader, storageProtocol)
 	assert.NoError(t, err)
 	return node
 }
@@ -562,7 +582,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair
 	return &tx, keypair
 }
 
-// generate a block and propagate the keypair used for the tx
+// generate a block and propagate the keypair used for the tx.
 func validBlock(t *testing.T) (*block.Block, ffgcrypto.KeyPair) {
 	validTx, kp := validTransaction(t)
 	b := block.Block{

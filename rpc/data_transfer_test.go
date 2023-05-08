@@ -381,7 +381,7 @@ type networkMessagePublisherNodesFinderStub struct {
 	addrInfos []peer.AddrInfo
 }
 
-func (n *networkMessagePublisherNodesFinderStub) PublishMessageToNetwork(ctx context.Context, data []byte) error {
+func (n *networkMessagePublisherNodesFinderStub) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
 	return n.err
 }
 

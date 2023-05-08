@@ -32,6 +32,7 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	internalrpc "github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
@@ -163,6 +164,11 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
+	storageProtocol, err := storageprotocol.New(host)
+	if err != nil {
+		return fmt.Errorf("failed to set up storage protocol: %w", err)
+	}
+
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
@@ -170,7 +176,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
 		}
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{})
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
 		if err != nil {
 			return fmt.Errorf("failed to setup super light node node: %w", err)
 		}
@@ -212,7 +218,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup block downloader protocol: %w", err)
 		}
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol)
 		if err != nil {
 			return fmt.Errorf("failed to setup full node: %w", err)
 		}
@@ -277,18 +283,30 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		log.Warnf("discovering peers failed: %v", err)
 	}
+
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx.Context, "ffgnet_pubsub")
+	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubBlocksTXQuery)
 	if err != nil {
 		return fmt.Errorf("failed to listen for handling incoming pub sub messages: %w", err)
 	}
 
 	// if full node, then hanlde incoming block, transactions, and data queries
 	if !conf.Global.SuperLightNode {
-		err = ffgNode.HandleIncomingMessages(ctx.Context, "ffgnet_pubsub")
+		err = ffgNode.HandleIncomingMessages(ctx.Context, common.FFGNetPubSubBlocksTXQuery)
 		if err != nil {
 			return fmt.Errorf("failed to start handling incoming pub sub messages: %w", err)
 		}
+	}
+
+	// join the storage pub sub
+	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubStorageQuery)
+	if err != nil {
+		return fmt.Errorf("failed to listen for handling incoming pub sub storage messages: %w", err)
+	}
+
+	err = ffgNode.HandleIncomingMessages(ctx.Context, common.FFGNetPubSubStorageQuery)
+	if err != nil {
+		return fmt.Errorf("failed to start handling incoming pub sub storage messages: %w", err)
 	}
 
 	// bootstrap

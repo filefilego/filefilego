@@ -40,6 +40,7 @@ import (
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	internalrpc "github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
@@ -748,12 +749,15 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 
+	storageProtocol, err := storageprotocol.New(host)
+	assert.NoError(t, err)
+
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{})
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
 		assert.NoError(t, err)
 	} else {
 		// full node dependencies setup
@@ -780,7 +784,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol)
 		assert.NoError(t, err)
 
 		// validator node
@@ -795,14 +799,21 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	err = ffgNode.DiscoverPeers(ctx, "ffgnet")
 	assert.NoError(t, err)
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx, "ffgnet_pubsub")
+	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
 	// if full node, then hanlde incoming block, transactions, and data queries
 	if !conf.Global.SuperLightNode {
-		err = ffgNode.HandleIncomingMessages(ctx, "ffgnet_pubsub")
+		err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 		assert.NoError(t, err)
 	}
+
+	// join the storage pub sub
+	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubStorageQuery)
+	assert.NoError(t, err)
+
+	err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubStorageQuery)
+	assert.NoError(t, err)
 
 	// bootstrap
 	err = ffgNode.Bootstrap(ctx, conf.P2P.Bootstraper.Nodes)

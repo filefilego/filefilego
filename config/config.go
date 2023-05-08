@@ -26,6 +26,8 @@ type global struct {
 	SearchEngine                            bool
 	SearchEngineResultCount                 int
 	Storage                                 bool
+	StoragePublic                           bool
+	StorageNodeLocation                     string
 	StorageDir                              string
 	StorageToken                            string
 	StorageFeesPerByte                      string
@@ -156,6 +158,14 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(Storage.Name) {
 		conf.Global.Storage = ctx.Bool(Storage.Name)
+	}
+
+	if ctx.IsSet(StoragePublic.Name) {
+		conf.Global.StoragePublic = ctx.Bool(StoragePublic.Name)
+	}
+
+	if ctx.IsSet(StorageNodeLocation.Name) {
+		conf.Global.StorageNodeLocation = ctx.String(StorageNodeLocation.Name)
 	}
 
 	if ctx.IsSet(StorageDir.Name) {

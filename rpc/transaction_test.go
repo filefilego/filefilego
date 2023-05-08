@@ -179,7 +179,7 @@ type networkMessagePublisherStub struct {
 	err error
 }
 
-func (n *networkMessagePublisherStub) PublishMessageToNetwork(ctx context.Context, data []byte) error {
+func (n *networkMessagePublisherStub) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
 	return n.err
 }
 

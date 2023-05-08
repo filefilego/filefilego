@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/keystore"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -24,7 +25,7 @@ type Blockchain interface {
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
 type NetworkMessagePublisher interface {
-	PublishMessageToNetwork(ctx context.Context, data []byte) error
+	PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error
 }
 
 // TransactionsResponse represents a response with block and transaction
@@ -183,7 +184,7 @@ func (api *TransactionAPI) validateBroadcastTxSetResponse(ctx context.Context, t
 
 	response.Transaction = toJSONTransaction(*tx)
 
-	if err := api.publisher.PublishMessageToNetwork(ctx, txBytes); err != nil {
+	if err := api.publisher.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, txBytes); err != nil {
 		return fmt.Errorf("failed to publish transaction to network: %w", err)
 	}
 	return nil

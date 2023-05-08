@@ -11,6 +11,7 @@ import (
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -20,7 +21,7 @@ import (
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
 type NetworkMessagePublisher interface {
-	PublishMessageToNetwork(ctx context.Context, data []byte) error
+	PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error
 }
 
 // Validator struct.
@@ -177,7 +178,7 @@ func (m *Validator) BroadcastBlock(ctx context.Context, validBlock *block.Block)
 	if err != nil {
 		return fmt.Errorf("failed to marshal proto block: %w", err)
 	}
-	err = m.node.PublishMessageToNetwork(ctx, blockData)
+	err = m.node.PublishMessageToNetwork(ctx, common.FFGNetPubSubBlocksTXQuery, blockData)
 	if err != nil {
 		return fmt.Errorf("failed to publish block to the network: %w", err)
 	}
