@@ -86,6 +86,49 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 	}, nil
 }
 
+// RebroadcastDataQueryRequestArgs rebroadcasts a data query.
+type RebroadcastDataQueryRequestArgs struct {
+	Hash string `json:"hash"`
+}
+
+// SendDataQueryRequestResponse is a data query hash response.
+type RebroadcastDataQueryRequestResponse struct {
+	Success bool `json:"success"`
+}
+
+// SendDataQueryRequest sends a data query request to the network.
+func (api *DataTransferAPI) RebroadcastDataQueryRequest(r *http.Request, args *RebroadcastDataQueryRequestArgs, response *RebroadcastDataQueryRequestResponse) error {
+	if args.Hash == "" {
+		return errors.New("data query request hash is empty")
+	}
+
+	dqr, ok := api.dataQueryProtocol.GetQueryHistory(args.Hash)
+	if !ok {
+		return errors.New("failed to find data query request")
+	}
+
+	requestProto := messages.ToDataQueryRequestProto(dqr)
+
+	payload := messages.GossipPayload{
+		Message: &messages.GossipPayload_Query{
+			Query: requestProto,
+		},
+	}
+
+	payloadBytes, err := proto.Marshal(&payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data query gossip payload for rebroadcasting: %w", err)
+	}
+
+	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), payloadBytes); err != nil {
+		return fmt.Errorf("failed to rebroadcast data query to network: %w", err)
+	}
+
+	response.Success = true
+
+	return nil
+}
+
 // SendDataQueryRequestArgs is a data query request argument.
 type SendDataQueryRequestArgs struct {
 	// FileHashes is a list of comma-separated file hashes.
