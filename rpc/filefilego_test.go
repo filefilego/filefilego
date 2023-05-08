@@ -176,7 +176,6 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	assert.Equal(t, 2, response2.PeerCount)
 	assert.Equal(t, n2.GetID(), response2.PeerID)
 	assert.NotEmpty(t, response2.Verifiers)
-
 }
 
 func newHost(t *testing.T, port string) host.Host {
