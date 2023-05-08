@@ -117,11 +117,11 @@ func (api *DataTransferAPI) RebroadcastDataQueryRequest(r *http.Request, args *R
 
 	payloadBytes, err := proto.Marshal(&payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal data query gossip payload: %w", err)
+		return fmt.Errorf("failed to marshal data query gossip payload for rebroadcasting: %w", err)
 	}
 
 	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), payloadBytes); err != nil {
-		return fmt.Errorf("failed to publish data query to network: %w", err)
+		return fmt.Errorf("failed to rebroadcast data query to network: %w", err)
 	}
 
 	response.Success = true
