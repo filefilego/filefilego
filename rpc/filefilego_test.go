@@ -171,6 +171,7 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	response2 := &StatsResponse{}
 	err = api2.Stats(&http.Request{}, &EmptyArgs{}, response2)
 	assert.NoError(t, err)
+	assert.Equal(t, uint64(0), response2.HeighestBlockNumberDiscovered)
 	assert.Equal(t, uint64(0), response2.BlockchainHeight)
 	assert.Equal(t, 2, response2.PeerCount)
 	assert.Equal(t, n2.GetID(), response2.PeerID)
