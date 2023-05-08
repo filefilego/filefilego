@@ -64,6 +64,7 @@ type Interface interface {
 	Bootstrap(ctx context.Context, bootstrapPeers []string) error
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 	JoinPubSubNetwork(ctx context.Context, topicName string) error
+	HeighestBlockNumberDiscovered() uint64
 }
 
 // Node represents all the node functionalities
@@ -78,8 +79,12 @@ type Node struct {
 	dataQueryProtocol       dataquery.Interface
 	blockDownloaderProtocol blockdownloader.Interface
 
-	syncing     bool
-	syncingMu   sync.RWMutex
+	syncing   bool
+	syncingMu sync.RWMutex
+
+	heighestBlockNumberDiscovered uint64
+	heighestBlockNumberMu         sync.RWMutex
+
 	config      *ffgconfig.Config
 	gossipTopic *pubsub.Topic
 }
@@ -140,6 +145,20 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 	}, nil
 }
 
+func (n *Node) HeighestBlockNumberDiscovered() uint64 {
+	n.heighestBlockNumberMu.RLock()
+	defer n.heighestBlockNumberMu.RUnlock()
+
+	return n.heighestBlockNumberDiscovered
+}
+
+func (n *Node) setHeighestBlockNumberDiscovered(height uint64) {
+	n.heighestBlockNumberMu.Lock()
+	defer n.heighestBlockNumberMu.Unlock()
+
+	n.heighestBlockNumberDiscovered = height
+}
+
 func (n *Node) setSyncing(val bool) {
 	n.syncingMu.Lock()
 	defer n.syncingMu.Unlock()
@@ -194,7 +213,10 @@ func (n *Node) Sync(ctx context.Context) error {
 	if len(remotePeersList) > 0 {
 		// while this node is behind the network
 		// try to download blocks
-		for n.blockchain.GetHeight() <= n.blockDownloaderProtocol.GetHeighestBlockNumberFromPeers() {
+		heighestBlockNumberDiscovered := n.blockDownloaderProtocol.GetHeighestBlockNumberFromPeers()
+		n.setHeighestBlockNumberDiscovered(heighestBlockNumberDiscovered)
+
+		for n.blockchain.GetHeight() <= heighestBlockNumberDiscovered {
 			localHeight := n.blockchain.GetHeight()
 			request := messages.BlockDownloadRequestProto{
 				From: localHeight + 1,
