@@ -5,11 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/database"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	internalstorage "github.com/filefilego/filefilego/storage"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -18,20 +21,35 @@ import (
 	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/stretchr/testify/assert"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestStorageProtocol(t *testing.T) {
 	h1, _, pubKey := newHost(t, "7365")
 	h2, _, _ := newHost(t, "7366")
 
-	protocol1, err := New(nil, true)
+	db, err := leveldb.OpenFile("storage.db", nil)
+	assert.NoError(t, err)
+	driver, err := database.New(db)
+	assert.NoError(t, err)
+	storagePath := "storagePath"
+	t.Cleanup(func() {
+		db.Close()
+		os.RemoveAll("storage.db")
+		os.RemoveAll(storagePath)
+	})
+
+	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024)
+	assert.NoError(t, err)
+
+	protocol1, err := New(nil, storage, true)
 	assert.EqualError(t, err, "host is nil")
 	assert.Nil(t, protocol1)
 
-	protocol1, err = New(h1, true)
+	protocol1, err = New(h1, storage, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol1)
-	protocol2, err := New(h2, true)
+	protocol2, err := New(h2, storage, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol2)
 

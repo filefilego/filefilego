@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +18,10 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
+	"github.com/filefilego/filefilego/node/protocols/messages"
+	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -31,6 +36,8 @@ const (
 	fileHashPrefix   = "mdt"
 
 	fileHashToNodePrefix = "fhn"
+
+	bufferSize = 8192
 )
 
 // Interface defines the functionalities of the storage engine.
@@ -44,6 +51,7 @@ type Interface interface {
 	GetFileMetadata(fileHash string) (FileMetadata, error)
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
+	HandleIncomingFileUploads(stream network.Stream)
 }
 
 // FileMetadata holds the metadata for a file.
@@ -393,6 +401,156 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_name":"%s","file_hash": "%s", "merkle_root_hash": "%s", "size": %d}`, fileMetadata.FileName, fileMetadata.Hash, fileMetadata.MerkleRootHash, fileMetadata.Size))
+}
+
+// ServeHTTP handles file uploading.
+func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
+	c := bufio.NewReader(stream)
+	defer stream.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from HandleIncomingFileUploads stream: %v", err)
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from HandleIncomingFileUploads stream to buffer: %v", err)
+		return
+	}
+
+	request := messages.StorageFileUploadMetadataProto{}
+	if err := proto.Unmarshal(buf, &request); err != nil {
+		log.Errorf("failed to unmarshall data from HandleIncomingFileUploads stream: %v", err)
+		return
+	}
+
+	nodeHash := request.ChannelNodeHash
+	fileName := request.FileName
+
+	if !validateFileName(fileName) {
+		if err != nil {
+			return
+		}
+	}
+
+	folderPath, err := s.CreateSubfolders()
+	if err != nil {
+		log.Errorf("failed to create subfolders: %v", err)
+		return
+	}
+
+	tmpFileName, err := crypto.RandomEntropy(40)
+	if err != nil {
+		log.Errorf("failed to create a random temp file: %v", err)
+		return
+	}
+
+	tmpFileHex := hexutil.Encode(tmpFileName)
+	destFile, err := os.Create(filepath.Join(folderPath, tmpFileHex))
+	if err != nil {
+		log.Errorf("failed to create destination file: %v", err)
+		return
+	}
+
+	// handle upload
+	buf = make([]byte, bufferSize)
+	for {
+		n, err := stream.Read(buf)
+		if n > 0 {
+			wroteN, err := destFile.Write(buf[:n])
+			if wroteN != n || err != nil {
+				log.Errorf("failed to write to destination file (buf: %d, output: %d): %v", n, wroteN, err)
+				destFile.Close()
+				return
+			}
+		}
+
+		if err == io.EOF {
+			destFile.Close()
+			break
+		}
+
+		if err != nil {
+			log.Errorf("fialed to read file content to buffer: %v", err)
+			destFile.Close()
+			break
+		}
+	}
+	destFile.Close()
+
+	old := filepath.Join(folderPath, tmpFileHex)
+	fileSize, err := common.FileSize(old)
+	if err != nil {
+		log.Errorf("failed to get destination file size: %v", err)
+		os.Remove(old)
+		return
+	}
+
+	fHash, err := crypto.Sha1File(old)
+	if err != nil {
+		log.Errorf("failed to hash destination file: %v", err)
+		os.Remove(old)
+		return
+	}
+
+	newPath := filepath.Join(folderPath, fHash)
+
+	if !common.FileExists(newPath) {
+		err = os.Rename(old, newPath)
+		if err != nil {
+			log.Errorf("failed to move uploaded file: %v", err)
+			os.Remove(old)
+			return
+		}
+	}
+
+	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	orderedSlice := make([]int, howManySegments)
+	for i := 0; i < howManySegments; i++ {
+		orderedSlice[i] = i
+	}
+
+	fMerkleRootHash, err := common.GetFileMerkleRootHash(newPath, s.merkleTreeTotalSegments, orderedSlice)
+	if err != nil {
+		log.Errorf("failed to get file merkle root hash: %v", err)
+		os.Remove(old)
+		return
+	}
+
+	fileName = html.EscapeString(fileName)
+	fileMetadata := FileMetadata{
+		FileName:       fileName,
+		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
+		Hash:           fHash,
+		FilePath:       newPath,
+		Size:           fileSize,
+	}
+
+	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
+	if fileHashExistsInDB {
+		fileMetadata, err = s.GetFileMetadata(nodeHashDB)
+		if err != nil {
+			log.Errorf("failed to get file merkle root hash: %v", err)
+			os.Remove(newPath)
+			return
+		}
+	}
+
+	err = s.SaveFileMetadata(nodeHash, fHash, fileMetadata)
+	if err != nil {
+		log.Errorf("failed to save file metadata: %v", err)
+		os.Remove(newPath)
+		return
+	}
 }
 
 // Authenticate authenticates storage access.

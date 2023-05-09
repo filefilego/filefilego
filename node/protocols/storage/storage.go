@@ -18,6 +18,7 @@ import (
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	internalstorage "github.com/filefilego/filefilego/storage"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -47,18 +48,25 @@ type Protocol struct {
 	host             host.Host
 	storageProviders map[string]*messages.StorageQueryResponseProto
 	storagePublic    bool
+	storage          internalstorage.Interface
 	mu               sync.RWMutex
 }
 
 // New creates a storage protocol.
-func New(h host.Host, storagePublic bool) (*Protocol, error) {
+func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
+
+	if storage == nil {
+		return nil, errors.New("storage is nil")
+	}
+
 	p := &Protocol{
 		host:             h,
 		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
 		storagePublic:    storagePublic,
+		storage:          storage,
 	}
 
 	// all types of nodes listen for this protocol
@@ -66,15 +74,17 @@ func New(h host.Host, storagePublic bool) (*Protocol, error) {
 	// requested storage discovery.
 	p.host.SetStreamHandler(ProtocolID, p.handleIncomingStorageQueryResponse)
 	if p.storagePublic {
-		p.host.SetStreamHandler(FileUploadProtocolID, p.handleIncomingFileUpload)
+		p.host.SetStreamHandler(FileUploadProtocolID, p.HandleIncomingFileUploads)
 		p.host.SetStreamHandler(SpeedTestProtocolID, p.handleIncomingSpeedTest)
 	}
 
 	return p, nil
 }
 
-// handleIncomingFileUpload handles incoming file uploads from other nodes.
-func (p *Protocol) handleIncomingFileUpload(s network.Stream) {}
+// HandleIncomingFileUploads handles incoming file uploads.
+func (p *Protocol) HandleIncomingFileUploads(s network.Stream) {
+	p.storage.HandleIncomingFileUploads(s)
+}
 
 // handleIncomingSpeedTest handles incoming speed tests.
 func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {

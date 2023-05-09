@@ -154,6 +154,7 @@ func run(ctx *cli.Context) error {
 	bchain := &blockchain.Blockchain{}
 	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
+	storageProtocol := &storageprotocol.Protocol{}
 	dataQueryProtocol, err := dataquery.New(host)
 	if err != nil {
 		return fmt.Errorf("failed to setup data query protocol: %w", err)
@@ -164,16 +165,16 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
-	storageProtocol, err := storageprotocol.New(host, conf.Global.StoragePublic)
-	if err != nil {
-		return fmt.Errorf("failed to set up storage protocol: %w", err)
-	}
-
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
 		if err != nil {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
+		}
+
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		if err != nil {
+			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
 
 		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
@@ -187,6 +188,11 @@ func run(ctx *cli.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to setup storage engine: %w", err)
 			}
+		}
+
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		if err != nil {
+			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
 
 		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))

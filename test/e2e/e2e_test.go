@@ -744,17 +744,18 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	bchain := &blockchain.Blockchain{}
 	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
+	storageProtocol := &storageprotocol.Protocol{}
 	dataQueryProtocol, err := dataquery.New(host)
 	assert.NoError(t, err)
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 
-	storageProtocol, err := storageprotocol.New(host, conf.Global.StoragePublic)
-	assert.NoError(t, err)
-
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
+		assert.NoError(t, err)
+
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
 		assert.NoError(t, err)
 
 		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
@@ -765,6 +766,9 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
 			assert.NoError(t, err)
 		}
+
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		assert.NoError(t, err)
 
 		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
 		assert.NoError(t, err)
