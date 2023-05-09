@@ -12,12 +12,35 @@ message GossipPayload {
         ProtoBlocks blocks = 1;
         transaction.ProtoTransaction transaction = 2;
         DataQueryRequestProto query = 3;
+        StorageQueryRequestProto storage_query = 4;
     }
 }
 
 // ProtoBlocks is the proto representation of blocks envelope.
 message ProtoBlocks {
     repeated block.ProtoBlock blocks = 1;
+}
+
+// StorageQueryRequestProto represents a storage query message.
+message StorageQueryRequestProto {
+    string from_peer_addr = 1;
+    string preferred_location = 2;
+}
+
+// StorageQueryResponseProto represents a storage response message.
+message StorageQueryResponseProto {
+    string storage_provider_peer_addr = 1;
+    string location = 2;
+    string fees_per_byte = 3;
+    bytes public_key = 4;
+    bytes hash = 5;
+    bytes signature = 6;
+}
+
+// StorageFileUploadMetadataProto represents a file's name and associated channel node item hash.
+message StorageFileUploadMetadataProto {
+    string file_name = 1;
+    string channel_node_hash = 2;
 }
 
 // DataQueryRequestProto represents a data query message.

@@ -66,6 +66,16 @@ var (
 		Usage: "Enable storage",
 	}
 
+	StoragePublic = cli.BoolFlag{
+		Name:  "storage_public",
+		Usage: "Enable other nodes without access to store data on this node",
+	}
+
+	StorageNodeLocation = cli.StringFlag{
+		Name:  "storage_node_location",
+		Usage: "Indicate the location of the node",
+	}
+
 	StorageDir = cli.StringFlag{
 		Name:  "storage_dir",
 		Usage: "Storage location",
@@ -248,6 +258,8 @@ var AppFlags = []cli.Flag{
 	&SearchEngine,
 	&SearchEngineResultCount,
 	&Storage,
+	&StoragePublic,
+	&StorageNodeLocation,
 	&StorageDir,
 	&StorageToken,
 	&StorageFeesPerByte,

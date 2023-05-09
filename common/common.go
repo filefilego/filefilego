@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+const (
+	// FFGNetPubSubBlocksTXQuery is a pub sub topic name to receive transactions, data queries and blocks.
+	FFGNetPubSubBlocksTXQuery = "ffgnet_pubsub"
+
+	// FFGNetPubSubStorageQuery is a pub sub topic name to receive storage queryies.
+	FFGNetPubSubStorageQuery = "ffgnet_pubsub_storage"
+)
+
 // Reverse a string.
 func Reverse(s string) string {
 	n := len(s)

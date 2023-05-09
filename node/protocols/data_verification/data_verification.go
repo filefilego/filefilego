@@ -72,7 +72,7 @@ type Interface interface {
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
 type NetworkMessagePublisher interface {
-	PublishMessageToNetwork(ctx context.Context, data []byte) error
+	PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error
 }
 
 // Protocol wraps the data verification protocols and handlers
@@ -658,7 +658,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		return fmt.Errorf("failed to marshal gossip payload in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
-	if err := d.publisher.PublishMessageToNetwork(context.Background(), txBytes); err != nil {
+	if err := d.publisher.PublishMessageToNetwork(context.Background(), common.FFGNetPubSubBlocksTXQuery, txBytes); err != nil {
 		return fmt.Errorf("failed to publish transaction to network in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 

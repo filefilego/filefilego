@@ -1,7 +1,9 @@
 package node
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
@@ -18,6 +20,7 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 	"github.com/filefilego/filefilego/transaction"
@@ -55,7 +58,7 @@ type Interface interface {
 	ConnectToPeerWithMultiaddr(ctx context.Context, addr multiaddr.Multiaddr) (*peer.AddrInfo, error)
 	Advertise(ctx context.Context, ns string)
 	DiscoverPeers(ctx context.Context, ns string) error
-	PublishMessageToNetwork(ctx context.Context, data []byte) error
+	PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error
 	HandleIncomingMessages(ctx context.Context, topicName string) error
 	GetMultiaddr() ([]multiaddr.Multiaddr, error)
 	Peers() peer.IDSlice
@@ -78,6 +81,7 @@ type Node struct {
 	blockchain              blockchain.Interface
 	dataQueryProtocol       dataquery.Interface
 	blockDownloaderProtocol blockdownloader.Interface
+	storageProtocol         storageprotocol.Interface
 
 	syncing   bool
 	syncingMu sync.RWMutex
@@ -86,11 +90,11 @@ type Node struct {
 	heighestBlockNumberMu         sync.RWMutex
 
 	config      *ffgconfig.Config
-	gossipTopic *pubsub.Topic
+	gossipTopic map[string]*pubsub.Topic
 }
 
 // New creates a new node.
-func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface, storageProtocol storageprotocol.Interface) (*Node, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -131,6 +135,10 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		return nil, errors.New("blockDownloader is nil")
 	}
 
+	if storageProtocol == nil {
+		return nil, errors.New("storageProtocol is nil")
+	}
+
 	return &Node{
 		host:                    host,
 		dht:                     dht,
@@ -141,7 +149,9 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		blockchain:              blockchain,
 		dataQueryProtocol:       dataQuery,
 		blockDownloaderProtocol: blockDownloaderProtocol,
+		storageProtocol:         storageProtocol,
 		config:                  cfg,
+		gossipTopic:             make(map[string]*pubsub.Topic),
 	}, nil
 }
 
@@ -306,12 +316,13 @@ func (n *Node) DiscoverPeers(ctx context.Context, ns string) error {
 }
 
 // PublishMessageToNetwork publish a message to the network.
-func (n *Node) PublishMessageToNetwork(ctx context.Context, data []byte) error {
-	if n.gossipTopic == nil {
+func (n *Node) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
+	topic, ok := n.gossipTopic[topicName]
+	if !ok {
 		return errors.New("pubsub topic is not available")
 	}
 
-	if err := n.gossipTopic.Publish(ctx, data); err != nil {
+	if err := topic.Publish(ctx, data); err != nil {
 		return fmt.Errorf("failed to publish message to network: %w", err)
 	}
 	return nil
@@ -319,7 +330,8 @@ func (n *Node) PublishMessageToNetwork(ctx context.Context, data []byte) error {
 
 // JoinPubSubNetwork joins the gossip network.
 func (n *Node) JoinPubSubNetwork(ctx context.Context, topicName string) error {
-	if n.gossipTopic != nil {
+	_, ok := n.gossipTopic[topicName]
+	if ok {
 		return errors.New("already subscribed to topic")
 	}
 
@@ -328,17 +340,18 @@ func (n *Node) JoinPubSubNetwork(ctx context.Context, topicName string) error {
 		return fmt.Errorf("failed to join pubsub topic: %w", err)
 	}
 
-	n.gossipTopic = topic
+	n.gossipTopic[topicName] = topic
 	return nil
 }
 
 // HandleIncomingMessages gets the messages from gossip network.
 func (n *Node) HandleIncomingMessages(ctx context.Context, topicName string) error {
-	if n.gossipTopic == nil {
-		return errors.New("not subscribed to to topic")
+	topic, ok := n.gossipTopic[topicName]
+	if !ok {
+		return errors.New("not subscribed to a topic")
 	}
 
-	sub, err := n.gossipTopic.Subscribe()
+	sub, err := topic.Subscribe()
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to topic %s: %w", topicName, err)
 	}
@@ -403,6 +416,67 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			if err := n.blockchain.PutMemPool(tx); err != nil {
 				return fmt.Errorf("failed to insert transaction to mempool: %w", err)
 			}
+		}
+
+	case *messages.GossipPayload_StorageQuery:
+		if !n.config.Global.StoragePublic {
+			return nil
+		}
+
+		pubKey, err := n.host.ID().ExtractPublicKey()
+		if err != nil {
+			return fmt.Errorf("failed to extract public key from host: %w", err)
+		}
+
+		pubKeyBytes, err := pubKey.Raw()
+		if err != nil {
+			return fmt.Errorf("failed to get public key bytes: %w", err)
+		}
+
+		response := messages.StorageQueryResponseProto{
+			StorageProviderPeerAddr: n.GetID(),
+			Location:                n.config.Global.StorageNodeLocation,
+			FeesPerByte:             n.config.Global.StorageFeesPerByte,
+			PublicKey:               make([]byte, len(pubKeyBytes)),
+		}
+
+		copy(response.PublicKey, pubKeyBytes)
+		data := bytes.Join(
+			[][]byte{
+				[]byte(response.StorageProviderPeerAddr),
+				[]byte(response.Location),
+				[]byte(response.FeesPerByte),
+				response.PublicKey,
+			},
+			[]byte{},
+		)
+
+		h := sha256.New()
+		if _, err := h.Write(data); err != nil {
+			return fmt.Errorf("failed to hash the storage query response: %w", err)
+		}
+		hash := h.Sum(nil)
+		privateKey := n.host.Peerstore().PrivKey(n.GetPeerID())
+		sig, err := privateKey.Sign(hash)
+		if err != nil {
+			return fmt.Errorf("failed to sign storage query response: %w", err)
+		}
+
+		response.Hash = make([]byte, len(hash))
+		response.Signature = make([]byte, len(sig))
+
+		copy(response.Hash, hash)
+		copy(response.Signature, sig)
+
+		storageQueryProto := payload.GetStorageQuery()
+		storageQuerier, err := peer.Decode(storageQueryProto.FromPeerAddr)
+		if err != nil {
+			return fmt.Errorf("failed to decode storage querier peer id: %w", err)
+		}
+
+		addrsInfos := n.FindPeers(ctx, []peer.ID{storageQuerier})
+		if len(addrsInfos) > 0 {
+			_ = n.storageProtocol.SendStorageQueryResponse(ctx, addrsInfos[0].ID, &response)
 		}
 
 	case *messages.GossipPayload_Query:

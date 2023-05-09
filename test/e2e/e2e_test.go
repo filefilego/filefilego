@@ -40,6 +40,7 @@ import (
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
 	"github.com/filefilego/filefilego/node/protocols/messages"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	internalrpc "github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
@@ -743,6 +744,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	bchain := &blockchain.Blockchain{}
 	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
+	storageProtocol := &storageprotocol.Protocol{}
 	dataQueryProtocol, err := dataquery.New(host)
 	assert.NoError(t, err)
 	genesisblockValid, err := block.GetGenesisBlock()
@@ -753,7 +755,10 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{})
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		assert.NoError(t, err)
+
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
 		assert.NoError(t, err)
 	} else {
 		// full node dependencies setup
@@ -761,6 +766,9 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
 			assert.NoError(t, err)
 		}
+
+		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		assert.NoError(t, err)
 
 		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
 		assert.NoError(t, err)
@@ -780,7 +788,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol)
 		assert.NoError(t, err)
 
 		// validator node
@@ -795,14 +803,21 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	err = ffgNode.DiscoverPeers(ctx, "ffgnet")
 	assert.NoError(t, err)
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx, "ffgnet_pubsub")
+	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
 	// if full node, then hanlde incoming block, transactions, and data queries
 	if !conf.Global.SuperLightNode {
-		err = ffgNode.HandleIncomingMessages(ctx, "ffgnet_pubsub")
+		err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 		assert.NoError(t, err)
 	}
+
+	// join the storage pub sub
+	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubStorageQuery)
+	assert.NoError(t, err)
+
+	err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubStorageQuery)
+	assert.NoError(t, err)
 
 	// bootstrap
 	err = ffgNode.Bootstrap(ctx, conf.P2P.Bootstraper.Nodes)
@@ -867,6 +882,13 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keyst)
 		assert.NoError(t, err)
 		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
+		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol)
+		assert.NoError(t, err)
+		err = s.RegisterService(storageAPI, internalrpc.StorageServiceNamespace)
 		assert.NoError(t, err)
 	}
 

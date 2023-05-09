@@ -17,6 +17,7 @@ import (
 	"github.com/filefilego/filefilego/node"
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
+	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
 	transaction "github.com/filefilego/filefilego/transaction"
@@ -245,7 +246,13 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader)
+	storage, err := storage.New(blockchainDB, "storagePath", true, "admin", 1024)
+	assert.NoError(t, err)
+
+	storageProtocol, err := storageprotocol.New(host, storage, false)
+	assert.NoError(t, err)
+
+	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storage, bchain, dataQueryProtocol, blockDownloader, storageProtocol)
 	assert.NoError(t, err)
 	return node, bchain, searchEngine, host
 }

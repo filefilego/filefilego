@@ -120,7 +120,7 @@ func (api *DataTransferAPI) RebroadcastDataQueryRequest(r *http.Request, args *R
 		return fmt.Errorf("failed to marshal data query gossip payload for rebroadcasting: %w", err)
 	}
 
-	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), payloadBytes); err != nil {
+	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), common.FFGNetPubSubBlocksTXQuery, payloadBytes); err != nil {
 		return fmt.Errorf("failed to rebroadcast data query to network: %w", err)
 	}
 
@@ -193,7 +193,7 @@ func (api *DataTransferAPI) SendDataQueryRequest(r *http.Request, args *SendData
 		return fmt.Errorf("failed to marshal data query gossip payload: %w", err)
 	}
 
-	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), payloadBytes); err != nil {
+	if err := api.publisherNodesFinder.PublishMessageToNetwork(r.Context(), common.FFGNetPubSubBlocksTXQuery, payloadBytes); err != nil {
 		return fmt.Errorf("failed to publish data query to network: %w", err)
 	}
 
