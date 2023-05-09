@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -84,6 +86,46 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 // HandleIncomingFileUploads handles incoming file uploads.
 func (p *Protocol) HandleIncomingFileUploads(s network.Stream) {
 	p.storage.HandleIncomingFileUploads(s)
+}
+
+// UploadFileWithMetadata uploads a file content, its name and if its associated with a channel node item.
+func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) error {
+	request := &messages.StorageFileUploadMetadataProto{
+		FileName:        filepath.Base(filePath),
+		ChannelNodeHash: chanNodeItemHash,
+	}
+
+	input, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open the source file for uploading: %w", err)
+	}
+	defer input.Close()
+
+	s, err := p.host.NewStream(ctx, peerID, FileUploadProtocolID)
+	if err != nil {
+		return fmt.Errorf("failed to create new file upload stream: %w", err)
+	}
+	defer s.Close()
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal a file upload request: %w", err)
+	}
+
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 20*common.KB {
+		return fmt.Errorf("request size is too large for a sending a file to the remote node: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to write file metadata to remote stream: %w", err)
+	}
+
+	return nil
 }
 
 // handleIncomingSpeedTest handles incoming speed tests.
