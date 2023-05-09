@@ -128,7 +128,6 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NotEmpty(t, metadata.Hash)
 	assert.NotEmpty(t, metadata.MerkleRootHash)
 	assert.NotEmpty(t, metadata.Size)
-
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {
