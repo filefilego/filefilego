@@ -125,6 +125,25 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		return fmt.Errorf("failed to write file metadata to remote stream: %w", err)
 	}
 
+	buf := make([]byte, bufferSize)
+	for {
+		n, err := input.Read(buf)
+		if n > 0 {
+			_, err := s.Write(buf[:n])
+			if err != nil {
+				return fmt.Errorf("failed to write content to remote stream: %w", err)
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to write the file to remote stream: %w", err)
+		}
+	}
+
 	return nil
 }
 
