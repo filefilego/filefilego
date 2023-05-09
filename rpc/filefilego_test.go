@@ -246,7 +246,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	storageProtocol, err := storageprotocol.New(host)
+	storageProtocol, err := storageprotocol.New(host, false)
 	assert.NoError(t, err)
 
 	node, err := node.New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader, storageProtocol)

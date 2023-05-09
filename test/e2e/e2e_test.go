@@ -749,7 +749,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 
-	storageProtocol, err := storageprotocol.New(host)
+	storageProtocol, err := storageprotocol.New(host, conf.Global.StoragePublic)
 	assert.NoError(t, err)
 
 	// super light node dependencies setup
@@ -878,6 +878,13 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keyst)
 		assert.NoError(t, err)
 		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
+		assert.NoError(t, err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
+		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol)
+		assert.NoError(t, err)
+		err = s.RegisterService(storageAPI, internalrpc.StorageServiceNamespace)
 		assert.NoError(t, err)
 	}
 

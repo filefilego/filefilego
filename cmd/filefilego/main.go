@@ -164,7 +164,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
-	storageProtocol, err := storageprotocol.New(host)
+	storageProtocol, err := storageprotocol.New(host, conf.Global.StoragePublic)
 	if err != nil {
 		return fmt.Errorf("failed to set up storage protocol: %w", err)
 	}
@@ -411,6 +411,17 @@ func run(ctx *cli.Context) error {
 		conf.Global.DataVerifierTransactionFees)
 	if err != nil {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
+	}
+
+	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
+		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol)
+		if err != nil {
+			return fmt.Errorf("failed to setup storage rpc api: %w", err)
+		}
+		err = s.RegisterService(storageAPI, internalrpc.StorageServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register storage rpc api service: %w", err)
+		}
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {

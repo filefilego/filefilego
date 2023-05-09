@@ -17,3 +17,6 @@ const ChannelServiceNamespace = "channel"
 
 // DataTransferServiceNamespace is the namespace for data transfer service rpc.
 const DataTransferServiceNamespace = "data_transfer"
+
+// StorageServiceNamespace is the namespace for storage service rpc.
+const StorageServiceNamespace = "storage"
