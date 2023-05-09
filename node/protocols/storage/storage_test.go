@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	internalstorage "github.com/filefilego/filefilego/storage"
@@ -110,6 +111,24 @@ func TestStorageProtocol(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	providers := protocol2.GetDiscoveredStorageProviders()
 	assert.Len(t, providers, 1)
+
+	err = protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
+	assert.NoError(t, err)
+
+	time.Sleep(1 * time.Second)
+
+	fhash, err := ffgcrypto.Sha1File("storage.go")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, fhash)
+
+	metadata, err := protocol2.storage.GetFileMetadata(fhash)
+	assert.NoError(t, err)
+	assert.Equal(t, "storage.go", metadata.FileName)
+	assert.NotEmpty(t, metadata.FilePath)
+	assert.NotEmpty(t, metadata.Hash)
+	assert.NotEmpty(t, metadata.MerkleRootHash)
+	assert.NotEmpty(t, metadata.Size)
+
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

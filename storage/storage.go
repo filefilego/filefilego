@@ -511,6 +511,8 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 			os.Remove(old)
 			return
 		}
+	} else {
+		os.Remove(old)
 	}
 
 	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
