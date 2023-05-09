@@ -1,16 +1,21 @@
 package storage
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -26,12 +31,15 @@ const (
 	SpeedTestProtocolID = "/ffg/storage_speed/1.0.0"
 	// FileUploadProtocolID is a file upload protocol id and version.
 	FileUploadProtocolID = "/ffg/storage_upload/1.0.0"
+
+	bufferSize = 8192
 )
 
 // Interface represents a set of functionalities by the storage query.
 type Interface interface {
 	SendStorageQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.StorageQueryResponseProto) error
 	GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto
+	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
 }
 
 // Protocol wraps the storage protocols and handlers.
@@ -69,7 +77,80 @@ func New(h host.Host, storagePublic bool) (*Protocol, error) {
 func (p *Protocol) handleIncomingFileUpload(s network.Stream) {}
 
 // handleIncomingSpeedTest handles incoming speed tests.
-func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {}
+func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the amount of the data requested
+	fileSizeBytes := make([]byte, 8)
+	_, err := c.Read(fileSizeBytes)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingSpeedTest stream: %v", err)
+		return
+	}
+
+	fileSize := int(binary.LittleEndian.Uint64(fileSizeBytes))
+	if fileSize > common.MB*10 {
+		log.Errorf("requested speed test file is larger than 10 MB in handleIncomingSpeedTest stream: %v", err)
+		return
+	}
+
+	totalSent := 0
+	buf := make([]byte, bufferSize)
+	for totalSent < fileSize {
+		n, err := rand.Read(buf)
+		if err != nil {
+			return
+		}
+
+		if fileSize-totalSent < n {
+			n = fileSize - totalSent
+		}
+
+		_, err = s.Write(buf[:n])
+		if err != nil {
+			log.Errorf("failed to write random bytes to stream in handleIncomingSpeedTest stream: %v", err)
+			return
+		}
+	}
+}
+
+// TestSpeedWithRemotePeer performs a speed test with a remote node.
+func (p *Protocol) TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error) {
+	s, err := p.host.NewStream(ctx, peerID, SpeedTestProtocolID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to peer for sending data query response: %w", err)
+	}
+	defer s.Close()
+
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, fileSize)
+
+	n, err := s.Write(buf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write to stream: %w", err)
+	}
+
+	if n != len(buf) {
+		return 0, errors.New("failed to wrtie file size request to stream")
+	}
+
+	start := time.Now()
+	readBuf := make([]byte, bufferSize)
+	for {
+		_, err := s.Read(readBuf)
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			break
+		}
+	}
+	elapsed := time.Since(start)
+
+	return elapsed, nil
+}
 
 // handleIncomingStorageQueryResponse handles incoming storage query responses from storage provider nodes.
 func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
