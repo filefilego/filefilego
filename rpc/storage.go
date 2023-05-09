@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -40,6 +41,43 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 		publisher:       publisher,
 		storageProtocol: storageProtocol,
 	}, nil
+}
+
+// TestSpeedWithRemotePeerArgs args for testing speed.
+type TestSpeedWithRemotePeerArgs struct {
+	PeerID   string `json:"peer_id"`
+	FileSize uint64 `json:"file_size"`
+}
+
+// TestSpeedWithRemotePeerResponse the response of the speed test.
+type TestSpeedWithRemotePeerResponse struct {
+	DownloadThroughputMB float64 `json:"download_throughput_mb"`
+}
+
+// TestSpeedWithRemotePeer tests the remote peer speed.
+func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedWithRemotePeerArgs, response *TestSpeedWithRemotePeerResponse) error {
+	peerID, err := peer.Decode(args.PeerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode remote peer id: %w", err)
+	}
+
+	if args.FileSize == 0 {
+		return fmt.Errorf("file size is empty")
+	}
+
+	timeelapsed, err := api.storageProtocol.TestSpeedWithRemotePeer(r.Context(), peerID, args.FileSize)
+	if err != nil {
+		return fmt.Errorf("failed to perform speed test: %w", err)
+	}
+
+	response.DownloadThroughputMB = calculateThroughput(args.FileSize, timeelapsed)
+
+	return nil
+}
+
+func calculateThroughput(fileSize uint64, duration time.Duration) float64 {
+	bytesPerSecond := float64(fileSize) / duration.Seconds()
+	return bytesPerSecond / (1024 * 1024) // convert to MB/s
 }
 
 // FindProvidersArgs args for finding providers

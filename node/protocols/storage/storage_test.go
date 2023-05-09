@@ -68,6 +68,9 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Greater(t, timePassed, ms1)
 
+	throughput := calculateThroughput(10*common.MB, timePassed)
+	assert.Greater(t, throughput, float64(1))
+
 	pubKeyBytes, err := pubKey.Raw()
 	assert.NoError(t, err)
 
@@ -155,4 +158,9 @@ func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKe
 	)
 	assert.NoError(t, err)
 	return host, priv, pubKey
+}
+
+func calculateThroughput(fileSize uint64, duration time.Duration) float64 {
+	bytesPerSecond := float64(fileSize) / duration.Seconds()
+	return bytesPerSecond / (1024 * 1024) // convert to MB/s
 }
