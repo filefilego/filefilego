@@ -43,6 +43,9 @@ type Interface interface {
 	SendStorageQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.StorageQueryResponseProto) error
 	GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto
 	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
+	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) error
+	GetUploadProgress(peerID peer.ID, filePath string) (int, error)
+	SetUploadingError(peerID peer.ID, filePath string, err error)
 }
 
 // Protocol wraps the storage protocols and handlers.
@@ -51,6 +54,8 @@ type Protocol struct {
 	storageProviders map[string]*messages.StorageQueryResponseProto
 	storagePublic    bool
 	storage          internalstorage.Interface
+	uploadProgress   map[string]int
+	uploadErrors     map[string]error
 	mu               sync.RWMutex
 }
 
@@ -67,6 +72,8 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 	p := &Protocol{
 		host:             h,
 		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
+		uploadProgress:   make(map[string]int),
+		uploadErrors:     make(map[string]error),
 		storagePublic:    storagePublic,
 		storage:          storage,
 	}
@@ -88,6 +95,24 @@ func (p *Protocol) HandleIncomingFileUploads(s network.Stream) {
 	p.storage.HandleIncomingFileUploads(s)
 }
 
+// SetUploadingError sets an error if upload failed.
+func (p *Protocol) SetUploadingError(peerID peer.ID, filePath string, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	fileWithPeer := filePath + peerID.String()
+	p.uploadErrors[fileWithPeer] = err
+}
+
+// GetUploadProgress returns the number of bytes transfered to the remote node.
+func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	fileWithPeer := filePath + peerID.String()
+	progress := p.uploadProgress[fileWithPeer]
+	err := p.uploadErrors[fileWithPeer]
+	return progress, err
+}
+
 // UploadFileWithMetadata uploads a file content, its name and if its associated with a channel node item.
 func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) error {
 	request := &messages.StorageFileUploadMetadataProto{
@@ -100,12 +125,21 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		return fmt.Errorf("failed to open the source file for uploading: %w", err)
 	}
 	defer input.Close()
-
 	s, err := p.host.NewStream(ctx, peerID, FileUploadProtocolID)
 	if err != nil {
 		return fmt.Errorf("failed to create new file upload stream: %w", err)
 	}
 	defer s.Close()
+
+	fileWithPeer := filePath + peerID.String()
+
+	p.mu.Lock()
+	_, ok := p.uploadProgress[fileWithPeer]
+	if ok {
+		return errors.New("file is already uploaded/uploading to remote node")
+	}
+	p.uploadProgress[fileWithPeer] = 0
+	p.mu.Unlock()
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
@@ -133,6 +167,9 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 			if err != nil {
 				return fmt.Errorf("failed to write content to remote stream: %w", err)
 			}
+			uploaded := p.uploadProgress[fileWithPeer]
+			uploaded += n
+			p.uploadProgress[fileWithPeer] = uploaded
 		}
 
 		if err == io.EOF {

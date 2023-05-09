@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -72,6 +74,41 @@ func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, r
 	if err != nil {
 		return fmt.Errorf("failed to publish storage query request proto message: %w", err)
 	}
+
+	response.Success = true
+
+	return nil
+}
+
+// UploadFileToProviderArgs args for uploading to a provider.
+type UploadFileToProviderArgs struct {
+	PeerID              string `json:"peer_id"`
+	FilePath            string `json:"file_path"`
+	ChannelNodeItemHash string `json:"channel_node_item_hash"`
+}
+
+// UploadFileToProviderResponse is the response of the uploaded file to provider.
+type UploadFileToProviderResponse struct {
+	Success bool `json:"success"`
+}
+
+// UploadFileToProvider uploads a file to provider.
+func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToProviderArgs, response *UploadFileToProviderResponse) error {
+	peerID, err := peer.Decode(args.PeerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode remote peer id: %w", err)
+	}
+
+	if args.FilePath == "" {
+		return errors.New("filepath is empty")
+	}
+
+	go func() {
+		err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
+		if err != nil {
+			api.storageProtocol.SetUploadingError(peerID, args.FilePath, err)
+		}
+	}()
 
 	response.Success = true
 

@@ -128,6 +128,9 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NotEmpty(t, metadata.Hash)
 	assert.NotEmpty(t, metadata.MerkleRootHash)
 	assert.NotEmpty(t, metadata.Size)
+	uploadedData, err := protocol1.GetUploadProgress(h2.ID(), "storage.go")
+	assert.NoError(t, err)
+	assert.NotEqual(t, 0, uploadedData)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {
