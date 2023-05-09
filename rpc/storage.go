@@ -185,8 +185,8 @@ func (api *StorageAPI) FileUploadProgress(r *http.Request, args *FileUploadProgr
 	return nil
 }
 
-// GetDiscovereProvidersResponse is the response containing the discovered storage providers.
-type GetDiscovereProvidersResponse struct {
+// GetDiscoveredProvidersResponse is the response containing the discovered storage providers.
+type GetDiscoveredProvidersResponse struct {
 	StorageProviders []JSONStorageProvider `json:"storage_providers"`
 }
 
@@ -200,8 +200,8 @@ type JSONStorageProvider struct {
 	Signature               string `json:"signature"`
 }
 
-// GetDiscovereProviders returns a list of discovered storage providers.
-func (api *StorageAPI) GetDiscovereProviders(r *http.Request, args *EmptyArgs, response *GetDiscovereProvidersResponse) error {
+// GetDiscoveredProviders returns a list of discovered storage providers.
+func (api *StorageAPI) GetDiscoveredProviders(r *http.Request, args *EmptyArgs, response *GetDiscoveredProvidersResponse) error {
 	providers := api.storageProtocol.GetDiscoveredStorageProviders()
 	response.StorageProviders = make([]JSONStorageProvider, len(providers))
 	for i, v := range providers {
