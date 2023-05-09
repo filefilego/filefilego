@@ -102,12 +102,14 @@ func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {
 		if err != nil {
 			return
 		}
+
 		diff := fileSize - totalSent
 		if diff < n {
 			n = diff
 		}
 
-		_, err = s.Write(buf[:n])
+		nn, err := s.Write(buf[:n])
+		totalSent += nn
 		if err != nil {
 			log.Errorf("failed to write random bytes to stream in handleIncomingSpeedTest stream: %v", err)
 			return
@@ -135,8 +137,8 @@ func (p *Protocol) TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, 
 		return 0, errors.New("failed to wrtie file size request to stream")
 	}
 
-	start := time.Now()
 	readBuf := make([]byte, bufferSize)
+	start := time.Now()
 	for {
 		_, err := s.Read(readBuf)
 		if err == io.EOF {
