@@ -102,9 +102,9 @@ func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {
 		if err != nil {
 			return
 		}
-
-		if fileSize-totalSent < n {
-			n = fileSize - totalSent
+		diff := fileSize - totalSent
+		if diff < n {
+			n = diff
 		}
 
 		_, err = s.Write(buf[:n])
