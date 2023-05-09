@@ -115,6 +115,38 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 	return nil
 }
 
+// FileUploadProgressArgs args for upload progress.
+type FileUploadProgressArgs struct {
+	PeerID   string `json:"peer_id"`
+	FilePath string `json:"file_path"`
+}
+
+// FileUploadProgressResponse is the response of the progress.
+type FileUploadProgressResponse struct {
+	Progress int    `json:"progress"`
+	Error    string `json:"error"`
+}
+
+// FileUploadProgress show the file upload progress and errors
+func (api *StorageAPI) FileUploadProgress(r *http.Request, args *FileUploadProgressArgs, response *FileUploadProgressResponse) error {
+	peerID, err := peer.Decode(args.PeerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode remote peer id: %w", err)
+	}
+
+	if args.FilePath == "" {
+		return errors.New("filepath is empty")
+	}
+
+	progress, err := api.storageProtocol.GetUploadProgress(peerID, args.FilePath)
+	response.Progress = progress
+	if err != nil {
+		response.Error = err.Error()
+	}
+
+	return nil
+}
+
 // GetDiscovereProvidersResponse is the response containing the discovered storage providers.
 type GetDiscovereProvidersResponse struct {
 	StorageProviders []JSONStorageProvider `json:"storage_providers"`
