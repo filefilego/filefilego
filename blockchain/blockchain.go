@@ -42,9 +42,9 @@ const (
 
 var (
 	// ChannelCreationFeesFFG required amount to register a channel.
-	ChannelCreationFeesFFG = int64(20000)
+	ChannelCreationFeesFFG = int64(400)
 	// RemainingChannelOperationFeesMiliFFG any other channel node item creation fees.
-	RemainingChannelOperationFeesMiliFFG = int64(50)
+	RemainingChannelOperationFeesMiliFFG = int64(100)
 )
 
 // Interface wraps the functionality of a blockchain.
