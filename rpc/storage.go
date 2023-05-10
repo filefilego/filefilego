@@ -142,10 +142,8 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 	}
 
 	go func() {
-		err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
-		if err != nil {
-			api.storageProtocol.SetUploadingError(peerID, args.FilePath, err)
-		}
+		fhash, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
+		api.storageProtocol.SetUploadingStatus(peerID, args.FilePath, fhash, err)
 	}()
 
 	response.Success = true
@@ -162,6 +160,7 @@ type FileUploadProgressArgs struct {
 // FileUploadProgressResponse is the response of the progress.
 type FileUploadProgressResponse struct {
 	Progress int    `json:"progress"`
+	FileHash string `json:"file_hash"`
 	Error    string `json:"error"`
 }
 
@@ -176,8 +175,9 @@ func (api *StorageAPI) FileUploadProgress(r *http.Request, args *FileUploadProgr
 		return errors.New("filepath is empty")
 	}
 
-	progress, err := api.storageProtocol.GetUploadProgress(peerID, args.FilePath)
+	progress, fHash, err := api.storageProtocol.GetUploadProgress(peerID, args.FilePath)
 	response.Progress = progress
+	response.FileHash = fHash
 	if err != nil {
 		response.Error = err.Error()
 	}

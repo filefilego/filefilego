@@ -115,14 +115,14 @@ func TestStorageProtocol(t *testing.T) {
 	providers := protocol2.GetDiscoveredStorageProviders()
 	assert.Len(t, providers, 1)
 
-	err = protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
-	assert.NoError(t, err)
-
-	time.Sleep(1 * time.Second)
-
 	fhash, err := ffgcrypto.Sha1File("storage.go")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, fhash)
+
+	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
+	assert.NoError(t, err)
+	assert.Equal(t, fhash, fhashremote)
+	time.Sleep(1 * time.Second)
 
 	metadata, err := protocol2.storage.GetFileMetadata(fhash)
 	assert.NoError(t, err)
@@ -131,9 +131,10 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NotEmpty(t, metadata.Hash)
 	assert.NotEmpty(t, metadata.MerkleRootHash)
 	assert.NotEmpty(t, metadata.Size)
-	uploadedData, err := protocol1.GetUploadProgress(h2.ID(), "storage.go")
+	uploadedData, fhash, err := protocol1.GetUploadProgress(h2.ID(), "storage.go")
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, uploadedData)
+	assert.NotEmpty(t, fhash)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

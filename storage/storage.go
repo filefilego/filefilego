@@ -475,13 +475,11 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		}
 
 		if err == io.EOF {
-			destFile.Close()
 			break
 		}
 
 		if err != nil {
 			log.Errorf("fialed to read file content to buffer: %v", err)
-			destFile.Close()
 			break
 		}
 	}
@@ -550,6 +548,20 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 	err = s.SaveFileMetadata(nodeHash, fHash, fileMetadata)
 	if err != nil {
 		log.Errorf("failed to save file metadata: %v", err)
+		os.Remove(newPath)
+		return
+	}
+
+	fhashBytes, err := hexutil.DecodeNoPrefix(fHash)
+	if err != nil {
+		log.Errorf("failed to decode file hash: %v", err)
+		os.Remove(newPath)
+		return
+	}
+
+	_, err = stream.Write(fhashBytes)
+	if err != nil {
+		log.Errorf("failed to write the filehash to the stream: %v", err)
 		os.Remove(newPath)
 		return
 	}
