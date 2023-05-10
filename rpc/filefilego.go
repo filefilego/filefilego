@@ -3,10 +3,13 @@ package rpc
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common/currency"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node"
@@ -49,13 +52,15 @@ func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockc
 
 // StatsResponse represents a syncing status
 type StatsResponse struct {
-	Syncing                       bool       `json:"syncing"`
-	BlockchainHeight              uint64     `json:"blockchain_height"`
-	HeighestBlockNumberDiscovered uint64     `json:"heighest_block_number_discovered"`
-	PeerCount                     int        `json:"peer_count"`
-	PeerID                        string     `json:"peer_id"`
-	StorageEnabled                bool       `json:"storage_enabled"`
-	Verifiers                     []verifier `json:"verifiers"`
+	Syncing                                 bool       `json:"syncing"`
+	BlockchainHeight                        uint64     `json:"blockchain_height"`
+	HeighestBlockNumberDiscovered           uint64     `json:"heighest_block_number_discovered"`
+	PeerCount                               int        `json:"peer_count"`
+	PeerID                                  string     `json:"peer_id"`
+	StorageEnabled                          bool       `json:"storage_enabled"`
+	ChannelCreationFeesFFGHex               string     `json:"channel_creation_fees_ffg_hex"`
+	RemainingChannelOperationFeesMiliFFGHex string     `json:"remaining_channel_operation_fees_miliffg_hex"`
+	Verifiers                               []verifier `json:"verifiers"`
 }
 
 type verifier struct {
@@ -73,6 +78,17 @@ func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *Stat
 	response.StorageEnabled = api.conf.Global.Storage
 	allVerifiers := block.GetBlockVerifiers()
 	response.Verifiers = make([]verifier, len(allVerifiers))
+
+	totalFFG := big.NewInt(0)
+	oneFFG := currency.FFG()
+	totalFFG = totalFFG.Add(totalFFG, oneFFG.Mul(oneFFG, big.NewInt(blockchain.ChannelCreationFeesFFG)))
+	response.ChannelCreationFeesFFGHex = hexutil.EncodeBig(totalFFG)
+
+	totalMiliFFG := big.NewInt(0)
+	oneMiliFFG := currency.MiliFFG()
+	totalMiliFFG = totalMiliFFG.Add(totalMiliFFG, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(blockchain.RemainingChannelOperationFeesMiliFFG)))
+
+	response.RemainingChannelOperationFeesMiliFFGHex = hexutil.EncodeBig(totalMiliFFG)
 
 	for i, v := range allVerifiers {
 		response.Verifiers[i] = verifier{

@@ -34,7 +34,7 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
-          ./filefilego --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
+          ./filefilego --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_public --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
   node2storage:
     hostname: node2storage.local
@@ -50,7 +50,7 @@ services:
         - |
           rm /root/.filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
-          ./filefilego --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
+          ./filefilego --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_public --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
   dataverifier1:
     hostname: dataverifier1.local

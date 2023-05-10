@@ -676,7 +676,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 		Chain:           mainChain,
 	}
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
-	assert.EqualError(t, err, "total cost of channel actions (20000000000000000000000) are higher than the supplied transaction fee (0)")
+	assert.EqualError(t, err, "total cost of channel actions (400000000000000000000) are higher than the supplied transaction fee (0)")
 	fees := currency.FFG().Mul(currency.FFG(), big.NewInt(ChannelCreationFeesFFG))
 	txWithChannelPayload.TransactionFees = "0x" + fees.Text(16)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
@@ -711,7 +711,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 		Chain:           mainChain,
 	}
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
-	assert.EqualError(t, err, "total cost of channel actions (50000000000000000) are higher than the supplied transaction fee (0)")
+	assert.EqualError(t, err, "total cost of channel actions (100000000000000000) are higher than the supplied transaction fee (0)")
 	txWithChannelPayload2.TransactionFees = "0x" + fees.Text(16)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
 	assert.NoError(t, err)

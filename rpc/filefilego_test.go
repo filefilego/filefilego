@@ -168,6 +168,8 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	assert.Equal(t, 2, response.PeerCount)
 	assert.Equal(t, n1.GetID(), response.PeerID)
 	assert.NotEmpty(t, response.Verifiers)
+	assert.NotEmpty(t, response.ChannelCreationFeesFFGHex)
+	assert.NotEmpty(t, response.RemainingChannelOperationFeesMiliFFGHex)
 
 	response2 := &StatsResponse{}
 	err = api2.Stats(&http.Request{}, &EmptyArgs{}, response2)
@@ -177,6 +179,8 @@ func TestFilefilegoAPIMethods(t *testing.T) {
 	assert.Equal(t, 2, response2.PeerCount)
 	assert.Equal(t, n2.GetID(), response2.PeerID)
 	assert.NotEmpty(t, response2.Verifiers)
+	assert.NotEmpty(t, response2.ChannelCreationFeesFFGHex)
+	assert.NotEmpty(t, response2.RemainingChannelOperationFeesMiliFFGHex)
 }
 
 func newHost(t *testing.T, port string) host.Host {
