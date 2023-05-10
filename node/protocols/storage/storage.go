@@ -18,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	internalstorage "github.com/filefilego/filefilego/storage"
@@ -43,9 +44,14 @@ type Interface interface {
 	SendStorageQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.StorageQueryResponseProto) error
 	GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto
 	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
-	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) error
-	GetUploadProgress(peerID peer.ID, filePath string) (int, error)
-	SetUploadingError(peerID peer.ID, filePath string, err error)
+	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (string, error)
+	GetUploadProgress(peerID peer.ID, filePath string) (int, string, error)
+	SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error)
+}
+
+type uploadStatus struct {
+	err      error
+	fileHash string
 }
 
 // Protocol wraps the storage protocols and handlers.
@@ -55,7 +61,7 @@ type Protocol struct {
 	storagePublic    bool
 	storage          internalstorage.Interface
 	uploadProgress   map[string]int
-	uploadErrors     map[string]error
+	uploadStatus     map[string]uploadStatus
 	mu               sync.RWMutex
 }
 
@@ -73,7 +79,7 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 		host:             h,
 		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
 		uploadProgress:   make(map[string]int),
-		uploadErrors:     make(map[string]error),
+		uploadStatus:     make(map[string]uploadStatus),
 		storagePublic:    storagePublic,
 		storage:          storage,
 	}
@@ -95,26 +101,30 @@ func (p *Protocol) HandleIncomingFileUploads(s network.Stream) {
 	p.storage.HandleIncomingFileUploads(s)
 }
 
-// SetUploadingError sets an error if upload failed.
-func (p *Protocol) SetUploadingError(peerID peer.ID, filePath string, err error) {
+// SetUploadingStatus sets an error or fhash if upload failed or completed.
+func (p *Protocol) SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	fileWithPeer := filePath + peerID.String()
-	p.uploadErrors[fileWithPeer] = err
+	st := p.uploadStatus[fileWithPeer]
+	st.err = err
+	st.fileHash = fileHash
+
+	p.uploadStatus[fileWithPeer] = st
 }
 
 // GetUploadProgress returns the number of bytes transfered to the remote node.
-func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, error) {
+func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	fileWithPeer := filePath + peerID.String()
 	progress := p.uploadProgress[fileWithPeer]
-	err := p.uploadErrors[fileWithPeer]
-	return progress, err
+	st := p.uploadStatus[fileWithPeer]
+	return progress, st.fileHash, st.err
 }
 
 // UploadFileWithMetadata uploads a file content, its name and if its associated with a channel node item.
-func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) error {
+func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (string, error) {
 	request := &messages.StorageFileUploadMetadataProto{
 		FileName:        filepath.Base(filePath),
 		ChannelNodeHash: chanNodeItemHash,
@@ -122,12 +132,12 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 
 	input, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to open the source file for uploading: %w", err)
+		return "", fmt.Errorf("failed to open the source file for uploading: %w", err)
 	}
 	defer input.Close()
 	s, err := p.host.NewStream(ctx, peerID, FileUploadProtocolID)
 	if err != nil {
-		return fmt.Errorf("failed to create new file upload stream: %w", err)
+		return "", fmt.Errorf("failed to create new file upload stream: %w", err)
 	}
 	defer s.Close()
 
@@ -136,19 +146,19 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 	p.mu.Lock()
 	_, ok := p.uploadProgress[fileWithPeer]
 	if ok {
-		return errors.New("file is already uploaded/uploading to remote node")
+		return "", errors.New("file is already uploaded/uploading to remote node")
 	}
 	p.uploadProgress[fileWithPeer] = 0
 	p.mu.Unlock()
 
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
-		return fmt.Errorf("failed to marshal a file upload request: %w", err)
+		return "", fmt.Errorf("failed to marshal a file upload request: %w", err)
 	}
 
 	requestBufferSize := 8 + len(requestBytes)
 	if requestBufferSize > 20*common.KB {
-		return fmt.Errorf("request size is too large for a sending a file to the remote node: %d", requestBufferSize)
+		return "", fmt.Errorf("request size is too large for a sending a file to the remote node: %d", requestBufferSize)
 	}
 
 	requestPayloadWithLength := make([]byte, requestBufferSize)
@@ -156,7 +166,7 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 	copy(requestPayloadWithLength[8:], requestBytes)
 	_, err = s.Write(requestPayloadWithLength)
 	if err != nil {
-		return fmt.Errorf("failed to write file metadata to remote stream: %w", err)
+		return "", fmt.Errorf("failed to write file metadata to remote stream: %w", err)
 	}
 
 	buf := make([]byte, bufferSize)
@@ -165,7 +175,7 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		if n > 0 {
 			_, err := s.Write(buf[:n])
 			if err != nil {
-				return fmt.Errorf("failed to write content to remote stream: %w", err)
+				return "", fmt.Errorf("failed to write content to remote stream: %w", err)
 			}
 			uploaded := p.uploadProgress[fileWithPeer]
 			uploaded += n
@@ -177,11 +187,27 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		}
 
 		if err != nil {
-			return fmt.Errorf("failed to write the file to remote stream: %w", err)
+			return "", fmt.Errorf("failed to write the file to remote stream: %w", err)
 		}
 	}
 
-	return nil
+	// we need to send EOF so we can move forward and read the response
+	// below will trigger an eof and the remote peer will no longer read but can still write
+	err = s.CloseWrite()
+	if err != nil {
+		return "", fmt.Errorf("failed to close local writer: %w", err)
+	}
+
+	fileHashBuf := make([]byte, 20)
+	nn, err := s.Read(fileHashBuf)
+	if nn != len(fileHashBuf) || err != nil {
+		return "", fmt.Errorf("failed to get uploaded file hash")
+	}
+	fileHash := hexutil.EncodeNoPrefix(fileHashBuf)
+
+	p.SetUploadingStatus(peerID, filePath, fileHash, nil)
+
+	return fileHash, nil
 }
 
 // handleIncomingSpeedTest handles incoming speed tests.
