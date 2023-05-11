@@ -79,15 +79,9 @@ func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *Stat
 	allVerifiers := block.GetBlockVerifiers()
 	response.Verifiers = make([]verifier, len(allVerifiers))
 
-	totalFFG := big.NewInt(0)
-	oneFFG := currency.FFG()
-	totalFFG = totalFFG.Add(totalFFG, oneFFG.Mul(oneFFG, big.NewInt(blockchain.ChannelCreationFeesFFG)))
+	totalFFG, totalMiliFFG := getChannelFees()
+
 	response.ChannelCreationFeesFFGHex = hexutil.EncodeBig(totalFFG)
-
-	totalMiliFFG := big.NewInt(0)
-	oneMiliFFG := currency.MiliFFG()
-	totalMiliFFG = totalMiliFFG.Add(totalMiliFFG, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(blockchain.RemainingChannelOperationFeesMiliFFG)))
-
 	response.RemainingChannelOperationFeesMiliFFGHex = hexutil.EncodeBig(totalMiliFFG)
 
 	for i, v := range allVerifiers {
@@ -102,9 +96,11 @@ func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *Stat
 
 // HostInfoResponse represents a response.
 type HostInfoResponse struct {
-	PeerID    string `json:"peer_id"`
-	Address   string `json:"address"`
-	PeerCount int    `json:"peer_count"`
+	PeerID                                  string `json:"peer_id"`
+	Address                                 string `json:"address"`
+	PeerCount                               int    `json:"peer_count"`
+	ChannelCreationFeesFFGHex               string `json:"channel_creation_fees_ffg_hex"`
+	RemainingChannelOperationFeesMiliFFGHex string `json:"remaining_channel_operation_fees_miliffg_hex"`
 }
 
 // HostInfo returns the node's addresses.
@@ -119,8 +115,26 @@ func (api *FilefilegoAPI) HostInfo(r *http.Request, args *EmptyArgs, response *H
 	if err != nil {
 		return fmt.Errorf("failed to get address from public key bytes: %w", err)
 	}
+
+	totalFFG, totalMiliFFG := getChannelFees()
+
 	response.Address = nodeAddress
 	response.PeerID = api.node.GetID()
 
+	response.ChannelCreationFeesFFGHex = hexutil.EncodeBig(totalFFG)
+	response.RemainingChannelOperationFeesMiliFFGHex = hexutil.EncodeBig(totalMiliFFG)
+
 	return nil
+}
+
+func getChannelFees() (*big.Int, *big.Int) {
+	totalFFG := big.NewInt(0)
+	oneFFG := currency.FFG()
+	totalFFG = totalFFG.Add(totalFFG, oneFFG.Mul(oneFFG, big.NewInt(blockchain.ChannelCreationFeesFFG)))
+
+	totalMiliFFG := big.NewInt(0)
+	oneMiliFFG := currency.MiliFFG()
+	totalMiliFFG = totalMiliFFG.Add(totalMiliFFG, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(blockchain.RemainingChannelOperationFeesMiliFFG)))
+
+	return totalFFG, totalMiliFFG
 }
