@@ -473,7 +473,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		}},
 	}
 
-	// try to get verification when key and file data havent been transfered yet
+	// try to get verification when key and file data havent been transferred yet
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
 

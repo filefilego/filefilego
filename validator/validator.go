@@ -83,7 +83,7 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 	mempoolTransactions := m.blockchain.GetTransactionsFromPool()
 	mempoolTransactions = sortTransactionsByNounce(mempoolTransactions)
 
-	// set the uncommited balances of addresses
+	// set the uncommitted balances of addresses
 	for _, tx := range mempoolTransactions {
 		fromBytes, err := hexutil.Decode(tx.From)
 		if err != nil {

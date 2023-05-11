@@ -52,8 +52,9 @@ func NewFilefilegoAPI(cfg *config.Config, node node.Interface, blockchain blockc
 
 // StatsResponse represents a syncing status
 type StatsResponse struct {
-	Syncing                                 bool       `json:"syncing"`
-	BlockchainHeight                        uint64     `json:"blockchain_height"`
+	Syncing          bool   `json:"syncing"`
+	BlockchainHeight uint64 `json:"blockchain_height"`
+	// nolint:misspell
 	HeighestBlockNumberDiscovered           uint64     `json:"heighest_block_number_discovered"`
 	PeerCount                               int        `json:"peer_count"`
 	PeerID                                  string     `json:"peer_id"`

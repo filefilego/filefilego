@@ -29,7 +29,7 @@ type Interface interface {
 	SetMerkleTreeNodes(contractHash string, fileHash []byte, merkleTreeNodes [][]byte) error
 	SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv, merkleRootHash []byte, encryptionType common.EncryptionType, randomizedSegments []int, fileSize uint64) error
 	SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error
-	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
+	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transferred bool) error
 	DeleteContract(contractHash string) error
 	GetContractFiles(contractHash string) ([]FileInfo, error)
 	ReleaseContractFees(contractHash string)
@@ -64,7 +64,7 @@ type FileInfo struct {
 	FileDecryptionStatus                  FileDecryptionStatus
 }
 
-// BytesTransferStats represents the metadata of a transfered data file part.
+// BytesTransferStats represents the metadata of a transferred data file part.
 type BytesTransferStats struct {
 	FromByteRange       int64
 	ToByteRange         int64
@@ -253,7 +253,7 @@ func (c *Store) ResetTransferedBytes(contractHash string, fileHash []byte) error
 	return nil
 }
 
-// IncrementTransferedBytes increments the number of bytes transfered for a file.
+// IncrementTransferedBytes increments the number of bytes transferred for a file.
 func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -322,7 +322,7 @@ func (c *Store) GetDownoadedFilePartInfos(contractHash string, fileHash []byte) 
 	return allFiles
 }
 
-// GetTransferedBytes gets the transfered bytes for a file.
+// GetTransferedBytes gets the transferred bytes for a file.
 func (c *Store) GetTransferedBytes(contractHash string, fileHash []byte) uint64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -674,7 +674,7 @@ func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string
 	return nil
 }
 
-// SetProofOfTransferVerified sets if a proof of transfer was successfull.
+// SetProofOfTransferVerified sets if a proof of transfer was successful.
 func (c *Store) SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -696,8 +696,8 @@ func (c *Store) SetProofOfTransferVerified(contractHash string, fileHash []byte,
 	return errors.New("file hash not found")
 }
 
-// SetReceivedUnencryptedDataFromFileHoster if all unencrypted data were transfered from file hoster to verifier node.
-func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error {
+// SetReceivedUnencryptedDataFromFileHoster if all unencrypted data were transferred from file hoster to verifier node.
+func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transferred bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	fileContracts, ok := c.fileContracts[contractHash]
@@ -707,7 +707,7 @@ func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fi
 
 	for idx, v := range fileContracts {
 		if bytes.Equal(v.FileHash, fileHash) {
-			v.ReceivedUnencryptedDataFromFileHoster = transfered
+			v.ReceivedUnencryptedDataFromFileHoster = transferred
 			c.fileContracts[contractHash][idx] = v
 			return nil
 		}
@@ -794,7 +794,6 @@ func (c *Store) Debug(w http.ResponseWriter, r *http.Request) {
 	defer c.mu.RUnlock()
 
 	allContracts := make([]contractFiles, 0)
-	log.Info("geting all contracts and their files")
 
 	for contractHash, v := range c.contracts {
 		ctrct := contractFiles{

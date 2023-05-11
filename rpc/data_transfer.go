@@ -492,10 +492,10 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 				}
 			}
 
-			// reset the file bytes transfered
+			// reset the file bytes transferred
 			err := api.contractStore.ResetTransferedBytes(args.ContractHash, fileHash)
 			if err != nil {
-				log.Warnf("failed to rest file transfered bytes: %v", err)
+				log.Warnf("failed to rest file transferred bytes: %v", err)
 			}
 		}
 
@@ -681,8 +681,8 @@ type DownloadFileProgressArgs struct {
 
 // DownloadFileProgressResponse represents the response of a download file progress.
 type DownloadFileProgressResponse struct {
-	Error           string `json:"error"`
-	BytesTransfered uint64 `json:"bytes_transfered"`
+	Error            string `json:"error"`
+	BytesTransferred uint64 `json:"bytes_transferred"`
 }
 
 // DownloadFileProgress returns the download progress of a file.
@@ -697,7 +697,7 @@ func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *Download
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	response.BytesTransfered = api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	response.BytesTransferred = api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
 	response.Error = fileInfo.Error
 
 	return nil
@@ -737,7 +737,7 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 	}
 
 	if fileInfo.FileSize != transferedBytes {
-		return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+		return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferedBytes)
 	}
 
 	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
@@ -835,7 +835,7 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		}
 
 		if fileInfo.FileSize != transferedBytes {
-			return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+			return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferedBytes)
 		}
 
 		contractHashBytes, err := hexutil.Decode(args.ContractHash)

@@ -662,8 +662,8 @@ func DownloadFile(ctx *cli.Context) error {
 			log.Errorf("failed to get file progress: %v", err)
 			break
 		}
-		_ = bar.Set(int(prog.BytesTransfered))
-		bytesTransfered = prog.BytesTransfered
+		_ = bar.Set(int(prog.BytesTransferred))
+		bytesTransfered = prog.BytesTransferred
 		time.Sleep(5 * time.Millisecond)
 	}
 

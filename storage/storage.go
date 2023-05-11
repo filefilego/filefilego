@@ -28,7 +28,7 @@ const (
 
 	// AdminAccess represents full access.
 	AdminAccess = "admin"
-	// UserAccess represents priviledge access.
+	// UserAccess represents privilege access.
 	UserAccess = "user"
 
 	tokenAccessHours = 2160

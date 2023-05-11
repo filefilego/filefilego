@@ -174,28 +174,28 @@ func TestStoreMethods(t *testing.T) {
 	fileInfo, err = store2.GetContractFileInfo("0x0a", fileHash)
 	assert.EqualError(t, err, "contract not found")
 
-	transfered := store2.GetTransferedBytes("0x0a", []byte{75})
-	assert.Equal(t, uint64(0), transfered)
+	transferred := store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(0), transferred)
 	store2.IncrementTransferedBytes("0x0a", []byte{75}, "part_1", "./part_1", 0, 5, 10)
-	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
-	assert.Equal(t, uint64(10), transfered)
+	transferred = store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(10), transferred)
 	store2.IncrementTransferedBytes("0x0a", []byte{75}, "part_2", "./part_2", 11, 15, 10)
 	store2.IncrementTransferedBytes("0x0a", []byte{79}, "part_1", "./part_1", 0, 10, 10)
-	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
-	assert.Equal(t, uint64(20), transfered)
+	transferred = store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(20), transferred)
 
-	transfered = store2.GetTransferedBytes("0x0a", []byte{79})
-	assert.Equal(t, uint64(10), transfered)
+	transferred = store2.GetTransferedBytes("0x0a", []byte{79})
+	assert.Equal(t, uint64(10), transferred)
 
-	// reset the transfered bytes
+	// reset the transferred bytes
 	err = store2.ResetTransferedBytes("0x0a", []byte{79})
 	assert.NoError(t, err)
 
 	// should be zero
-	transfered = store2.GetTransferedBytes("0x0a", []byte{79})
-	assert.Equal(t, uint64(0), transfered)
+	transferred = store2.GetTransferedBytes("0x0a", []byte{79})
+	assert.Equal(t, uint64(0), transferred)
 
 	// should not be affected
-	transfered = store2.GetTransferedBytes("0x0a", []byte{75})
-	assert.Equal(t, uint64(20), transfered)
+	transferred = store2.GetTransferedBytes("0x0a", []byte{75})
+	assert.Equal(t, uint64(20), transferred)
 }
