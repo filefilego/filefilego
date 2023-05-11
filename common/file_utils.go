@@ -224,7 +224,7 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 
 	_, err := input.Seek(0, 0)
 	if err != nil {
-		return fmt.Errorf("failed to seek to the begining of the file: %w", err)
+		return fmt.Errorf("failed to seek to the beginning of the file: %w", err)
 	}
 
 	for i := 0; i < howManySegments; i++ {

@@ -113,7 +113,7 @@ func (p *Protocol) SetUploadingStatus(peerID peer.ID, filePath, fileHash string,
 	p.uploadStatus[fileWithPeer] = st
 }
 
-// GetUploadProgress returns the number of bytes transfered to the remote node.
+// GetUploadProgress returns the number of bytes transferred to the remote node.
 func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
