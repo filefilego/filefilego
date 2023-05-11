@@ -799,7 +799,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				// get permissions to see if allowed
 				owner, admin, poster := b.GetPermissionFromRootNode(rootNodeItem, fromBytes)
 				if err != nil {
-					return fmt.Errorf("failed to retreive root node to get permissions: %w", err)
+					return fmt.Errorf("failed to retrieve root node to get permissions: %w", err)
 				}
 
 				if !owner && !admin && !poster && node.NodeType != NodeItemType_OTHER {
@@ -1367,7 +1367,7 @@ func (b *Blockchain) releaseFeesContractFromTransactionDataPayload(contractInfo 
 	return nil
 }
 
-// GetFilesFromEntryOrFolderRecursively findes all the files recursivly by given a folder or entry hash.
+// GetFilesFromEntryOrFolderRecursively findes all the files recursively by given a folder or entry hash.
 func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int) ([]FileMetadata, error) {
 	fileItems := make([]FileMetadata, 0)
 

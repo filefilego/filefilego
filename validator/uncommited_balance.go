@@ -1,7 +1,7 @@
 // Package validator implements sealing and broadcasting blocks to the network.
 //
 // The block sealing process is to go through all the transactions in the mempool
-// and order them by nounce and later on construct an uncommited balance which will
+// and order them by nounce and later on construct an uncommitted balance which will
 // be used to check if a transaction has enough balance and allowed to change the
 // state of the blockchain.
 package validator
@@ -16,7 +16,7 @@ type balanceItem struct {
 	dbNounce  uint64
 }
 
-// UncommitedBalance represents an uncommited balance of a user.
+// UncommitedBalance represents an uncommitted balance of a user.
 type UncommitedBalance struct {
 	addresses map[string]balanceItem
 	mu        sync.RWMutex
@@ -70,7 +70,7 @@ func (b *UncommitedBalance) Subtract(address string, amount *big.Int, nounce uin
 	return true
 }
 
-// NewUncommitedBalance creates a new uncommited balance.
+// NewUncommitedBalance creates a new uncommitted balance.
 func NewUncommitedBalance() UncommitedBalance {
 	return UncommitedBalance{
 		addresses: make(map[string]balanceItem),

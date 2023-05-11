@@ -29,15 +29,15 @@ type Interface interface {
 	SetMerkleTreeNodes(contractHash string, fileHash []byte, merkleTreeNodes [][]byte) error
 	SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string, fileHash []byte, key, iv, merkleRootHash []byte, encryptionType common.EncryptionType, randomizedSegments []int, fileSize uint64) error
 	SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error
-	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error
+	SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transferred bool) error
 	DeleteContract(contractHash string) error
 	GetContractFiles(contractHash string) ([]FileInfo, error)
 	ReleaseContractFees(contractHash string)
 	GetReleaseContractFeesStatus(contractHash string) bool
 	LoadFromDB() error
-	IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64)
+	IncrementTransferredBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64)
 	SetFilePartDownloadError(contractHash string, fileHash []byte, fileNamePart, errorMessage string)
-	GetTransferedBytes(contractHash string, fileHash []byte) uint64
+	GetTransferredBytes(contractHash string, fileHash []byte) uint64
 	SetError(contractHash string, fileHash []byte, errorMessage string)
 	SetFileSize(contractHash string, fileHash []byte, fileSize uint64)
 	SetFileDecryptionStatus(contractHash string, fileHash []byte, decryptionStatus FileDecryptionStatus)
@@ -45,7 +45,7 @@ type Interface interface {
 	PurgeInactiveContracts(int64) error
 	SetContractFileDownloadContexts(key string, ctxData ContextFileDownloadData)
 	CancelContractFileDownloadContexts(key string) error
-	ResetTransferedBytes(contractHash string, fileHash []byte) error
+	ResetTransferredBytes(contractHash string, fileHash []byte) error
 }
 
 // FileInfo represents a contract with the file information.
@@ -64,7 +64,7 @@ type FileInfo struct {
 	FileDecryptionStatus                  FileDecryptionStatus
 }
 
-// BytesTransferStats represents the metadata of a transfered data file part.
+// BytesTransferStats represents the metadata of a transferred data file part.
 type BytesTransferStats struct {
 	FromByteRange       int64
 	ToByteRange         int64
@@ -91,7 +91,7 @@ type Store struct {
 	contractsCreatedAt          map[string]int64
 	contracts                   map[string]*messages.DownloadContractProto
 	releasedContractFees        map[string]struct{}
-	bytesTransfered             map[string]map[string]map[string]BytesTransferStats
+	bytesTransferred            map[string]map[string]map[string]BytesTransferStats
 	mu                          sync.RWMutex
 	muRC                        sync.RWMutex
 }
@@ -111,7 +111,7 @@ type persistedData struct {
 	Contracts            map[string]*messages.DownloadContractProto
 	ReleasedContractFees map[string]struct{}
 	ContractsCreatedAt   map[string]int64
-	BytesTransfered      map[string]map[string]map[string]BytesTransferStats
+	BytesTransferred     map[string]map[string]map[string]BytesTransferStats
 }
 
 // New constructs a contract store.
@@ -127,7 +127,7 @@ func New(db database.Database) (*Store, error) {
 		contractsCreatedAt:          make(map[string]int64),
 		contracts:                   make(map[string]*messages.DownloadContractProto),
 		releasedContractFees:        make(map[string]struct{}),
-		bytesTransfered:             make(map[string]map[string]map[string]BytesTransferStats),
+		bytesTransferred:            make(map[string]map[string]map[string]BytesTransferStats),
 	}
 
 	return store, nil
@@ -204,29 +204,29 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 	defer c.mu.Unlock()
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
-	_, ok := c.bytesTransfered[contractHash]
+	_, ok := c.bytesTransferred[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]map[string]BytesTransferStats)
-		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
+		c.bytesTransferred[contractHash] = make(map[string]map[string]BytesTransferStats)
+		c.bytesTransferred[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}}
 		return
 	}
 
-	_, ok = c.bytesTransfered[contractHash][fh]
+	_, ok = c.bytesTransferred[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
+		c.bytesTransferred[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}}
 		return
 	}
 
-	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
+	filePartStats, ok := c.bytesTransferred[contractHash][fh][fileNamePart]
 	if !ok {
-		c.bytesTransfered[contractHash][fh][fileNamePart] = BytesTransferStats{
+		c.bytesTransferred[contractHash][fh][fileNamePart] = BytesTransferStats{
 			FilePartName: fileNamePart,
 			ErrorMessage: errorMessage,
 		}
@@ -234,36 +234,36 @@ func (c *Store) SetFilePartDownloadError(contractHash string, fileHash []byte, f
 	}
 
 	filePartStats.ErrorMessage = errorMessage
-	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
+	c.bytesTransferred[contractHash][fh][fileNamePart] = filePartStats
 }
 
-// ResetTransferedBytes resets file transfer bytes to zero.
-func (c *Store) ResetTransferedBytes(contractHash string, fileHash []byte) error {
+// ResetTransferredBytes resets file transfer bytes to zero.
+func (c *Store) ResetTransferredBytes(contractHash string, fileHash []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
-	ch, ok := c.bytesTransfered[contractHash]
+	ch, ok := c.bytesTransferred[contractHash]
 	if !ok {
 		return errors.New("contract was not found")
 	}
 
 	delete(ch, fh)
-	c.bytesTransfered[contractHash] = ch
+	c.bytesTransferred[contractHash] = ch
 	return nil
 }
 
-// IncrementTransferedBytes increments the number of bytes transfered for a file.
-func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64) {
+// IncrementTransferredBytes increments the number of bytes transferred for a file.
+func (c *Store) IncrementTransferredBytes(contractHash string, fileHash []byte, fileNamePart, destinationFilePath string, filePartFromRange, filePartToRange int64, count uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
-	_, ok := c.bytesTransfered[contractHash]
+	_, ok := c.bytesTransferred[contractHash]
 
 	if !ok {
-		c.bytesTransfered[contractHash] = make(map[string]map[string]BytesTransferStats)
-		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
+		c.bytesTransferred[contractHash] = make(map[string]map[string]BytesTransferStats)
+		c.bytesTransferred[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -273,9 +273,9 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 		return
 	}
 
-	_, ok = c.bytesTransfered[contractHash][fh]
+	_, ok = c.bytesTransferred[contractHash][fh]
 	if !ok {
-		c.bytesTransfered[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
+		c.bytesTransferred[contractHash][fh] = map[string]BytesTransferStats{fileNamePart: {
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -285,9 +285,9 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 		return
 	}
 
-	filePartStats, ok := c.bytesTransfered[contractHash][fh][fileNamePart]
+	filePartStats, ok := c.bytesTransferred[contractHash][fh][fileNamePart]
 	if !ok {
-		c.bytesTransfered[contractHash][fh][fileNamePart] = BytesTransferStats{
+		c.bytesTransferred[contractHash][fh][fileNamePart] = BytesTransferStats{
 			FromByteRange:       filePartFromRange,
 			ToByteRange:         filePartToRange,
 			FilePartName:        fileNamePart,
@@ -300,7 +300,7 @@ func (c *Store) IncrementTransferedBytes(contractHash string, fileHash []byte, f
 	filePartStats.FromByteRange += filePartFromRange
 	filePartStats.BytesTransfer += count
 
-	c.bytesTransfered[contractHash][fh][fileNamePart] = filePartStats
+	c.bytesTransferred[contractHash][fh][fileNamePart] = filePartStats
 }
 
 // GetDownoadedFilePartInfos gets the downloaded file part infos.
@@ -310,7 +310,7 @@ func (c *Store) GetDownoadedFilePartInfos(contractHash string, fileHash []byte) 
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
 
-	d := c.bytesTransfered[contractHash][fh]
+	d := c.bytesTransferred[contractHash][fh]
 
 	allFiles := make([]BytesTransferStats, 0)
 
@@ -322,14 +322,14 @@ func (c *Store) GetDownoadedFilePartInfos(contractHash string, fileHash []byte) 
 	return allFiles
 }
 
-// GetTransferedBytes gets the transfered bytes for a file.
-func (c *Store) GetTransferedBytes(contractHash string, fileHash []byte) uint64 {
+// GetTransferredBytes gets the transferred bytes for a file.
+func (c *Store) GetTransferredBytes(contractHash string, fileHash []byte) uint64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	fh := hexutil.EncodeNoPrefix(fileHash)
 
-	d := c.bytesTransfered[contractHash][fh]
+	d := c.bytesTransferred[contractHash][fh]
 
 	total := uint64(0)
 	for _, v := range d {
@@ -368,7 +368,7 @@ func (c *Store) DeleteContract(contractHash string) error {
 
 	delete(c.contracts, contractHash)
 	delete(c.fileContracts, contractHash)
-	delete(c.bytesTransfered, contractHash)
+	delete(c.bytesTransferred, contractHash)
 	delete(c.releasedContractFees, contractHash)
 	delete(c.contractsCreatedAt, contractHash)
 
@@ -674,7 +674,7 @@ func (c *Store) SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash string
 	return nil
 }
 
-// SetProofOfTransferVerified sets if a proof of transfer was successfull.
+// SetProofOfTransferVerified sets if a proof of transfer was successful.
 func (c *Store) SetProofOfTransferVerified(contractHash string, fileHash []byte, verified bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -696,8 +696,8 @@ func (c *Store) SetProofOfTransferVerified(contractHash string, fileHash []byte,
 	return errors.New("file hash not found")
 }
 
-// SetReceivedUnencryptedDataFromFileHoster if all unencrypted data were transfered from file hoster to verifier node.
-func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transfered bool) error {
+// SetReceivedUnencryptedDataFromFileHoster if all unencrypted data were transferred from file hoster to verifier node.
+func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fileHash []byte, transferred bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	fileContracts, ok := c.fileContracts[contractHash]
@@ -707,7 +707,7 @@ func (c *Store) SetReceivedUnencryptedDataFromFileHoster(contractHash string, fi
 
 	for idx, v := range fileContracts {
 		if bytes.Equal(v.FileHash, fileHash) {
-			v.ReceivedUnencryptedDataFromFileHoster = transfered
+			v.ReceivedUnencryptedDataFromFileHoster = transferred
 			c.fileContracts[contractHash][idx] = v
 			return nil
 		}
@@ -726,7 +726,7 @@ func (c *Store) persistToDB() error {
 		ContractsCreatedAt:   c.contractsCreatedAt,
 		Contracts:            c.contracts,
 		ReleasedContractFees: c.releasedContractFees,
-		BytesTransfered:      c.bytesTransfered,
+		BytesTransferred:     c.bytesTransferred,
 	}
 	err := enc.Encode(data)
 	if err != nil {
@@ -768,7 +768,7 @@ func (c *Store) LoadFromDB() error {
 	c.contractsCreatedAt = pd.ContractsCreatedAt
 	c.fileContracts = pd.FileContracts
 	c.releasedContractFees = pd.ReleasedContractFees
-	c.bytesTransfered = pd.BytesTransfered
+	c.bytesTransferred = pd.BytesTransferred
 
 	return nil
 }
@@ -794,7 +794,6 @@ func (c *Store) Debug(w http.ResponseWriter, r *http.Request) {
 	defer c.mu.RUnlock()
 
 	allContracts := make([]contractFiles, 0)
-	log.Info("geting all contracts and their files")
 
 	for contractHash, v := range c.contracts {
 		ctrct := contractFiles{

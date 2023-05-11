@@ -593,12 +593,12 @@ func TestE2E(t *testing.T) {
 	file1Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
 	assert.NoError(t, err)
 	assert.Empty(t, file1Progress.Error)
-	assert.Equal(t, uint64(file1UploadResponse.Size), file1Progress.BytesTransfered)
+	assert.Equal(t, uint64(file1UploadResponse.Size), file1Progress.BytesTransferred)
 
 	file2Progress, err := fileDownloader1Client.DownloadFileProgress(context.TODO(), downloadContract.Contract.ContractHash, file2UploadResponse.FileHash)
 	assert.NoError(t, err)
 	assert.Empty(t, file2Progress.Error)
-	assert.Equal(t, uint64(file2UploadResponse.Size), file2Progress.BytesTransfered)
+	assert.Equal(t, uint64(file2UploadResponse.Size), file2Progress.BytesTransferred)
 
 	ok, err = fileDownloader1Client.SendFileMerkleTreeNodesToVerifier(context.TODO(), downloadContract.Contract.ContractHash, file1UploadResponse.FileHash)
 	assert.NoError(t, err)

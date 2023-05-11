@@ -109,7 +109,7 @@ func TestDownloadFile(t *testing.T) {
 }
 
 func TestDownloadFileProgress(t *testing.T) {
-	bodyReader := strings.NewReader(`{"result":{"bytes_transfered":32242, "error":""},"error":null,"id":1}`)
+	bodyReader := strings.NewReader(`{"result":{"bytes_transferred":32242, "error":""},"error":null,"id":1}`)
 	stringReadCloser := io.NopCloser(bodyReader)
 	c, err := New("http://localhost:8090/rpc", &httpClientStub{
 		response: &http.Response{
@@ -119,7 +119,7 @@ func TestDownloadFileProgress(t *testing.T) {
 	assert.NoError(t, err)
 	status, err := c.DownloadFileProgress(context.TODO(), "0x0585084bc6e0c76af2d4b7f19e6020126df140bb6cd2975b5057aae40a2b2eae", "0585084bc6e0c76af2d4b7f19e6020126d")
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(32242), status.BytesTransfered)
+	assert.Equal(t, uint64(32242), status.BytesTransferred)
 }
 
 func TestSendFileMerkleTreeNodesToVerifier(t *testing.T) {

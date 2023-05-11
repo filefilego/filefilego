@@ -473,7 +473,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		}},
 	}
 
-	// try to get verification when key and file data havent been transfered yet
+	// try to get verification when key and file data havent been transferred yet
 	_, err = protocolH2.RequestEncryptionData(context.TODO(), verifier1.ID(), encRequest)
 	assert.EqualError(t, err, "failed to read encryption data from stream: EOF")
 
@@ -603,8 +603,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value)
 	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees)
 
-	transferedBytes := protocolH2.contractStore.GetTransferedBytes(contractHashHex, fileHash2Bytes)
-	assert.Equal(t, uint64(fileSize2), transferedBytes)
+	transferredBytes := protocolH2.contractStore.GetTransferredBytes(contractHashHex, fileHash2Bytes)
+	assert.Equal(t, uint64(fileSize2), transferredBytes)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

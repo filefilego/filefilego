@@ -492,10 +492,10 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 				}
 			}
 
-			// reset the file bytes transfered
-			err := api.contractStore.ResetTransferedBytes(args.ContractHash, fileHash)
+			// reset the file bytes transferred
+			err := api.contractStore.ResetTransferredBytes(args.ContractHash, fileHash)
 			if err != nil {
-				log.Warnf("failed to rest file transfered bytes: %v", err)
+				log.Warnf("failed to rest file transferred bytes: %v", err)
 			}
 		}
 
@@ -560,7 +560,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		wg.Wait()
 
 		// check if all file parts have been downloaded
-		totalDownloaded := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		totalDownloaded := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if totalDownloaded != fileSize {
 			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("total downloaded parts size (%d) is not equal to the file size (%d)", totalDownloaded, fileSize))
 			return
@@ -681,8 +681,8 @@ type DownloadFileProgressArgs struct {
 
 // DownloadFileProgressResponse represents the response of a download file progress.
 type DownloadFileProgressResponse struct {
-	Error           string `json:"error"`
-	BytesTransfered uint64 `json:"bytes_transfered"`
+	Error            string `json:"error"`
+	BytesTransferred uint64 `json:"bytes_transferred"`
 }
 
 // DownloadFileProgress returns the download progress of a file.
@@ -697,7 +697,7 @@ func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *Download
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	response.BytesTransfered = api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	response.BytesTransferred = api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	response.Error = fileInfo.Error
 
 	return nil
@@ -731,13 +731,13 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	transferredBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	if fileInfo.Error != "" {
 		return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 	}
 
-	if fileInfo.FileSize != transferedBytes {
-		return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+	if fileInfo.FileSize != transferredBytes {
+		return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferredBytes)
 	}
 
 	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
@@ -829,13 +829,13 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 			return fmt.Errorf("contract not found: %w", err)
 		}
 
-		transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		transferredBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if fileInfo.Error != "" {
 			return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 		}
 
-		if fileInfo.FileSize != transferedBytes {
-			return fmt.Errorf("file wasn't fully transfered: size: %d, transfered: %d", fileInfo.FileSize, transferedBytes)
+		if fileInfo.FileSize != transferredBytes {
+			return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferredBytes)
 		}
 
 		contractHashBytes, err := hexutil.Decode(args.ContractHash)

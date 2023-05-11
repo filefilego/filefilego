@@ -77,6 +77,7 @@ func (bd *Protocol) GetRemotePeers() []*RemotePeer {
 	return list
 }
 
+// nolint:misspell
 // GetHeighestBlockNumberFromPeers gets the heighest block number from peers.
 func (bd *Protocol) GetHeighestBlockNumberFromPeers() uint64 {
 	height := uint64(0)

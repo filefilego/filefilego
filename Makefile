@@ -1,7 +1,7 @@
 build:
 	go build -o cmd/filefilego/filefilego cmd/filefilego/main.go
 lint:
-	golangci-lint run --disable-all -E govet -E revive -E gofumpt -E gosec -E unparam -E goconst -E prealloc -E stylecheck -E unconvert -E errcheck -E ineffassign -E unused -E tparallel -E whitespace -E staticcheck -E gosimple -E gocritic
+	golangci-lint run --disable-all -E misspell -E govet -E revive -E gofumpt -E gosec -E unparam -E goconst -E prealloc -E stylecheck -E unconvert -E errcheck -E ineffassign -E unused -E tparallel -E whitespace -E staticcheck -E gosimple -E gocritic
 run:
 	go run cmd/filefilego/main.go --storage_token="admintoken"
 unit:
