@@ -493,7 +493,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 			}
 
 			// reset the file bytes transferred
-			err := api.contractStore.ResetTransferedBytes(args.ContractHash, fileHash)
+			err := api.contractStore.ResetTransferredBytes(args.ContractHash, fileHash)
 			if err != nil {
 				log.Warnf("failed to rest file transferred bytes: %v", err)
 			}
@@ -560,7 +560,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		wg.Wait()
 
 		// check if all file parts have been downloaded
-		totalDownloaded := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		totalDownloaded := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if totalDownloaded != fileSize {
 			api.contractStore.SetError(args.ContractHash, fileHash, fmt.Sprintf("total downloaded parts size (%d) is not equal to the file size (%d)", totalDownloaded, fileSize))
 			return
@@ -697,7 +697,7 @@ func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *Download
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	response.BytesTransferred = api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	response.BytesTransferred = api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	response.Error = fileInfo.Error
 
 	return nil
@@ -731,7 +731,7 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+	transferedBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	if fileInfo.Error != "" {
 		return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 	}
@@ -829,7 +829,7 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 			return fmt.Errorf("contract not found: %w", err)
 		}
 
-		transferedBytes := api.contractStore.GetTransferedBytes(args.ContractHash, fileHash)
+		transferedBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if fileInfo.Error != "" {
 			return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 		}
