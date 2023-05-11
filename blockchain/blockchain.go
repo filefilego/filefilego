@@ -1108,8 +1108,8 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
 	idx++
 	itemsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(itemsUint64, idx)
-	prefixWithNodeNodesParent := append([]byte(nodeNodesPrefix), parentHash...)
-	prefixWithNodeNodes := append(prefixWithNodeNodesParent, itemsUint64...)
+	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), parentHash...)
+	prefixWithNodeNodes = append(prefixWithNodeNodes, itemsUint64...)
 
 	err := b.db.Put(append(prefixWithNodeNodes, childHash...), []byte{})
 	if err != nil {
