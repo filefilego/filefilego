@@ -603,8 +603,8 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value)
 	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees)
 
-	transferedBytes := protocolH2.contractStore.GetTransferredBytes(contractHashHex, fileHash2Bytes)
-	assert.Equal(t, uint64(fileSize2), transferedBytes)
+	transferredBytes := protocolH2.contractStore.GetTransferredBytes(contractHashHex, fileHash2Bytes)
+	assert.Equal(t, uint64(fileSize2), transferredBytes)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

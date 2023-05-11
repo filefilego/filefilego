@@ -731,13 +731,13 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	transferedBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
+	transferredBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	if fileInfo.Error != "" {
 		return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 	}
 
-	if fileInfo.FileSize != transferedBytes {
-		return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferedBytes)
+	if fileInfo.FileSize != transferredBytes {
+		return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferredBytes)
 	}
 
 	totalDesiredSegments, _ := api.dataVerificationProtocol.GetMerkleTreeFileSegmentsEncryptionPercentage()
@@ -829,13 +829,13 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 			return fmt.Errorf("contract not found: %w", err)
 		}
 
-		transferedBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
+		transferredBytes := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if fileInfo.Error != "" {
 			return fmt.Errorf("contract file info failure: %s", fileInfo.Error)
 		}
 
-		if fileInfo.FileSize != transferedBytes {
-			return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferedBytes)
+		if fileInfo.FileSize != transferredBytes {
+			return fmt.Errorf("file wasn't fully transferred: size: %d, transferred: %d", fileInfo.FileSize, transferredBytes)
 		}
 
 		contractHashBytes, err := hexutil.Decode(args.ContractHash)
