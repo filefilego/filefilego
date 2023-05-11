@@ -36,28 +36,32 @@ func NewChannelAPI(bchain blockchain.Interface, search search.IndexSearcher) (*C
 
 // ListArgs is a list args
 type ListArgs struct {
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
+	CurrentPage int    `json:"current_page"`
+	PageSize    int    `json:"page_size"`
+	Order       string `json:"order"`
 }
 
 // ListResponse is a list response.
 type ListResponse struct {
-	Total    uint64         `json:"total"`
-	Limit    int            `json:"limit"`
-	Offset   int            `json:"offset"`
-	Channels []NodeItemJSON `json:"channels"`
+	Total       uint64         `json:"total"`
+	CurrentPage int            `json:"current_page"`
+	PageSize    int            `json:"page_size"`
+	Channels    []NodeItemJSON `json:"channels"`
 }
 
 // List returns a list of channels.
 func (api *ChannelAPI) List(r *http.Request, args *ListArgs, response *ListResponse) error {
-	channels, err := api.blockchain.GetChannels(args.Limit, args.Offset)
+	if args.Order != "asc" && args.Order != "desc" {
+		return fmt.Errorf("invalid order: %s", args.Order)
+	}
+
+	channels, err := api.blockchain.GetChannels(args.CurrentPage, args.PageSize, args.Order)
 	if err != nil {
 		return fmt.Errorf("failed to get channels list: %w", err)
 	}
-
 	response.Total = api.blockchain.GetChannelsCount()
-	response.Limit = args.Limit
-	response.Offset = args.Offset
+	response.CurrentPage = args.CurrentPage
+	response.PageSize = args.PageSize
 	response.Channels = make([]NodeItemJSON, len(channels))
 	for i, v := range channels {
 		response.Channels[i] = transformNodeItemToJSON(v)
@@ -282,7 +286,9 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 
 // FilesFromEntryOrFolderArgs is a request.
 type FilesFromEntryOrFolderArgs struct {
-	NodeHash string `json:"node_hash"`
+	NodeHash    string `json:"node_hash"`
+	CurrentPage int    `json:"current_page"`
+	PageSize    int    `json:"page_size"`
 }
 
 // FileMetadata represents a file metadata
@@ -305,7 +311,7 @@ func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEn
 		return fmt.Errorf("failed to decode node hash: %w", err)
 	}
 
-	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes)
+	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes, args.CurrentPage, args.PageSize)
 	if err != nil {
 		return fmt.Errorf("failed to find files in the requested node: %w", err)
 	}

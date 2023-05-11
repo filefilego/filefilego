@@ -28,7 +28,7 @@ func TestCreateChannelNodeItemsTxDataPayload(t *testing.T) {
 }
 
 func TestListChannels(t *testing.T) {
-	bodyReader := strings.NewReader(`{"result":{"total":1,"limit":100,"offset":100,"channels":[{"name":"ffg channel"}]},"error":null,"id":1}`)
+	bodyReader := strings.NewReader(`{"result":{"total":1,"current_page":100,"page_size":100,"channels":[{"name":"ffg channel"}]},"error":null,"id":1}`)
 	stringReadCloser := io.NopCloser(bodyReader)
 	c, err := New("http://localhost:8090/rpc", &httpClientStub{
 		response: &http.Response{
@@ -36,10 +36,10 @@ func TestListChannels(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	list, err := c.ListChannels(context.TODO(), 100, 100)
+	list, err := c.ListChannels(context.TODO(), 100, 100, "asc")
 	assert.NoError(t, err)
-	assert.Equal(t, 100, list.Limit)
-	assert.Equal(t, 100, list.Offset)
+	assert.Equal(t, 100, list.CurrentPage)
+	assert.Equal(t, 100, list.PageSize)
 	assert.Equal(t, uint64(1), list.Total)
 	assert.Len(t, list.Channels, 1)
 	assert.Equal(t, "ffg channel", list.Channels[0].Name)
