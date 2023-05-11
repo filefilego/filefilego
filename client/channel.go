@@ -75,14 +75,15 @@ func (cli *Client) CreateChannelNodeItemsTxDataPayload(ctx context.Context, node
 }
 
 // ListChannels gets the list of channels.
-func (cli *Client) ListChannels(ctx context.Context, limit, offset int) (rpc.ListResponse, error) {
+func (cli *Client) ListChannels(ctx context.Context, currentPage, pageSize int, order string) (rpc.ListResponse, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "channel.List",
 		Params: []interface{}{
 			rpc.ListArgs{
-				Limit:  limit,
-				Offset: offset,
+				CurrentPage: currentPage,
+				PageSize:    pageSize,
+				Order:       order,
 			},
 		},
 		ID: 1,

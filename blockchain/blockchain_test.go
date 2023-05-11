@@ -553,7 +553,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.Equal(t, channelNode.Name, retrivedNode.Name)
 
 	// GetChannels
-	channels, err := blockchain.GetChannels(10, 0)
+	channels, err := blockchain.GetChannels(0, 10, "asc")
 	assert.NoError(t, err)
 	assert.Equal(t, channelNode.Name, channels[0].Name)
 
@@ -681,7 +681,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	txWithChannelPayload.TransactionFees = "0x" + fees.Text(16)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
 	assert.NoError(t, err)
-	channels, err := blockchain.GetChannels(10, 0)
+	channels, err := blockchain.GetChannels(0, 10, "desc")
 	assert.NoError(t, err)
 	assert.Len(t, channels, 1)
 	assert.Equal(t, "channel one", channels[0].Name)
@@ -798,7 +798,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload3)
 	assert.NoError(t, err)
 
-	allChannels, err := blockchain.GetChannels(10, 0)
+	allChannels, err := blockchain.GetChannels(0, 10, "desc")
 	assert.NoError(t, err)
 	assert.Len(t, allChannels, 2)
 
@@ -826,18 +826,18 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Equal(t, proto.Uint64(1024), fileItem[0].Size)
 
 	// check limit and offset
-	allChannels, err = blockchain.GetChannels(1, 0)
-	assert.NoError(t, err)
-	assert.Len(t, allChannels, 1)
-	assert.Equal(t, "channel FFG", allChannels[0].Name)
-
-	allChannels, err = blockchain.GetChannels(1, 1)
+	allChannels, err = blockchain.GetChannels(1, 1, "asc")
 	assert.NoError(t, err)
 	assert.Len(t, allChannels, 1)
 	assert.Equal(t, "channel one", allChannels[0].Name)
 
-	// offset bigger than the
-	allChannels, err = blockchain.GetChannels(1, 2)
+	allChannels, err = blockchain.GetChannels(2, 1, "asc")
+	assert.NoError(t, err)
+	assert.Len(t, allChannels, 1)
+	assert.Equal(t, "channel FFG", allChannels[0].Name)
+
+	// offset bigger than the number of channels
+	allChannels, err = blockchain.GetChannels(3, 1, "asc")
 	assert.NoError(t, err)
 	assert.Len(t, allChannels, 0)
 

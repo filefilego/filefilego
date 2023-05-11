@@ -69,7 +69,7 @@ type Interface interface {
 	GetLastBlockUpdatedAt() int64
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
-	GetChannels(limit, offset int) ([]*NodeItem, error)
+	GetChannels(currentPage, pageSize int, order string) ([]*NodeItem, error)
 	GetChannelsCount() uint64
 	GetChildNodeItems(nodeHash []byte) ([]*NodeItem, error)
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
@@ -1093,16 +1093,17 @@ func (b *Blockchain) GetChannelsCount() uint64 {
 }
 
 func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
-	err := b.db.Put(append([]byte(channelPrefix), nodeHash...), []byte{})
-	if err != nil {
-		return fmt.Errorf("failed to insert node to channels: %w", err)
-	}
-
 	channelsCountBytes, err := b.db.Get([]byte(channelsCountPrefix))
 	if err != nil || channelsCountBytes == nil {
 		channelsUint64 := make([]byte, 8)
 		binary.BigEndian.PutUint64(channelsUint64, 1)
-		err := b.db.Put([]byte(channelsCountPrefix), channelsUint64)
+		prefix := append([]byte(channelPrefix), channelsUint64...)
+		err := b.db.Put(append(prefix, nodeHash...), []byte{})
+		if err != nil {
+			return fmt.Errorf("failed to insert node to channels: %w", err)
+		}
+
+		err = b.db.Put([]byte(channelsCountPrefix), channelsUint64)
 		if err != nil {
 			return fmt.Errorf("failed to insert to channels count: %w", err)
 		}
@@ -1113,6 +1114,12 @@ func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
 	num++
 	channelsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(channelsUint64, num)
+	prefix := append([]byte(channelPrefix), channelsUint64...)
+	err = b.db.Put(append(prefix, nodeHash...), []byte{})
+	if err != nil {
+		return fmt.Errorf("failed to insert node to channels: %w", err)
+	}
+
 	err = b.db.Put([]byte(channelsCountPrefix), channelsUint64)
 	if err != nil {
 		return fmt.Errorf("failed to update channels count: %w", err)
@@ -1349,26 +1356,87 @@ func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []by
 }
 
 // GetChannels gets a list of channels.
-func (b *Blockchain) GetChannels(limit, offset int) ([]*NodeItem, error) {
+func (b *Blockchain) GetChannels(currentPage, pageSize int, order string) ([]*NodeItem, error) {
+	if currentPage < 0 {
+		currentPage = 0
+	}
+
+	if pageSize == 0 {
+		pageSize = 10
+	} else if pageSize > 100 {
+		pageSize = 100
+	}
+
+	start := (currentPage) * pageSize
+	if start < 0 {
+		start = 0
+	}
+
+	limit := pageSize
+
 	iter := b.db.NewIterator(util.BytesPrefix([]byte(channelPrefix)), nil)
 	channelNodes := make([]*NodeItem, 0)
-	index := 0
-	for iter.Next() {
-		if limit == 0 {
-			break
+	i := 0
+	if order == "asc" {
+		for iter.Next() {
+			i++
+			if limit == 0 {
+				break
+			}
+
+			if i < start {
+				continue
+			}
+
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
+
+			item, err := b.GetNodeItem(key[8+len([]byte(channelPrefix)):])
+			if err != nil {
+				continue
+			}
+			channelNodes = append(channelNodes, item)
+			limit--
 		}
-		index++
-		if index <= offset {
-			continue
+	} else {
+		if iter.Last() {
+			key := iter.Key()
+			i++
+			if len(key) != 0 && i > start {
+				item, err := b.GetNodeItem(key[8+len([]byte(channelPrefix)):])
+				if err == nil {
+					channelNodes = append(channelNodes, item)
+					limit--
+				}
+			}
 		}
-		key := iter.Key()
-		item, err := b.GetNodeItem(key[len([]byte(channelPrefix)):])
-		if err != nil {
-			continue
+
+		for iter.Prev() {
+			i++
+			if limit == 0 {
+				break
+			}
+
+			if i < start {
+				continue
+			}
+
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
+
+			item, err := b.GetNodeItem(key[8+len([]byte(channelPrefix)):])
+			if err != nil {
+				continue
+			}
+			channelNodes = append(channelNodes, item)
+			limit--
 		}
-		channelNodes = append(channelNodes, item)
-		limit--
 	}
+
 	iter.Release()
 	err := iter.Error()
 	if err != nil {

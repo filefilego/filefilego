@@ -569,7 +569,7 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 
 	// check if channel was created
-	channels, err := v1Client.ListChannels(context.TODO(), 10, 0)
+	channels, err := v1Client.ListChannels(context.TODO(), 0, 10, "asc")
 	assert.NoError(t, err)
 	assert.Len(t, channels.Channels, 1)
 	assert.Equal(t, "Filefilego Official Channel", channels.Channels[0].Name)
