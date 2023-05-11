@@ -286,7 +286,9 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 
 // FilesFromEntryOrFolderArgs is a request.
 type FilesFromEntryOrFolderArgs struct {
-	NodeHash string `json:"node_hash"`
+	NodeHash    string `json:"node_hash"`
+	CurrentPage int    `json:"current_page"`
+	PageSize    int    `json:"page_size"`
 }
 
 // FileMetadata represents a file metadata
@@ -309,7 +311,7 @@ func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEn
 		return fmt.Errorf("failed to decode node hash: %w", err)
 	}
 
-	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes)
+	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes, args.CurrentPage, args.PageSize)
 	if err != nil {
 		return fmt.Errorf("failed to find files in the requested node: %w", err)
 	}

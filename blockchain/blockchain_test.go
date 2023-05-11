@@ -558,7 +558,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.Equal(t, channelNode.Name, channels[0].Name)
 
 	// GetChildNodeItems
-	childNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash)
+	childNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.Empty(t, childNodes)
 	childNode := NodeItem{
@@ -572,7 +572,7 @@ func TestChannelFunctionality(t *testing.T) {
 	// saveNodeAsChildNode
 	err = blockchain.saveNodeAsChildNode(channelNode.NodeHash, childNode.NodeHash)
 	assert.NoError(t, err)
-	newChildNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash)
+	newChildNodes, err := blockchain.GetChildNodeItems(channelNode.NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.Len(t, newChildNodes, 1)
 	assert.Equal(t, childNode.Name, newChildNodes[0].Name)
@@ -589,13 +589,14 @@ func TestChannelFunctionality(t *testing.T) {
 		ParentHash: childNode.NodeHash,
 		NodeType:   NodeItemType_ENTRY,
 	}
+
 	err = blockchain.saveNode(&childChildNode)
 	assert.NoError(t, err)
 
 	// saveNodeAsChildNode
 	err = blockchain.saveNodeAsChildNode(childNode.NodeHash, childChildNode.NodeHash)
 	assert.NoError(t, err)
-	newChildChildNodes, err := blockchain.GetChildNodeItems(childNode.NodeHash)
+	newChildChildNodes, err := blockchain.GetChildNodeItems(childNode.NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.NotNil(t, newChildChildNodes)
 	assert.Len(t, newChildChildNodes, 1)
@@ -715,7 +716,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	txWithChannelPayload2.TransactionFees = "0x" + fees.Text(16)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
 	assert.NoError(t, err)
-	subchan, err := blockchain.GetChildNodeItems(channels[0].NodeHash)
+	subchan, err := blockchain.GetChildNodeItems(channels[0].NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.Len(t, subchan, 1)
 	assert.Equal(t, "sub channel under main channel", subchan[0].Name)
@@ -802,17 +803,17 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, allChannels, 2)
 
-	secondSubChannelChilds, err := blockchain.GetChildNodeItems(allChannels[0].NodeHash)
+	secondSubChannelChilds, err := blockchain.GetChildNodeItems(allChannels[0].NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.Len(t, secondSubChannelChilds, 1)
 	assert.Equal(t, "subchannel of ffg", secondSubChannelChilds[0].Name)
 
-	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[0].NodeHash)
+	childsOfSubchannelffg, err := blockchain.GetChildNodeItems(secondSubChannelChilds[0].NodeHash, 0, 10)
 	assert.NoError(t, err)
 	assert.Len(t, childsOfSubchannelffg, 1)
 	assert.Equal(t, "subchannel of ffg 2 folder", childsOfSubchannelffg[0].Name)
 
-	files, err := blockchain.GetFilesFromEntryOrFolderRecursively(childsOfSubchannelffg[0].NodeHash)
+	files, err := blockchain.GetFilesFromEntryOrFolderRecursively(childsOfSubchannelffg[0].NodeHash, 0, 1000)
 	assert.NoError(t, err)
 	assert.Len(t, files, 1)
 	assert.Equal(t, "this is a file under subchannel", files[0].Name)
