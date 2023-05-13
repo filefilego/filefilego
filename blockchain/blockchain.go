@@ -72,7 +72,7 @@ type Interface interface {
 	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
 	GetChannels(currentPage, pageSize int, order string) ([]*NodeItem, error)
 	GetChannelsCount() uint64
-	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, error)
+	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, uint64, error)
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
@@ -1094,8 +1094,9 @@ func (b *Blockchain) GetChannelsCount() uint64 {
 }
 
 // GetTotalChannelNodesChilds returns the total number of channel entries in the blockchain except the channels.
-func (b *Blockchain) GetTotalChannelNodesChilds() uint64 {
-	channelsNodesCountBytes, err := b.db.Get([]byte(channelsNodesCountPrefix))
+func (b *Blockchain) GetTotalChannelNodesChilds(parentHash []byte) uint64 {
+	prefix := append([]byte(channelsNodesCountPrefix), parentHash...)
+	channelsNodesCountBytes, err := b.db.Get(prefix)
 	if err != nil || len(channelsNodesCountBytes) != 8 {
 		return 0
 	}
@@ -1104,8 +1105,9 @@ func (b *Blockchain) GetTotalChannelNodesChilds() uint64 {
 }
 
 func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
-	idx := b.GetTotalChannelNodesChilds()
+	idx := b.GetTotalChannelNodesChilds(parentHash)
 	idx++
+
 	itemsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(itemsUint64, idx)
 	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), parentHash...)
@@ -1116,7 +1118,7 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
 		return fmt.Errorf("failed to insert child node item under parent node: %w", err)
 	}
 
-	err = b.db.Put([]byte(channelsNodesCountPrefix), itemsUint64)
+	err = b.db.Put(append([]byte(channelsNodesCountPrefix), parentHash...), itemsUint64)
 	if err != nil {
 		return fmt.Errorf("failed to update child nodes count: %w", err)
 	}
@@ -1125,7 +1127,7 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
 }
 
 // GetChildNodeItems returns a list of child nodes of a node.
-func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, error) {
+func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, uint64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -1174,10 +1176,12 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 	iter.Release()
 	err := iter.Error()
 	if err != nil {
-		return nil, fmt.Errorf("failed to release get child nodes iterator: %w", err)
+		return nil, 0, fmt.Errorf("failed to release get child nodes iterator: %w", err)
 	}
 
-	return childNodes, nil
+	totalChildsCount := b.GetTotalChannelNodesChilds(nodeHash)
+
+	return childNodes, totalChildsCount, nil
 }
 
 func (b *Blockchain) saveAsChannel(nodeHash []byte) error {
@@ -1383,7 +1387,7 @@ func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []by
 		node := el.Value.(*NodeItem)
 		if node.NodeType == NodeItemType_DIR || node.NodeType == NodeItemType_ENTRY {
 			path += node.Name + "/"
-			childs, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize)
+			childs, _, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize)
 			if err == nil {
 				for _, v := range childs {
 					if v.NodeType == NodeItemType_DIR {
