@@ -1149,14 +1149,12 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 	childNodes := make([]*NodeItem, 0)
 	i := 0
 	for iter.Next() {
-		log.Error("fuck")
 		i++
 		if limit == 0 {
 			break
 		}
 
 		if i < start {
-			log.Error("continue")
 			continue
 		}
 
