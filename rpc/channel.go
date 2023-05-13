@@ -240,26 +240,29 @@ func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *Searc
 
 // GetNodeItemArgs is a response.
 type GetNodeItemArgs struct {
-	NodeHash string `json:"node_hash"`
+	NodeHash    string `json:"node_hash"`
+	CurrentPage int    `json:"current_page"`
+	PageSize    int    `json:"page_size"`
 }
 
 // NodeItemJSON represents a node item json.
 type NodeItemJSON struct {
-	Name        string   `json:"name"`
-	NodeHash    string   `json:"node_hash"`
-	Owner       string   `json:"owner"`
-	Enabled     bool     `json:"enabled"`
-	NodeType    int32    `json:"node_type"`
-	Attributes  []string `json:"attributes"`
-	Admins      []string `json:"admins"`
-	Posters     []string `json:"posters"`
-	Timestamp   int64    `json:"timestamp"`
-	Description string   `json:"description"`
-	MerkleRoot  string   `json:"merkle_root"`
-	FileHash    string   `json:"file_hash"`
-	Size        uint64   `json:"size"`
-	ParentHash  string   `json:"parent_hash"`
-	ContentType string   `json:"content_type"`
+	Name        string         `json:"name"`
+	NodeHash    string         `json:"node_hash"`
+	Owner       string         `json:"owner"`
+	Enabled     bool           `json:"enabled"`
+	NodeType    int32          `json:"node_type"`
+	Attributes  []string       `json:"attributes"`
+	Admins      []string       `json:"admins"`
+	Posters     []string       `json:"posters"`
+	Timestamp   int64          `json:"timestamp"`
+	Description string         `json:"description"`
+	MerkleRoot  string         `json:"merkle_root"`
+	FileHash    string         `json:"file_hash"`
+	Size        uint64         `json:"size"`
+	ParentHash  string         `json:"parent_hash"`
+	ContentType string         `json:"content_type"`
+	Nodes       []NodeItemJSON `json:"nodes"`
 }
 
 // GetNodeItemResponse is a response.
@@ -280,6 +283,14 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 	}
 
 	response.Node = transformNodeItemToJSON(item)
+
+	childs, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize)
+	if err == nil {
+		response.Node.Nodes = make([]NodeItemJSON, len(childs))
+		for i, v := range childs {
+			response.Node.Nodes[i] = transformNodeItemToJSON(v)
+		}
+	}
 
 	return nil
 }
