@@ -43,6 +43,7 @@ type Interface interface {
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
 	SendDataQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.DataQueryResponseProto) error
 	RequestDataQueryResponseTransfer(ctx context.Context, peerID peer.ID, request *messages.DataQueryResponseTransferProto) error
+	PurgeQueryHistory(key string) error
 }
 
 // Protocol wraps the data query protocols and handlers
@@ -80,6 +81,16 @@ func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) er
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
 	d.queryHistory[key] = val
+	return nil
+}
+
+// PurgeQueryHistory purges/deletes a query history.
+func (d *Protocol) PurgeQueryHistory(key string) error {
+	if _, ok := d.queryHistory[key]; ok {
+		d.queryHistoryMux.Lock()
+		defer d.queryHistoryMux.Unlock()
+		delete(d.queryHistory, key)
+	}
 	return nil
 }
 
