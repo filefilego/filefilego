@@ -563,6 +563,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.Equal(t, uint64(0), totalChilds)
 	assert.Empty(t, childNodes)
 	childNode := NodeItem{
+		NodeType:   NodeItemType_SUBCHANNEL,
 		Name:       "sub channel",
 		NodeHash:   []byte{33},
 		ParentHash: channelNode.NodeHash,
@@ -571,7 +572,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.NoError(t, err)
 
 	// saveNodeAsChildNode
-	err = blockchain.saveNodeAsChildNode(channelNode.NodeHash, childNode.NodeHash)
+	err = blockchain.saveNodeAsChildNode(channelNode.NodeHash, childNode.NodeHash, uint8(childNode.NodeType))
 	assert.NoError(t, err)
 	newChildNodes, totalChilds, err := blockchain.GetChildNodeItems(channelNode.NodeHash, 0, 10)
 	assert.NoError(t, err)
@@ -596,7 +597,7 @@ func TestChannelFunctionality(t *testing.T) {
 	assert.NoError(t, err)
 
 	// saveNodeAsChildNode
-	err = blockchain.saveNodeAsChildNode(childNode.NodeHash, childChildNode.NodeHash)
+	err = blockchain.saveNodeAsChildNode(childNode.NodeHash, childChildNode.NodeHash, uint8(childChildNode.NodeType))
 	assert.NoError(t, err)
 	newChildChildNodes, totalChilds, err := blockchain.GetChildNodeItems(childNode.NodeHash, 0, 10)
 	assert.NoError(t, err)
