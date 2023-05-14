@@ -89,6 +89,9 @@ func TestDataQueryProtocol(t *testing.T) {
 	assert.True(t, ok)
 	assert.NotEmpty(t, msgs)
 
+	err = protocol2.PurgeQueryHistory(hexutil.Encode(hashOfReq))
+	assert.NoError(t, err)
+
 	err = protocol3.RequestDataQueryResponseTransfer(context.TODO(), h2.ID(), &messages.DataQueryResponseTransferProto{Hash: hashOfReq})
 	assert.NoError(t, err)
 	results, ok := protocol3.GetQueryResponse(hexutil.Encode(hashOfReq))
