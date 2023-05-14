@@ -815,7 +815,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				if err != nil {
 					return fmt.Errorf("failed to create node: %w", err)
 				}
-				err = b.saveNodeAsChildNode(parentNode.NodeHash, node.NodeHash)
+				err = b.saveNodeAsChildNode(parentNode.NodeHash, node.NodeHash, uint8(node.NodeType))
 				if err != nil {
 					return fmt.Errorf("failed to save node child: %w", err)
 				}
@@ -1104,13 +1104,15 @@ func (b *Blockchain) GetTotalChannelNodesChilds(parentHash []byte) uint64 {
 	return binary.BigEndian.Uint64(channelsNodesCountBytes)
 }
 
-func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte) error {
+func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte, childItemType uint8) error {
 	idx := b.GetTotalChannelNodesChilds(parentHash)
 	idx++
 
 	itemsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(itemsUint64, idx)
+	nodeTypeByte := []byte{childItemType}
 	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), parentHash...)
+	prefixWithNodeNodes = append(prefixWithNodeNodes, nodeTypeByte...)
 	prefixWithNodeNodes = append(prefixWithNodeNodes, itemsUint64...)
 
 	err := b.db.Put(append(prefixWithNodeNodes, childHash...), []byte{})
@@ -1163,7 +1165,7 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 			break
 		}
 
-		item, err := b.GetNodeItem(key[8+len(prefixWithNodeNodes):])
+		item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
 		if err != nil {
 			continue
 		}

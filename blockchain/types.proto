@@ -14,11 +14,11 @@ message AddressStateProto {
 // NodeItemType represents the type of each node.
 enum NodeItemType {
     UNKNOWN = 0;
-    FILE = 1;
-    DIR = 2;
-    CHANNEL = 3;
-    SUBCHANNEL = 4;
-    ENTRY = 5;
+    CHANNEL = 1;
+    SUBCHANNEL = 2;
+    ENTRY = 3;
+    DIR = 4;
+    FILE = 5;
     OTHER = 6;
 }
 
