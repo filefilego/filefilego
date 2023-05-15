@@ -596,19 +596,14 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 
 func getDownloadedPartsInfo(downloadedPartsFolder string) ([]FileRanges, error) {
 	filesRanges := make([]FileRanges, 0)
-	f, err := os.Open(downloadedPartsFolder)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open downloaded parts folder: %w", err)
-	}
 
-	fileInfo, err := f.Readdir(-1)
+	dirEntries, err := os.ReadDir(downloadedPartsFolder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read downloaded parts folder content: %w", err)
 	}
-	f.Close()
 
-	for _, file := range fileInfo {
-		fileParts := strings.Split(file.Name(), "_part_")
+	for _, entry := range dirEntries {
+		fileParts := strings.Split(entry.Name(), "_part_")
 		if len(fileParts) == 2 {
 			fromToParts := strings.Split(fileParts[1], "_")
 			if len(fromToParts) == 2 {
@@ -620,11 +615,15 @@ func getDownloadedPartsInfo(downloadedPartsFolder string) ([]FileRanges, error) 
 				if err != nil {
 					continue
 				}
+				info, err := entry.Info()
+				if err != nil {
+					continue
+				}
 
 				tmpRange := FileRanges{
 					from:          from,
 					to:            to,
-					availableSize: file.Size(),
+					availableSize: info.Size(),
 				}
 				filesRanges = append(filesRanges, tmpRange)
 			}
