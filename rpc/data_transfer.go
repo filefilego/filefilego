@@ -180,15 +180,6 @@ func (api *DataTransferAPI) SendDataQueryRequest(r *http.Request, args *SendData
 		return fmt.Errorf("failed to insert data query request: %w", err)
 	}
 
-	//Purge QueryHistory after 5 minutes
-	go func() {
-		time.Sleep(5 * time.Minute)
-		err := api.dataQueryProtocol.PurgeQueryHistory(requestHashHex)
-		if err != nil {
-			return
-		}
-	}()
-
 	requestProto := messages.ToDataQueryRequestProto(request)
 
 	payload := messages.GossipPayload{
