@@ -12,4 +12,4 @@ genproto:
 	# protoc --go_out=transaction transaction/transaction.proto
 	# protoc --proto_path=. --go_out=block block/block.proto transaction/transaction.proto
 	# protoc --go_out=blockchain blockchain/types.proto
-	protoc --proto_path=. --go_out=node node/protocols/messages/messages.proto block/block.proto transaction/transaction.proto
+	# protoc --proto_path=. --go_out=node node/protocols/messages/messages.proto block/block.proto transaction/transaction.proto

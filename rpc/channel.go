@@ -267,7 +267,8 @@ type NodeItemJSON struct {
 
 // GetNodeItemResponse is a response.
 type GetNodeItemResponse struct {
-	Node NodeItemJSON `json:"node"`
+	Node            NodeItemJSON `json:"node"`
+	TotalChildNodes uint64       `json:"total_child_nodes"`
 }
 
 // GetNodeItem gets a node item.
@@ -284,8 +285,9 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 
 	response.Node = transformNodeItemToJSON(item)
 
-	childs, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize)
+	childs, totalChilds, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize)
 	if err == nil {
+		response.TotalChildNodes = totalChilds
 		response.Node.Nodes = make([]NodeItemJSON, len(childs))
 		for i, v := range childs {
 			response.Node.Nodes[i] = transformNodeItemToJSON(v)
