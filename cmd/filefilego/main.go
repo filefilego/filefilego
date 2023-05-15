@@ -54,6 +54,7 @@ const (
 	purgeContractStoreIntervalSeconds    = 60 * 60
 	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
 	triggerSyncSinceLastUpdateSeconds    = 15
+	purgeDataQueryReqsIntervalSeconds    = 30
 )
 
 func main() {
@@ -457,6 +458,17 @@ func run(ctx *cli.Context) error {
 		r.Handle("/uploads", storageEngine)
 		r.HandleFunc("/auth", storageEngine.Authenticate)
 	}
+
+	// periodically purge data query requests that are old
+	go func() {
+		for {
+			<-time.After(purgeDataQueryReqsIntervalSeconds * time.Second)
+			err := dataQueryProtocol.PurgeQueryHistory()
+			if err != nil {
+				log.Warnf("failed to purge data query store: %v", err)
+			}
+		}
+	}()
 
 	// unix socket
 	unixserver := &http.Server{

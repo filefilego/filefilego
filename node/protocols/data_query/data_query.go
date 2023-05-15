@@ -33,6 +33,8 @@ const (
 	DataQueryResponseTransferProtocolID = "/ffg/dataquery_response_transfer/1.0.0"
 
 	deadlineTimeInSecond = 10
+
+	dataQueryReqAgeToPurgeInMins = 5
 )
 
 // Interface represents a data quertier.
@@ -43,6 +45,7 @@ type Interface interface {
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
 	SendDataQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.DataQueryResponseProto) error
 	RequestDataQueryResponseTransfer(ctx context.Context, peerID peer.ID, request *messages.DataQueryResponseTransferProto) error
+	PurgeQueryHistory() error
 }
 
 // Protocol wraps the data query protocols and handlers
@@ -80,6 +83,19 @@ func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) er
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
 	d.queryHistory[key] = val
+	return nil
+}
+
+// PurgeQueryHistory purges/deletes all queries that are more than some minutes old.
+func (d *Protocol) PurgeQueryHistory() error {
+	d.queryHistoryMux.Lock()
+	defer d.queryHistoryMux.Unlock()
+	for key, val := range d.queryHistory {
+		minsElapsed := (time.Now().Unix() - val.Timestamp) / 60
+		if minsElapsed > dataQueryReqAgeToPurgeInMins {
+			delete(d.queryHistory, key)
+		}
+	}
 	return nil
 }
 

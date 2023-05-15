@@ -89,6 +89,20 @@ func TestDataQueryProtocol(t *testing.T) {
 	assert.True(t, ok)
 	assert.NotEmpty(t, msgs)
 
+	dqrequestold := messages.DataQueryRequest{
+		FileHashes:   [][]byte{{12}},
+		FromPeerAddr: h1.ID().String(),
+		Timestamp:    time.Now().Unix() - ((dataQueryReqAgeToPurgeInMins + 1) * 60),
+	}
+	hashOfOldReq := dqrequestold.GetHash()
+	dqrequestold.Hash = make([]byte, len(hashOfOldReq))
+	copy(dqrequestold.Hash, hashOfOldReq)
+	err = protocol2.PutQueryHistory(hexutil.Encode(hashOfOldReq), dqrequestold)
+	assert.NoError(t, err)
+	err = protocol2.PurgeQueryHistory()
+	assert.NoError(t, err)
+	assert.Len(t, protocol2.queryHistory, 1)
+
 	err = protocol3.RequestDataQueryResponseTransfer(context.TODO(), h2.ID(), &messages.DataQueryResponseTransferProto{Hash: hashOfReq})
 	assert.NoError(t, err)
 	results, ok := protocol3.GetQueryResponse(hexutil.Encode(hashOfReq))
