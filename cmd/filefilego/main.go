@@ -465,7 +465,7 @@ func run(ctx *cli.Context) error {
 			<-time.After(purgeDataQueryReqsIntervalSeconds * time.Second)
 			err := dataQueryProtocol.PurgeQueryHistory()
 			if err != nil {
-				log.Warnf("failed to purge data query store: %s", err.Error())
+				log.Warnf("failed to purge data query store: %v", err)
 			}
 		}
 	}()
