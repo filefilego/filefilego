@@ -216,19 +216,14 @@ func ListAddresses(ctx *cli.Context) error {
 		return errors.New("keystore directory doesn't exist")
 	}
 
-	f, err := os.Open(conf.Global.KeystoreDir)
-	if err != nil {
-		return fmt.Errorf("failed to read keystore directory: %w", err)
-	}
-	fileInfo, err := f.Readdir(-1)
-	f.Close()
+	dirEntries, err := os.ReadDir(conf.Global.KeystoreDir)
 	if err != nil {
 		return fmt.Errorf("failed to read keystore directory: %w", err)
 	}
 
-	for i, file := range fileInfo {
-		if file.Name() == "node_identity.json" {
-			fileData, err := os.ReadFile(filepath.Join(conf.Global.KeystoreDir, file.Name()))
+	for i, entry := range dirEntries {
+		if entry.Name() == "node_identity.json" {
+			fileData, err := os.ReadFile(filepath.Join(conf.Global.KeystoreDir, entry.Name()))
 			if err != nil {
 				continue
 			}
@@ -238,7 +233,7 @@ func ListAddresses(ctx *cli.Context) error {
 			continue
 		}
 
-		addrr := hexutil.ExtractHex(file.Name())
+		addrr := hexutil.ExtractHex(entry.Name())
 		if addrr == "" {
 			continue
 		}

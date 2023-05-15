@@ -115,21 +115,16 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	f, err := os.Open(ks.keysDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to read keystore directory: %w", err)
-	}
-	fileInfo, err := f.Readdir(-1)
-	f.Close()
+	dirEntries, err := os.ReadDir(ks.keysDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to read keystore directory: %w", err)
 	}
 
-	for _, file := range fileInfo {
+	for _, entry := range dirEntries {
 		nodeIDKey := false
-		if file.Name() == "node_identity.json" {
+		if entry.Name() == "node_identity.json" {
 			nodeIDKey = true
-			fileData, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
+			fileData, err := os.ReadFile(filepath.Join(ks.keysDir, entry.Name()))
 			if err != nil {
 				continue
 			}
@@ -140,13 +135,13 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 			}
 		} else {
 			nodeIDKey = false
-			fileNameContainsAddress := strings.Contains(file.Name(), address)
+			fileNameContainsAddress := strings.Contains(entry.Name(), address)
 			if !fileNameContainsAddress {
 				continue
 			}
 		}
 
-		bts, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
+		bts, err := os.ReadFile(filepath.Join(ks.keysDir, entry.Name()))
 		if err != nil {
 			return "", fmt.Errorf("failed to read keystore file: %w", err)
 		}
@@ -182,18 +177,13 @@ func (ks *Store) UnlockKey(address string, passphrase string) (string, error) {
 func (ks *Store) ListKeys() ([]string, error) {
 	addresses := make([]string, 0)
 
-	f, err := os.Open(ks.keysDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read keystore directory: %w", err)
-	}
-	fileInfo, err := f.Readdir(-1)
-	f.Close()
+	dirEntries, err := os.ReadDir(ks.keysDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read keystore directory: %w", err)
 	}
 
-	for _, file := range fileInfo {
-		fileData, err := os.ReadFile(filepath.Join(ks.keysDir, file.Name()))
+	for _, entry := range dirEntries {
+		fileData, err := os.ReadFile(filepath.Join(ks.keysDir, entry.Name()))
 		if err != nil {
 			continue
 		}
