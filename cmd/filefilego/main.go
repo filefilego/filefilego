@@ -399,7 +399,18 @@ func run(ctx *cli.Context) error {
 			<-time.After(purgeContractStoreIntervalSeconds * time.Second)
 			err := contractStore.PurgeInactiveContracts(purgeConstractStoreTimeWindowSeconds)
 			if err != nil {
-				log.Warnf("failed to purge contract store: %s", err.Error())
+				log.Warnf("failed to purge contract store: %v", err)
+			}
+		}
+	}()
+
+	// periodically purge data query requests that are old
+	go func() {
+		for {
+			<-time.After(purgeDataQueryReqsIntervalSeconds * time.Second)
+			err := dataQueryProtocol.PurgeQueryHistory()
+			if err != nil {
+				log.Warnf("failed to purge data query store: %v", err)
 			}
 		}
 	}()
@@ -458,17 +469,6 @@ func run(ctx *cli.Context) error {
 		r.Handle("/uploads", storageEngine)
 		r.HandleFunc("/auth", storageEngine.Authenticate)
 	}
-
-	// periodically purge data query requests that are old
-	go func() {
-		for {
-			<-time.After(purgeDataQueryReqsIntervalSeconds * time.Second)
-			err := dataQueryProtocol.PurgeQueryHistory()
-			if err != nil {
-				log.Warnf("failed to purge data query store: %v", err)
-			}
-		}
-	}()
 
 	// unix socket
 	unixserver := &http.Server{
