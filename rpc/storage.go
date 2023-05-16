@@ -109,7 +109,7 @@ func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, r
 		return fmt.Errorf("failed to marshal storage query gossip payload: %w", err)
 	}
 
-	err = api.publisher.PublishMessageToNetwork(r.Context(), common.FFGNetPubSubStorageQuery, payloadBytes)
+	err = api.publisher.PublishMessageToNetwork(context.Background(), common.FFGNetPubSubStorageQuery, payloadBytes)
 	if err != nil {
 		return fmt.Errorf("failed to publish storage query request proto message: %w", err)
 	}
