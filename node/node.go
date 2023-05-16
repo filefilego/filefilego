@@ -477,7 +477,10 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 
 		addrsInfos := n.FindPeers(ctx, []peer.ID{storageQuerier})
 		if len(addrsInfos) > 0 {
-			_ = n.storageProtocol.SendStorageQueryResponse(ctx, addrsInfos[0].ID, &response)
+			err := n.storageProtocol.SendStorageQueryResponse(ctx, addrsInfos[0].ID, &response)
+			if err != nil {
+				log.Warnf("failed to send data query response back to initiator: %v", err)
+			}
 		}
 
 	case *messages.GossipPayload_Query:
