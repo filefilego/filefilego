@@ -462,6 +462,18 @@ func run(ctx *cli.Context) error {
 
 	if conf.Global.Debug {
 		r.HandleFunc("/internal/contracts/", contractStore.Debug)
+		r.HandleFunc("/internal/config/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			configBytes, err := jsonencoder.Marshal(conf)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"` + err.Error() + `"}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write(configBytes)
+		})
+
 	}
 
 	// storage is allowed only in full node mode
