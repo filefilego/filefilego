@@ -12,6 +12,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	orderAsc  = "asc"
+	orderDesc = "desc"
+)
+
 // ChannelAPI represents the channel rpc service.
 type ChannelAPI struct {
 	blockchain blockchain.Interface
@@ -51,7 +56,7 @@ type ListResponse struct {
 
 // List returns a list of channels.
 func (api *ChannelAPI) List(r *http.Request, args *ListArgs, response *ListResponse) error {
-	if args.Order != "asc" && args.Order != "desc" {
+	if args.Order != orderAsc && args.Order != orderDesc {
 		return fmt.Errorf("invalid order: %s", args.Order)
 	}
 
@@ -243,6 +248,7 @@ type GetNodeItemArgs struct {
 	NodeHash    string `json:"node_hash"`
 	CurrentPage int    `json:"current_page"`
 	PageSize    int    `json:"page_size"`
+	Order       string `json:"order"`
 }
 
 // NodeItemJSON represents a node item json.
@@ -278,6 +284,10 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 		return fmt.Errorf("failed to decode node hash: %w", err)
 	}
 
+	if args.Order != orderAsc && args.Order != orderDesc {
+		args.Order = orderAsc
+	}
+
 	item, err := api.blockchain.GetNodeItem(nodeHashBytes)
 	if err != nil {
 		return fmt.Errorf("failed to find node: %w", err)
@@ -285,7 +295,7 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 
 	response.Node = transformNodeItemToJSON(item)
 
-	childs, totalChilds, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize)
+	childs, totalChilds, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize, args.Order)
 	if err == nil {
 		response.TotalChildNodes = totalChilds
 		response.Node.Nodes = make([]NodeItemJSON, len(childs))
@@ -302,6 +312,7 @@ type FilesFromEntryOrFolderArgs struct {
 	NodeHash    string `json:"node_hash"`
 	CurrentPage int    `json:"current_page"`
 	PageSize    int    `json:"page_size"`
+	Order       string `json:"order"`
 }
 
 // FileMetadata represents a file metadata
@@ -324,7 +335,11 @@ func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEn
 		return fmt.Errorf("failed to decode node hash: %w", err)
 	}
 
-	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes, args.CurrentPage, args.PageSize)
+	if args.Order != orderAsc && args.Order != orderDesc {
+		args.Order = orderAsc
+	}
+
+	files, err := api.blockchain.GetFilesFromEntryOrFolderRecursively(nodeHashBytes, args.CurrentPage, args.PageSize, args.Order)
 	if err != nil {
 		return fmt.Errorf("failed to find files in the requested node: %w", err)
 	}

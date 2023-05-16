@@ -72,13 +72,13 @@ type Interface interface {
 	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
 	GetChannels(currentPage, pageSize int, order string) ([]*NodeItem, error)
 	GetChannelsCount() uint64
-	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, uint64, error)
+	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string) ([]*NodeItem, uint64, error)
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetReleasedFeesOfDownloadContractInTransactionData(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error)
-	GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int) ([]FileMetadata, error)
+	GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int, order string) ([]FileMetadata, error)
 }
 
 // Blockchain represents a blockchain structure.
@@ -1129,7 +1129,7 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte, childItem
 }
 
 // GetChildNodeItems returns a list of child nodes of a node.
-func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int) ([]*NodeItem, uint64, error) {
+func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string) ([]*NodeItem, uint64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -1150,27 +1150,65 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 	iter := b.db.NewIterator(util.BytesPrefix(prefixWithNodeNodes), nil)
 	childNodes := make([]*NodeItem, 0)
 	i := 0
-	for iter.Next() {
-		i++
-		if limit == 0 {
-			break
+
+	if order == "asc" {
+		for iter.Next() {
+			i++
+			if limit == 0 {
+				break
+			}
+
+			if i < start {
+				continue
+			}
+
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
+
+			item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+			if err != nil {
+				continue
+			}
+			childNodes = append(childNodes, item)
+			limit--
+		}
+	} else {
+		if iter.Last() {
+			key := iter.Key()
+			i++
+			if len(key) != 0 && i > start {
+				item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+				if err == nil {
+					childNodes = append(childNodes, item)
+					limit--
+				}
+			}
 		}
 
-		if i < start {
-			continue
-		}
+		for iter.Prev() {
+			i++
+			if limit == 0 {
+				break
+			}
 
-		key := iter.Key()
-		if len(key) == 0 {
-			break
-		}
+			if i < start {
+				continue
+			}
 
-		item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
-		if err != nil {
-			continue
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
+
+			item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+			if err != nil {
+				continue
+			}
+			childNodes = append(childNodes, item)
+			limit--
 		}
-		childNodes = append(childNodes, item)
-		limit--
 	}
 
 	iter.Release()
@@ -1372,7 +1410,7 @@ func (b *Blockchain) releaseFeesContractFromTransactionDataPayload(contractInfo 
 }
 
 // GetFilesFromEntryOrFolderRecursively findes all the files recursively by given a folder or entry hash.
-func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int) ([]FileMetadata, error) {
+func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int, order string) ([]FileMetadata, error) {
 	fileItems := make([]FileMetadata, 0)
 
 	queue := list.New()
@@ -1387,7 +1425,7 @@ func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []by
 		node := el.Value.(*NodeItem)
 		if node.NodeType == NodeItemType_DIR || node.NodeType == NodeItemType_ENTRY {
 			path += node.Name + "/"
-			childs, _, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize)
+			childs, _, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize, order)
 			if err == nil {
 				for _, v := range childs {
 					if v.NodeType == NodeItemType_DIR {
