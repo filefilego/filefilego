@@ -38,6 +38,7 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 	}
 
 	return &StorageAPI{
+		host:            host,
 		publisher:       publisher,
 		storageProtocol: storageProtocol,
 	}, nil
