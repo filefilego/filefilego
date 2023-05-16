@@ -481,6 +481,8 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			if err != nil {
 				log.Warnf("failed to send data query response back to initiator: %v", err)
 			}
+		} else {
+			log.Warnf("failed to find the requester addrinfo: %v", storageQuerier)
 		}
 
 	case *messages.GossipPayload_Query:
@@ -687,6 +689,8 @@ func (n *Node) FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 				mutex.Lock()
 				discoveredPeers = append(discoveredPeers, addr)
 				mutex.Unlock()
+			} else {
+				log.Warnf("failed to find peer: %v", err)
 			}
 		}(peerAddr)
 	}

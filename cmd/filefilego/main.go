@@ -284,6 +284,12 @@ func run(ctx *cli.Context) error {
 		}()
 	}
 
+	// bootstrap
+	err = ffgNode.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap nodes: %w", err)
+	}
+
 	// advertise
 	ffgNode.Advertise(ctx.Context, "ffgnet")
 	err = ffgNode.DiscoverPeers(ctx.Context, "ffgnet")
@@ -314,12 +320,6 @@ func run(ctx *cli.Context) error {
 	err = ffgNode.HandleIncomingMessages(ctx.Context, common.FFGNetPubSubStorageQuery)
 	if err != nil {
 		return fmt.Errorf("failed to start handling incoming pub sub storage messages: %w", err)
-	}
-
-	// bootstrap
-	err = ffgNode.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
-	if err != nil {
-		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
 
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
