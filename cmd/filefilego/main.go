@@ -88,7 +88,7 @@ func run(ctx *cli.Context) error {
 	geoip2db, err := geoip2.Open(conf.Global.GeoLiteDBPath)
 	if err != nil {
 		geoip2db = nil
-		log.Warnf("starting without geoip: %v", err)
+		log.Warnf("node starting without geoip: %v", err)
 	}
 
 	defer geoip2db.Close()
