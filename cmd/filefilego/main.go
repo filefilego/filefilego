@@ -89,9 +89,9 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		geoip2db = nil
 		log.Warnf("node starting without geoip: %v", err)
+	} else {
+		defer geoip2db.Close()
 	}
-
-	defer geoip2db.Close()
 
 	nodeIdentityData, err := os.ReadFile(nodeIdentityFile)
 	if err != nil {
