@@ -197,6 +197,10 @@ func TestStorageMethods(t *testing.T) {
 	retrivedNodeHash, found = storage.GetNodeHashFromFileHash(fileHash)
 	assert.Equal(t, true, found)
 	assert.Equal(t, node1Hash, retrivedNodeHash)
+
+	uploadedData, err := storage.ListFiles(0, 100)
+	assert.NoError(t, err)
+	assert.Len(t, uploadedData, 1)
 }
 
 func TestAuthenticateHandler(t *testing.T) {
@@ -337,6 +341,10 @@ func TestUploadHandler(t *testing.T) {
 	if _, err := os.Stat(fileMetadata.FilePath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to exist", fileMetadata.FilePath)
 	}
+
+	uploadedData, err := storage.ListFiles(0, 100)
+	assert.NoError(t, err)
+	assert.Len(t, uploadedData, 1)
 }
 
 func TestValidateFileName(t *testing.T) {

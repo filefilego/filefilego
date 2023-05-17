@@ -5,6 +5,7 @@ import (
 
 	"github.com/filefilego/filefilego/node"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
+	"github.com/filefilego/filefilego/storage"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,6 +17,7 @@ func TestNewStorageAPI(t *testing.T) {
 		host            host.Host
 		publisher       NetworkMessagePublisher
 		storageProtocol storageprotocol.Interface
+		storageEngine   storage.Interface
 		expErr          string
 	}{
 		"no host": {
@@ -30,10 +32,17 @@ func TestNewStorageAPI(t *testing.T) {
 			publisher: &node.Node{},
 			expErr:    "storageProtocol is nil",
 		},
+		"no storageEngine": {
+			host:            h,
+			publisher:       &node.Node{},
+			storageProtocol: &storageprotocol.Protocol{},
+			expErr:          "storageEngine is nil",
+		},
 		"success": {
 			host:            h,
 			publisher:       &node.Node{},
 			storageProtocol: &storageprotocol.Protocol{},
+			storageEngine:   &storage.Storage{},
 		},
 	}
 
@@ -41,7 +50,7 @@ func TestNewStorageAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewStorageAPI(tt.host, tt.publisher, tt.storageProtocol)
+			api, err := NewStorageAPI(tt.host, tt.publisher, tt.storageProtocol, tt.storageEngine)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
