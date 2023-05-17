@@ -155,7 +155,7 @@ func run(ctx *cli.Context) error {
 	bchain := &blockchain.Blockchain{}
 	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
-	storageProtocol := &storageprotocol.Protocol{}
+	var storageProtocol *storageprotocol.Protocol
 	dataQueryProtocol, err := dataquery.New(host)
 	if err != nil {
 		return fmt.Errorf("failed to setup data query protocol: %w", err)
@@ -173,7 +173,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -191,7 +191,7 @@ func run(ctx *cli.Context) error {
 			}
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -284,6 +284,12 @@ func run(ctx *cli.Context) error {
 		}()
 	}
 
+	// bootstrap
+	err = ffgNode.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap nodes: %w", err)
+	}
+
 	// advertise
 	ffgNode.Advertise(ctx.Context, "ffgnet")
 	err = ffgNode.DiscoverPeers(ctx.Context, "ffgnet")
@@ -314,12 +320,6 @@ func run(ctx *cli.Context) error {
 	err = ffgNode.HandleIncomingMessages(ctx.Context, common.FFGNetPubSubStorageQuery)
 	if err != nil {
 		return fmt.Errorf("failed to start handling incoming pub sub storage messages: %w", err)
-	}
-
-	// bootstrap
-	err = ffgNode.Bootstrap(ctx.Context, conf.P2P.Bootstraper.Nodes)
-	if err != nil {
-		return fmt.Errorf("failed to bootstrap nodes: %w", err)
 	}
 
 	err = common.CreateDirectory(conf.Global.KeystoreDir)
@@ -462,6 +462,17 @@ func run(ctx *cli.Context) error {
 
 	if conf.Global.Debug {
 		r.HandleFunc("/internal/contracts/", contractStore.Debug)
+		r.HandleFunc("/internal/config/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			configBytes, err := jsonencoder.Marshal(conf)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":"` + err.Error() + `"}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(configBytes)
+		})
 	}
 
 	// storage is allowed only in full node mode

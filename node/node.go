@@ -424,6 +424,10 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return nil
 		}
 
+		if n.host.ID().String() == message.ReceivedFrom.String() {
+			return nil
+		}
+
 		pubKey, err := n.host.ID().ExtractPublicKey()
 		if err != nil {
 			return fmt.Errorf("failed to extract public key from host: %w", err)
@@ -475,9 +479,10 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return fmt.Errorf("failed to decode storage querier peer id: %w", err)
 		}
 
-		addrsInfos := n.FindPeers(ctx, []peer.ID{storageQuerier})
-		if len(addrsInfos) > 0 {
-			_ = n.storageProtocol.SendStorageQueryResponse(ctx, addrsInfos[0].ID, &response)
+		_ = n.FindPeers(ctx, []peer.ID{storageQuerier})
+		err = n.storageProtocol.SendStorageQueryResponse(ctx, storageQuerier, &response)
+		if err != nil {
+			log.Warnf("failed to send data query response back to initiator: %v", err)
 		}
 
 	case *messages.GossipPayload_Query:
@@ -568,44 +573,25 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			peerIDs = append(peerIDs, peerID)
 		}
 
-		addrsInfos := n.FindPeers(ctx, peerIDs)
-		if len(addrsInfos) > 0 {
-			// check if file requester was found
-			foundFileRequester := false
-			for _, v := range addrsInfos {
-				if v.ID.String() == fileRequesterID.String() {
-					foundFileRequester = true
-					break
+		_ = n.FindPeers(ctx, peerIDs)
+		err = n.dataQueryProtocol.SendDataQueryResponse(ctx, fileRequesterID, messages.ToDataQueryResponseProto(response))
+		if err != nil {
+			var wg sync.WaitGroup
+			for _, peerID := range peerIDs {
+				// skip the file requester
+				if peerID.String() == fileRequesterID.String() {
+					continue
 				}
-			}
-
-			dataQueryResponseSentToRequester := false
-			if foundFileRequester {
-				err := n.dataQueryProtocol.SendDataQueryResponse(ctx, fileRequesterID, messages.ToDataQueryResponseProto(response))
-				if err == nil {
-					dataQueryResponseSentToRequester = true
-				}
-			}
-
-			// if not found, then contact verifiers
-			if !dataQueryResponseSentToRequester {
-				var wg sync.WaitGroup
-				for _, addInfo := range addrsInfos {
-					// skip the file requester
-					if addInfo.ID.String() == fileRequesterID.String() {
-						continue
+				wg.Add(1)
+				go func(peerID peer.ID) {
+					defer wg.Done()
+					err := n.dataQueryProtocol.SendDataQueryResponse(ctx, peerID, messages.ToDataQueryResponseProto(response))
+					if err != nil {
+						log.Warnf("failed to sent data query response to verifiers: %v", err)
 					}
-					wg.Add(1)
-					go func(peerID peer.ID) {
-						defer wg.Done()
-						err := n.dataQueryProtocol.SendDataQueryResponse(ctx, peerID, messages.ToDataQueryResponseProto(response))
-						if err != nil {
-							log.Warnf("failed to sent data query response to verifiers: %v", err)
-						}
-					}(addInfo.ID)
-				}
-				wg.Wait()
+				}(peerID)
 			}
+			wg.Wait()
 		}
 	}
 
@@ -684,6 +670,8 @@ func (n *Node) FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 				mutex.Lock()
 				discoveredPeers = append(discoveredPeers, addr)
 				mutex.Unlock()
+			} else {
+				log.Warnf("failed to find peer: %v", err)
 			}
 		}(peerAddr)
 	}

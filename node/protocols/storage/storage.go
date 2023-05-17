@@ -77,11 +77,11 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 
 	p := &Protocol{
 		host:             h,
+		storage:          storage,
+		storagePublic:    storagePublic,
 		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
 		uploadProgress:   make(map[string]int),
 		uploadStatus:     make(map[string]uploadStatus),
-		storagePublic:    storagePublic,
-		storage:          storage,
 	}
 
 	// all types of nodes listen for this protocol
@@ -334,6 +334,7 @@ func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
 	ok, err := publicKeyStorageProvider.Verify(hash, tmp.Signature)
 	if err != nil || !ok {
 		log.Error("failed to verify storage query response")
+		return
 	}
 
 	p.mu.Lock()
@@ -345,6 +346,7 @@ func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
 func (p *Protocol) GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
 	providers := make([]*messages.StorageQueryResponseProto, 0)
 	for _, v := range p.storageProviders {
 		providers = append(providers, v)
