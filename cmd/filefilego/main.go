@@ -155,7 +155,7 @@ func run(ctx *cli.Context) error {
 	bchain := &blockchain.Blockchain{}
 	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
-	storageProtocol := &storageprotocol.Protocol{}
+	var storageProtocol *storageprotocol.Protocol
 	dataQueryProtocol, err := dataquery.New(host)
 	if err != nil {
 		return fmt.Errorf("failed to setup data query protocol: %w", err)
@@ -173,7 +173,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -191,7 +191,7 @@ func run(ctx *cli.Context) error {
 			}
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -467,13 +467,12 @@ func run(ctx *cli.Context) error {
 			configBytes, err := jsonencoder.Marshal(conf)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"error":"` + err.Error() + `"}`))
+				_, _ = w.Write([]byte(`{"error":"` + err.Error() + `"}`))
 				return
 			}
 			w.WriteHeader(http.StatusOK)
-			w.Write(configBytes)
+			_, _ = w.Write(configBytes)
 		})
-
 	}
 
 	// storage is allowed only in full node mode

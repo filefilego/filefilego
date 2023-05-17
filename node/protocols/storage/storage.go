@@ -77,11 +77,11 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 
 	p := &Protocol{
 		host:             h,
+		storage:          storage,
+		storagePublic:    storagePublic,
 		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
 		uploadProgress:   make(map[string]int),
 		uploadStatus:     make(map[string]uploadStatus),
-		storagePublic:    storagePublic,
-		storage:          storage,
 	}
 
 	// all types of nodes listen for this protocol
