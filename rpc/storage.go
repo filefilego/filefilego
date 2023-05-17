@@ -52,6 +52,30 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 	}, nil
 }
 
+// ListUploadedFilesArgs args for listing uploads.
+type ListUploadedFilesArgs struct {
+	CurrentPage int `json:"current_page"`
+	PageSize    int `json:"page_size"`
+}
+
+// ListUploadedFilesResponse the response listing uploads.
+type ListUploadedFilesResponse struct {
+	Files []storage.FileMetadata `json:"files"`
+}
+
+// ListUploadedFiles lists the uploaded files on this node.
+func (api *StorageAPI) ListUploadedFiles(r *http.Request, args *ListUploadedFilesArgs, response *ListUploadedFilesResponse) error {
+	metadata, err := api.storageEngine.ListFiles(args.CurrentPage, args.PageSize)
+	if err != nil {
+		return fmt.Errorf("failed to list files: %w", err)
+	}
+
+	response.Files = make([]storage.FileMetadata, len(metadata))
+	copy(response.Files, metadata)
+
+	return nil
+}
+
 // TestSpeedWithRemotePeerArgs args for testing speed.
 type TestSpeedWithRemotePeerArgs struct {
 	PeerID   string `json:"peer_id"`
