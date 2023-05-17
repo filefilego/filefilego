@@ -886,7 +886,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
-		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol)
+		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol, storageEngine)
 		assert.NoError(t, err)
 		err = s.RegisterService(storageAPI, internalrpc.StorageServiceNamespace)
 		assert.NoError(t, err)

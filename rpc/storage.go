@@ -11,6 +11,7 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
+	"github.com/filefilego/filefilego/storage"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oschwald/geoip2-golang"
@@ -22,10 +23,11 @@ type StorageAPI struct {
 	host            host.Host
 	publisher       NetworkMessagePublisher
 	storageProtocol storageprotocol.Interface
+	storageEngine   storage.Interface
 }
 
 // NewStorageAPI creates a new storage API to be served using JSONRPC.
-func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storageProtocol storageprotocol.Interface) (*StorageAPI, error) {
+func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -38,10 +40,15 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 		return nil, errors.New("storageProtocol is nil")
 	}
 
+	if storageEngine == nil {
+		return nil, errors.New("storageEngine is nil")
+	}
+
 	return &StorageAPI{
 		host:            host,
 		publisher:       publisher,
 		storageProtocol: storageProtocol,
+		storageEngine:   storageEngine,
 	}, nil
 }
 

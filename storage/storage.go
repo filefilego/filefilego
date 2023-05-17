@@ -21,6 +21,7 @@ import (
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,6 +53,7 @@ type Interface interface {
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
+	ListFiles(currentPage, pageSize int) ([]FileMetadata, error)
 }
 
 // FileMetadata holds the metadata for a file.
@@ -202,6 +204,60 @@ func (s *Storage) GetFileMetadata(fileHash string) (FileMetadata, error) {
 		return FileMetadata{}, fmt.Errorf("failed to unmarshal file metadata: %w", err)
 	}
 	return metadata, nil
+}
+
+// ListFiles the uploaded files.
+func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, error) {
+	if currentPage < 0 {
+		currentPage = 0
+	}
+
+	if pageSize == 0 {
+		pageSize = 10
+	} else if pageSize > 1000 {
+		pageSize = 1000
+	}
+
+	start := (currentPage) * pageSize
+	if start < 0 {
+		start = 0
+	}
+
+	limit := pageSize
+	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashPrefix)), nil)
+	items := make([]FileMetadata, 0)
+	i := 0
+	for iter.Next() {
+		i++
+		if limit == 0 {
+			break
+		}
+
+		if i < start {
+			continue
+		}
+
+		key := iter.Key()
+		if len(key) == 0 {
+			break
+		}
+
+		hash := string(key[len([]byte(fileHashPrefix)):])
+		item, err := s.GetFileMetadata(hash)
+		if err != nil {
+			continue
+		}
+		items = append(items, item)
+		limit--
+	}
+
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release uploaded files iterator: %w", err)
+	}
+
+	return items, nil
 }
 
 // GetNodeHashFromFileHash gets the node's Hash given a fileHash.
