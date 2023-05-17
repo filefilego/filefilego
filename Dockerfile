@@ -1,6 +1,7 @@
 FROM ubuntu:20.04
 
 COPY cmd/filefilego/filefilego filefilego
+COPY data data
 
 RUN apt update && apt install nano
 
