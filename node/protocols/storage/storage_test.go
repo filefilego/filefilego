@@ -43,14 +43,14 @@ func TestStorageProtocol(t *testing.T) {
 	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024)
 	assert.NoError(t, err)
 
-	protocol1, err := New(nil, storage, true)
+	protocol1, err := New(nil, storage, nil, true)
 	assert.EqualError(t, err, "host is nil")
 	assert.Nil(t, protocol1)
 
-	protocol1, err = New(h1, storage, true)
+	protocol1, err = New(h1, storage, nil, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol1)
-	protocol2, err := New(h2, storage, true)
+	protocol2, err := New(h2, storage, nil, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol2)
 

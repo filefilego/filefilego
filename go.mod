@@ -127,6 +127,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.5.1 // indirect
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
+	github.com/oschwald/geoip2-golang v1.8.0 // indirect
+	github.com/oschwald/maxminddb-golang v1.10.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

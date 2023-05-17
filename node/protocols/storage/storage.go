@@ -10,11 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/filefilego/filefilego/common"
@@ -42,11 +45,16 @@ const (
 // Interface represents a set of functionalities by the storage query.
 type Interface interface {
 	SendStorageQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.StorageQueryResponseProto) error
-	GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto
+	GetDiscoveredStorageProviders() []ProviderWithCountry
 	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
 	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (string, error)
 	GetUploadProgress(peerID peer.ID, filePath string) (int, string, error)
 	SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error)
+}
+
+// GeoIPLocator given an ip address it returns the country info.
+type GeoIPLocator interface {
+	Country(ipAddress net.IP) (*geoip2.Country, error)
 }
 
 type uploadStatus struct {
@@ -54,19 +62,26 @@ type uploadStatus struct {
 	fileHash string
 }
 
+// ProviderWithCountry contain the response and the country if available.
+type ProviderWithCountry struct {
+	Country  *geoip2.Country                     `json:"country"`
+	Response *messages.StorageQueryResponseProto `json:"response"`
+}
+
 // Protocol wraps the storage protocols and handlers.
 type Protocol struct {
 	host             host.Host
-	storageProviders map[string]*messages.StorageQueryResponseProto
+	storageProviders map[string]ProviderWithCountry
 	storagePublic    bool
 	storage          internalstorage.Interface
+	ipLocator        GeoIPLocator
 	uploadProgress   map[string]int
 	uploadStatus     map[string]uploadStatus
 	mu               sync.RWMutex
 }
 
 // New creates a storage protocol.
-func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*Protocol, error) {
+func New(h host.Host, storage internalstorage.Interface, ipLocator GeoIPLocator, storagePublic bool) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -75,11 +90,16 @@ func New(h host.Host, storage internalstorage.Interface, storagePublic bool) (*P
 		return nil, errors.New("storage is nil")
 	}
 
+	if ipLocator == nil {
+		ipLocator = &defaultIPLocator{}
+	}
+
 	p := &Protocol{
 		host:             h,
 		storage:          storage,
+		ipLocator:        ipLocator,
 		storagePublic:    storagePublic,
-		storageProviders: make(map[string]*messages.StorageQueryResponseProto),
+		storageProviders: make(map[string]ProviderWithCountry),
 		uploadProgress:   make(map[string]int),
 		uploadStatus:     make(map[string]uploadStatus),
 	}
@@ -297,6 +317,16 @@ func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
 		return
 	}
 
+	var country *geoip2.Country
+	remoteIP, _ := getRemotePeerIP(s)
+	netIP := net.ParseIP(remoteIP)
+	if netIP != nil {
+		country, err = p.ipLocator.Country(netIP)
+		if err != nil {
+			country = nil
+		}
+	}
+
 	tmp := messages.StorageQueryResponseProto{}
 	err = proto.Unmarshal(buf, &tmp)
 	if err != nil {
@@ -338,18 +368,24 @@ func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
 	}
 
 	p.mu.Lock()
-	p.storageProviders[tmp.StorageProviderPeerAddr] = &tmp
+	p.storageProviders[tmp.StorageProviderPeerAddr] = ProviderWithCountry{
+		Country:  country,
+		Response: &tmp,
+	}
 	p.mu.Unlock()
 }
 
 // GetDiscoveredStorageProviders returns a list of discovered storage providers.
-func (p *Protocol) GetDiscoveredStorageProviders() []*messages.StorageQueryResponseProto {
+func (p *Protocol) GetDiscoveredStorageProviders() []ProviderWithCountry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	providers := make([]*messages.StorageQueryResponseProto, 0)
+	providers := make([]ProviderWithCountry, 0)
 	for _, v := range p.storageProviders {
-		providers = append(providers, v)
+		providers = append(providers, ProviderWithCountry{
+			Country:  v.Country,
+			Response: v.Response,
+		})
 	}
 
 	return providers
@@ -380,4 +416,24 @@ func (p *Protocol) SendStorageQueryResponse(ctx context.Context, peerID peer.ID,
 	}
 
 	return nil
+}
+
+func getRemotePeerIP(stream network.Stream) (string, error) {
+	remoteMultiaddr := stream.Conn().RemoteMultiaddr()
+
+	ip, err := remoteMultiaddr.ValueForProtocol(multiaddr.P_IP4)
+	if err != nil {
+		ip, err = remoteMultiaddr.ValueForProtocol(multiaddr.P_IP6)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return ip, nil
+}
+
+type defaultIPLocator struct{}
+
+func (d *defaultIPLocator) Country(ipAddress net.IP) (*geoip2.Country, error) {
+	return nil, errors.New("failed to load the database")
 }

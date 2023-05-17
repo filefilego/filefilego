@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oschwald/geoip2-golang"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
@@ -83,6 +84,14 @@ func run(ctx *cli.Context) error {
 	if !common.FileExists(nodeIdentityFile) {
 		return fmt.Errorf("node identity key is not available. first run: `./filefilego address create_node_key yourpasswordhere`")
 	}
+
+	geoip2db, err := geoip2.Open(conf.Global.GeoLiteDBPath)
+	if err != nil {
+		geoip2db = nil
+		log.Warnf("starting without geoip: %v", err)
+	}
+
+	defer geoip2db.Close()
 
 	nodeIdentityData, err := os.ReadFile(nodeIdentityFile)
 	if err != nil {
@@ -173,7 +182,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
 		}
 
-		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -191,7 +200,7 @@ func run(ctx *cli.Context) error {
 			}
 		}
 
-		storageProtocol, err = storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}

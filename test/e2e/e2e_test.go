@@ -755,7 +755,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
 		assert.NoError(t, err)
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic)
 		assert.NoError(t, err)
 
 		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
@@ -767,7 +767,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 			assert.NoError(t, err)
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, conf.Global.StoragePublic)
+		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic)
 		assert.NoError(t, err)
 
 		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))

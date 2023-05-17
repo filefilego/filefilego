@@ -13,6 +13,7 @@ import (
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/oschwald/geoip2-golang"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,6 +54,7 @@ type TestSpeedWithRemotePeerArgs struct {
 // TestSpeedWithRemotePeerResponse the response of the speed test.
 type TestSpeedWithRemotePeerResponse struct {
 	DownloadThroughputMB float64 `json:"download_throughput_mb"`
+	Country              string  `json:"country"`
 }
 
 // TestSpeedWithRemotePeer tests the remote peer speed.
@@ -71,6 +73,7 @@ func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedW
 		return fmt.Errorf("failed to perform speed test: %w", err)
 	}
 
+	response.Country = "something"
 	response.DownloadThroughputMB = calculateThroughput(args.FileSize, timeelapsed)
 
 	return nil
@@ -193,12 +196,13 @@ type GetDiscoveredProvidersResponse struct {
 
 // JSONStorageProvider is a json storage provider.
 type JSONStorageProvider struct {
-	StorageProviderPeerAddr string `json:"storage_provider_peer_addr"`
-	Location                string `json:"location"`
-	FeesPerByte             string `json:"fees_per_byte"`
-	PublicKey               string `json:"public_key"`
-	Hash                    string `json:"hash"`
-	Signature               string `json:"signature"`
+	StorageProviderPeerAddr string          `json:"storage_provider_peer_addr"`
+	Location                string          `json:"location"`
+	FeesPerByte             string          `json:"fees_per_byte"`
+	PublicKey               string          `json:"public_key"`
+	Hash                    string          `json:"hash"`
+	Signature               string          `json:"signature"`
+	Country                 *geoip2.Country `json:"country"`
 }
 
 // GetDiscoveredProviders returns a list of discovered storage providers.
@@ -207,12 +211,13 @@ func (api *StorageAPI) GetDiscoveredProviders(r *http.Request, args *EmptyArgs, 
 	response.StorageProviders = make([]JSONStorageProvider, len(providers))
 	for i, v := range providers {
 		response.StorageProviders[i] = JSONStorageProvider{
-			StorageProviderPeerAddr: v.StorageProviderPeerAddr,
-			Location:                v.Location,
-			FeesPerByte:             v.FeesPerByte,
-			PublicKey:               hexutil.Encode(v.PublicKey),
-			Hash:                    hexutil.Encode(v.Hash),
-			Signature:               hexutil.Encode(v.Signature),
+			StorageProviderPeerAddr: v.Response.StorageProviderPeerAddr,
+			Location:                v.Response.Location,
+			FeesPerByte:             v.Response.FeesPerByte,
+			PublicKey:               hexutil.Encode(v.Response.PublicKey),
+			Hash:                    hexutil.Encode(v.Response.Hash),
+			Signature:               hexutil.Encode(v.Response.Signature),
+			Country:                 v.Country,
 		}
 	}
 
