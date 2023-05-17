@@ -32,10 +32,10 @@ const (
 	// UserAccess represents privilege access.
 	UserAccess = "user"
 
-	tokenAccessHours = 2160
-	tokenPrefix      = "token"
-	fileHashPrefix   = "mdt"
-
+	tokenAccessHours     = 2160
+	tokenPrefix          = "token"
+	fileHashPrefix       = "mdt"
+	fileHashCountPrefix  = "fileHashCount"
 	fileHashToNodePrefix = "fhn"
 
 	bufferSize = 8192
@@ -53,7 +53,7 @@ type Interface interface {
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
-	ListFiles(currentPage, pageSize int) ([]FileMetadata, error)
+	ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, error)
 }
 
 // FileMetadata holds the metadata for a file.
@@ -163,6 +163,16 @@ func (s *Storage) SaveToken(token AccessToken) error {
 	return s.db.Put(append([]byte(tokenPrefix), []byte(token.Token)...), data)
 }
 
+// GetTotalFilesStored returns the total number of files stored on this node.
+func (s *Storage) GetTotalFilesStored() uint64 {
+	countBytes, err := s.db.Get([]byte(fileHashCountPrefix))
+	if err != nil || len(countBytes) != 8 {
+		return 0
+	}
+
+	return binary.BigEndian.Uint64(countBytes)
+}
+
 // SaveFileMetadata saves a file's metadata in the database.
 func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetadata) error {
 	if metadata.MerkleRootHash == "" || metadata.FilePath == "" || metadata.Hash == "" || metadata.Size == 0 {
@@ -177,6 +187,15 @@ func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetad
 	err = s.db.Put(append([]byte(fileHashPrefix), []byte(fileHash)...), data)
 	if err != nil {
 		return fmt.Errorf("failed to insert nodeHash %s", fileHash)
+	}
+
+	idx := s.GetTotalFilesStored()
+	idx++
+	itemsUint64 := make([]byte, 8)
+	binary.BigEndian.PutUint64(itemsUint64, idx)
+	err = s.db.Put([]byte(fileHashCountPrefix), itemsUint64)
+	if err != nil {
+		return fmt.Errorf("failed to save files count: %w", err)
 	}
 
 	if nodeHash != "" {
@@ -207,7 +226,7 @@ func (s *Storage) GetFileMetadata(fileHash string) (FileMetadata, error) {
 }
 
 // ListFiles the uploaded files.
-func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, error) {
+func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -254,10 +273,12 @@ func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, error) {
 	iter.Release()
 	err := iter.Error()
 	if err != nil {
-		return nil, fmt.Errorf("failed to release uploaded files iterator: %w", err)
+		return nil, 0, fmt.Errorf("failed to release uploaded files iterator: %w", err)
 	}
 
-	return items, nil
+	idx := s.GetTotalFilesStored()
+
+	return items, idx, nil
 }
 
 // GetNodeHashFromFileHash gets the node's Hash given a fileHash.

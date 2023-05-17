@@ -61,16 +61,18 @@ type ListUploadedFilesArgs struct {
 // ListUploadedFilesResponse the response listing uploads.
 type ListUploadedFilesResponse struct {
 	Files []storage.FileMetadata `json:"files"`
+	Total uint64                 `json:"total"`
 }
 
 // ListUploadedFiles lists the uploaded files on this node.
 func (api *StorageAPI) ListUploadedFiles(r *http.Request, args *ListUploadedFilesArgs, response *ListUploadedFilesResponse) error {
-	metadata, err := api.storageEngine.ListFiles(args.CurrentPage, args.PageSize)
+	metadata, totalCount, err := api.storageEngine.ListFiles(args.CurrentPage, args.PageSize)
 	if err != nil {
 		return fmt.Errorf("failed to list files: %w", err)
 	}
 
 	response.Files = make([]storage.FileMetadata, len(metadata))
+	response.Total = totalCount
 	copy(response.Files, metadata)
 
 	return nil
