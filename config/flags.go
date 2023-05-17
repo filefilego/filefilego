@@ -136,6 +136,11 @@ var (
 		Usage: "Verifies all downloaded blocks",
 	}
 
+	GeoLiteDBPath = cli.StringFlag{
+		Name:  "geolite_db_path",
+		Usage: "GeoLite DB path",
+	}
+
 	RPCWhitelistFlag = cli.StringFlag{
 		Name:  "rpc_whitelist",
 		Usage: "Allow IP addresses to access the RPC servers",
@@ -272,6 +277,7 @@ var AppFlags = []cli.Flag{
 	&SuperLightNode,
 	&DebugMode,
 	&VerifyBlocks,
+	&GeoLiteDBPath,
 
 	&RPCServicesFlag,
 	&RPCDisabledMethodsFlag,

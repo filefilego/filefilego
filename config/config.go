@@ -40,6 +40,7 @@ type global struct {
 	SuperLightNode                          bool
 	Debug                                   bool
 	VerifyBlocks                            bool
+	GeoLiteDBPath                           string
 }
 
 type p2p struct {
@@ -214,6 +215,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(VerifyBlocks.Name) {
 		conf.Global.VerifyBlocks = ctx.Bool(VerifyBlocks.Name)
+	}
+
+	if ctx.IsSet(GeoLiteDBPath.Name) {
+		conf.Global.GeoLiteDBPath = ctx.String(GeoLiteDBPath.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {

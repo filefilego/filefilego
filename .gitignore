@@ -19,3 +19,5 @@ coverage.txt
 .vscode/
 
 rpc/storagePath/
+
+data/GeoLite2-Country.mmdb
