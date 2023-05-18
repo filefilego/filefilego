@@ -87,7 +87,6 @@ type TestSpeedWithRemotePeerArgs struct {
 // TestSpeedWithRemotePeerResponse the response of the speed test.
 type TestSpeedWithRemotePeerResponse struct {
 	DownloadThroughputMB float64 `json:"download_throughput_mb"`
-	Country              string  `json:"country"`
 }
 
 // TestSpeedWithRemotePeer tests the remote peer speed.
@@ -106,7 +105,6 @@ func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedW
 		return fmt.Errorf("failed to perform speed test: %w", err)
 	}
 
-	response.Country = "something"
 	response.DownloadThroughputMB = calculateThroughput(args.FileSize, timeelapsed)
 
 	return nil
