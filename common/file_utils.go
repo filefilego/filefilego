@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"syscall"
 
 	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
