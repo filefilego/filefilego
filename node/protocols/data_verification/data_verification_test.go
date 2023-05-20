@@ -632,7 +632,6 @@ func TestDataVerificationMethods(t *testing.T) {
 	hashOfDownloadedFileWithoutFees, err := ffgcrypto.Sha1File(destinationFile2Path)
 	assert.NoError(t, err)
 	assert.Equal(t, file2Hash, hashOfDownloadedFileWithoutFees)
-
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {
