@@ -875,7 +875,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		conf.Global.DataDownloadsPath,
 		conf.Global.DataVerifier,
 		conf.Global.DataVerifierVerificationFees,
-		conf.Global.DataVerifierTransactionFees)
+		conf.Global.DataVerifierTransactionFees,
+		conf.Global.StorageFeesPerByte)
 	assert.NoError(t, err)
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {

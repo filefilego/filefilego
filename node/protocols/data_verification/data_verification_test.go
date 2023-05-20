@@ -54,6 +54,7 @@ func TestNew(t *testing.T) {
 		dataVerifier                 bool
 		dataVerifierVerificationFees string
 		dataVerifierTransactionFees  string
+		storageFeesPerByte           string
 		expErr                       string
 	}{
 		"no host": {
@@ -119,7 +120,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees, tt.dataVerifierTransactionFees)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees, tt.dataVerifierTransactionFees, tt.storageFeesPerByte)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -214,7 +215,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
-	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken2", totalDesiredFileSegments)
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments)
 	assert.NoError(t, err)
 
 	genesisblockValid, err := block.GetGenesisBlock()
@@ -235,15 +236,15 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = blockchain3.InitOrLoad(true)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "")
+	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "1")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "", "")
+	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "", "", "1")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7", "0x1")
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7", "0x1", "1")
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -605,6 +606,33 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	transferredBytes := protocolH2.contractStore.GetTransferredBytes(contractHashHex, fileHash2Bytes)
 	assert.Equal(t, uint64(fileSize2), transferredBytes)
+
+	// recreate the protocol with zero fees so we can download the data directly
+	protocolH1, err = New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "0")
+	assert.NoError(t, err)
+	assert.NotNil(t, protocolH1)
+
+	request3 := &messages.FileTransferInfoProto{
+		ContractHash: []byte{13},
+		FileHash:     fileHash2Bytes,
+		FileSize:     uint64(fileSize2),
+		From:         0,
+		To:           fileSize2 - 1,
+	}
+
+	fileHashHex2 = hexutil.EncodeNoPrefix(request3.FileHash)
+	file2NameWithPart = fmt.Sprintf("%s_part_%d_%d", fileHashHex2, request3.From, request3.To)
+	destinationFile2Path = filepath.Join(protocolH2.GetDownloadDirectory(), hexutil.Encode(request3.ContractHash), file2NameWithPart)
+
+	res3, err := protocolH2.RequestFileTransfer(context.TODO(), destinationFile2Path, file2NameWithPart, h1.ID(), request3)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, res3)
+	time.Sleep(200 * time.Millisecond)
+
+	hashOfDownloadedFileWithoutFees, err := ffgcrypto.Sha1File(destinationFile2Path)
+	assert.NoError(t, err)
+	assert.Equal(t, file2Hash, hashOfDownloadedFileWithoutFees)
+
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {

@@ -435,7 +435,8 @@ func run(ctx *cli.Context) error {
 		conf.Global.DataDownloadsPath,
 		conf.Global.DataVerifier,
 		conf.Global.DataVerifierVerificationFees,
-		conf.Global.DataVerifierTransactionFees)
+		conf.Global.DataVerifierTransactionFees,
+		conf.Global.StorageFeesPerByte)
 	if err != nil {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
 	}
