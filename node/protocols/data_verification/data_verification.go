@@ -88,10 +88,11 @@ type Protocol struct {
 	dataVerifier                 bool
 	dataVerifierVerificationFees string
 	dataVerifierTransactionFees  string
+	storageFeesPerByte           string
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, publisher NetworkMessagePublisher, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees, dataVerifierTransactionFees string) (*Protocol, error) {
+func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, publisher NetworkMessagePublisher, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees, dataVerifierTransactionFees string, storageFeesPerByte string) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -128,6 +129,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		dataVerifier:                 dataVerifier,
 		dataVerifierVerificationFees: dataVerifierVerificationFees,
 		dataVerifierTransactionFees:  dataVerifierTransactionFees,
+		storageFeesPerByte:           storageFeesPerByte,
 	}
 
 	// the following protocols are hanlded by verifier
@@ -1328,6 +1330,73 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 		return
 	}
 
+	fileHashHex := hexutil.EncodeNoPrefix(fileTransferRequest.FileHash)
+	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex)
+	if err != nil {
+		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %v", err)
+		return
+	}
+
+	// check if the storage fees is zero or not set
+	if d.storageFeesPerByte == "" || d.storageFeesPerByte == "0" {
+		input, err := os.Open(fileMetadata.FilePath)
+		if err != nil {
+			log.Errorf("failed to open file in handleIncomingFileTransfer: %v", err)
+			return
+		}
+		defer input.Close()
+
+		from := fileTransferRequest.From
+		to := fileTransferRequest.To
+
+		if to > fileMetadata.Size-1 {
+			to = fileMetadata.Size - 1
+		}
+
+		if from > to {
+			log.Errorf("from is smaller than to in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		if from > fileMetadata.Size-1 || to > fileMetadata.Size-1 {
+			log.Errorf("from or to are greater than file size in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		_, err = input.Seek(from, 0)
+		if err != nil {
+			log.Errorf("failed to seek the file to the position of 'from' in handleIncomingFileTransfer: %v", err)
+			return
+		}
+
+		diff := (to - from) + 1
+		buf := make([]byte, bufferSize)
+		for {
+			if diff <= 0 {
+				break
+			}
+
+			n, err := input.Read(buf)
+			if n > 0 {
+				wroteN, err := s.Write(buf[:n])
+				if wroteN != n || err != nil {
+					log.Errorf("failed to write equal amount of data from input to output in handleIncomingFileTransfer: %v", err)
+					return
+				}
+			}
+
+			diff -= int64(n)
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return
+			}
+		}
+		return
+	}
+
 	contractHash := hexutil.Encode(fileTransferRequest.ContractHash)
 
 	downloadContract, err := d.contractStore.GetContract(contractHash)
@@ -1364,13 +1433,6 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 
 	if !verifyConnection(publicKeyFileRequester, s.Conn().RemotePublicKey()) {
 		log.Error("malicious request from downloader")
-		return
-	}
-
-	fileHashHex := hexutil.EncodeNoPrefix(fileTransferRequest.FileHash)
-	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex)
-	if err != nil {
-		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %v", err)
 		return
 	}
 

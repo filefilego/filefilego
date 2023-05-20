@@ -115,7 +115,7 @@ func TestDataTransferAPIMethods(t *testing.T) {
 	assert.NoError(t, err)
 	currentDir, err := os.Getwd()
 	assert.NoError(t, err)
-	dv, err := dataverification.New(h, contractStore, &storage.Storage{}, &blockchain.Blockchain{}, &networkMessagePublisherNodesFinderStub{}, 8, 1, filepath.Join(currentDir, "data_download"), false, "", "")
+	dv, err := dataverification.New(h, contractStore, &storage.Storage{}, &blockchain.Blockchain{}, &networkMessagePublisherNodesFinderStub{}, 8, 1, filepath.Join(currentDir, "data_download"), false, "", "", "1")
 	assert.NoError(t, err)
 	randomKeyForJWT, err := crypto.RandomEntropy(40)
 	assert.NoError(t, err)
