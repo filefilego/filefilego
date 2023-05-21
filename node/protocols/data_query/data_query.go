@@ -39,7 +39,7 @@ const (
 
 // Interface represents a data quertier.
 type Interface interface {
-	PutQueryHistory(key string, val messages.DataQueryRequest) error
+	PutQueryHistory(key string, val messages.DataQueryRequest, localTimestamp int64) error
 	GetQueryHistory(key string) (messages.DataQueryRequest, bool)
 	PutQueryResponse(key string, val messages.DataQueryResponse)
 	GetQueryResponse(key string) ([]messages.DataQueryResponse, bool)
@@ -48,10 +48,15 @@ type Interface interface {
 	PurgeQueryHistory() error
 }
 
+type dataQueryRequestWithLocalTimestamp struct {
+	dqr       messages.DataQueryRequest
+	timestamp int64
+}
+
 // Protocol wraps the data query protocols and handlers
 type Protocol struct {
 	host             host.Host
-	queryHistory     map[string]messages.DataQueryRequest
+	queryHistory     map[string]dataQueryRequestWithLocalTimestamp
 	queryResponse    map[string][]messages.DataQueryResponse
 	queryHistoryMux  sync.RWMutex
 	queryResponseMux sync.RWMutex
@@ -64,7 +69,7 @@ func New(h host.Host) (*Protocol, error) {
 	}
 	p := &Protocol{
 		host:          h,
-		queryHistory:  make(map[string]messages.DataQueryRequest),
+		queryHistory:  make(map[string]dataQueryRequestWithLocalTimestamp),
 		queryResponse: make(map[string][]messages.DataQueryResponse),
 	}
 
@@ -75,14 +80,18 @@ func New(h host.Host) (*Protocol, error) {
 }
 
 // PutQueryHistory puts the query history.
-func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) error {
+// localTimestamp is the machine's timestamp which will be used to purge old queries automatically after they are expired.
+func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest, localTimestamp int64) error {
 	if err := val.Validate(); err != nil {
 		return fmt.Errorf("failed to insert data query request: %w", err)
 	}
 
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
-	d.queryHistory[key] = val
+	d.queryHistory[key] = dataQueryRequestWithLocalTimestamp{
+		dqr:       val,
+		timestamp: localTimestamp,
+	}
 	return nil
 }
 
@@ -91,7 +100,7 @@ func (d *Protocol) PurgeQueryHistory() error {
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
 	for key, val := range d.queryHistory {
-		minsElapsed := (time.Now().Unix() - val.Timestamp) / 60
+		minsElapsed := (time.Now().Unix() - val.timestamp) / 60
 		if minsElapsed > dataQueryReqAgeToPurgeInMins {
 			delete(d.queryHistory, key)
 		}
@@ -104,7 +113,7 @@ func (d *Protocol) GetQueryHistory(key string) (messages.DataQueryRequest, bool)
 	d.queryHistoryMux.RLock()
 	defer d.queryHistoryMux.RUnlock()
 	v, ok := d.queryHistory[key]
-	return v, ok
+	return v.dqr, ok
 }
 
 // PutQueryResponse put into responses.
