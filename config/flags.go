@@ -61,6 +61,11 @@ var (
 		Usage: "Max number of documents per search query",
 	}
 
+	StorageCapacity = cli.BoolFlag{
+		Name:  "show_storage_capacity",
+		Usage: "Show storage capacity to other nodes",
+	}
+
 	Storage = cli.BoolFlag{
 		Name:  "storage",
 		Usage: "Enable storage",
@@ -262,6 +267,7 @@ var AppFlags = []cli.Flag{
 	&ValidatorPass,
 	&SearchEngine,
 	&SearchEngineResultCount,
+	&StorageCapacity,
 	&Storage,
 	&StoragePublic,
 	&StorageNodeLocation,
