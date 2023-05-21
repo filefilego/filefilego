@@ -10,11 +10,8 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/crypto"
-	"github.com/filefilego/filefilego/database"
 	"github.com/filefilego/filefilego/keystore"
-	"github.com/filefilego/filefilego/storage"
 	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/urfave/cli/v2"
 )
 
@@ -82,132 +79,7 @@ var (
 			},
 		},
 	}
-
-	StorageCommand = &cli.Command{
-		Name:     "storage",
-		Usage:    "Manage file storage",
-		Category: "Storage",
-		Description: `
-					Manage storage, add or remove files to local storage`,
-		Subcommands: []*cli.Command{
-			{
-				Name:   "add",
-				Usage:  "add <filepath>",
-				Action: AddFile,
-				Flags:  []cli.Flag{},
-				Description: `
-				Add a new file to storage given its full path`,
-			},
-			{
-				Name:   "get",
-				Usage:  "get <filehash>",
-				Action: GetFile,
-				Flags:  []cli.Flag{},
-				Description: `
-				Get file's metadata from file hash`,
-			},
-		},
-	}
 )
-
-// GetFile gets file's metadata from hash
-func GetFile(ctx *cli.Context) error {
-	conf := config.New(ctx)
-	db, err := leveldb.OpenFile(filepath.Join(conf.Global.DataDir, "blockchain.db"), nil)
-	if err != nil {
-		return fmt.Errorf("failed to open leveldb database file: %w", err)
-	}
-	defer db.Close()
-	globalDB, err := database.New(db)
-	if err != nil {
-		return fmt.Errorf("failed to setup global database: %w", err)
-	}
-
-	s, err := storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
-	if err != nil {
-		return fmt.Errorf("failed to setup storage: %w", err)
-	}
-
-	fileHash := ctx.Args().First()
-
-	fileMetadata, err := s.GetFileMetadata(fileHash)
-	if err != nil {
-		return fmt.Errorf("failed to find file: %w", err)
-	}
-
-	log.Infof("MerkleRootHash:\t%s", fileMetadata.MerkleRootHash)
-	log.Infof("Hash:\t%s", fileMetadata.Hash)
-	log.Infof("FilePath:\t%s", fileMetadata.FilePath)
-	log.Infof("Size:\t%d", fileMetadata.Size)
-
-	return nil
-}
-
-// AddFile adds a file to local storage.
-func AddFile(ctx *cli.Context) error {
-	conf := config.New(ctx)
-	db, err := leveldb.OpenFile(filepath.Join(conf.Global.DataDir, "blockchain.db"), nil)
-	if err != nil {
-		return fmt.Errorf("failed to open leveldb database file: %w", err)
-	}
-	defer db.Close()
-	globalDB, err := database.New(db)
-	if err != nil {
-		return fmt.Errorf("failed to setup global database: %w", err)
-	}
-
-	s, err := storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
-	if err != nil {
-		return fmt.Errorf("failed to setup storage: %w", err)
-	}
-
-	fPath := ctx.Args().First()
-
-	filePath, err := filepath.Abs(fPath)
-	if err != nil {
-		return fmt.Errorf("failed to get file's absolute path: %w", err)
-	}
-
-	fileSize, err := common.FileSize(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to get file's size: %w", err)
-	}
-
-	fHash, err := crypto.Sha1File(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to get file's hash: %w", err)
-	}
-
-	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), conf.Global.StorageFileMerkleTreeTotalSegments, 0)
-	orderedSlice := make([]int, howManySegments)
-	for i := 0; i < howManySegments; i++ {
-		orderedSlice[i] = i
-	}
-
-	fMerkleRootHash, err := common.GetFileMerkleRootHash(filePath, conf.Global.StorageFileMerkleTreeTotalSegments, orderedSlice)
-	if err != nil {
-		return fmt.Errorf("failed to get file's merkle root hash: %w", err)
-	}
-
-	fileMetadata := storage.FileMetadata{
-		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
-		Hash:           fHash,
-		FilePath:       filePath,
-		Size:           fileSize,
-	}
-
-	err = s.SaveFileMetadata("", fHash, fileMetadata)
-	if err != nil {
-		return fmt.Errorf("failed to save file's metadata: %w", err)
-	}
-
-	log.Infof("MerkleRootHash:\t%s", fileMetadata.MerkleRootHash)
-	log.Infof("Hash:\t%s", fileMetadata.Hash)
-	log.Infof("FilePath:\t%s", fileMetadata.FilePath)
-	log.Infof("Size:\t%d", fileMetadata.Size)
-
-	return nil
-}
 
 // ListAddresses list the addresses on this node.
 func ListAddresses(ctx *cli.Context) error {

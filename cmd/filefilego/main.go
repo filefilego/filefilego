@@ -68,7 +68,6 @@ func main() {
 	app.Flags = config.AppFlags
 	app.Commands = []*cli.Command{
 		ffgcli.AddressCommand,
-		ffgcli.StorageCommand,
 		ffgcli.ClientCommand,
 	}
 	app.Suggest = true
