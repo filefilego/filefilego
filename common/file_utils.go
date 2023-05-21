@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"syscall"
 
 	"github.com/cbergoon/merkletree"
 	log "github.com/sirupsen/logrus"
@@ -916,38 +915,6 @@ func CreateDirectory(path string) error {
 	}
 
 	return nil
-}	
-
-// GetDirectoryFreeSpace returns the available space of a directory.
-func GetDirectoryFreeSpace(directoryPath string) (uint64, error) {
-	var freeSpace uint64
-	var err error
-
-	if os.PathSeparator == '\\' { // Windows
-		lpFreeBytesAvailable := uint64(0)
-		lpTotalNumberOfBytes := uint64(0)
-		lpTotalNumberOfFreeBytes := uint64(0)
-
-		_, err = syscall.GetDiskFreeSpaceEx(
-			syscall.StringToUTF16Ptr(directoryPath),
-			(*syscall.ULARGE_INTEGER)(unsafe.Pointer(&lpFreeBytesAvailable)),
-			(*syscall.ULARGE_INTEGER)(unsafe.Pointer(&lpTotalNumberOfBytes)),
-			(*syscall.ULARGE_INTEGER)(unsafe.Pointer(&lpTotalNumberOfFreeBytes)),
-		)
-		if err == nil {
-			freeSpace = lpFreeBytesAvailable
-		}
-	} else { // Unix-like
-		var stat syscall.Statfs_t
-
-		err = syscall.Statfs(directoryPath, &stat)
-		if err == nil {
-			// Calculate free space in bytes
-			freeSpace = stat.Bavail * uint64(stat.Bsize)
-		}
-	}
-
-	return freeSpace, err
 }
 
 // FileSize gets the file size
