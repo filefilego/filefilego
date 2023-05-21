@@ -175,7 +175,7 @@ func (api *DataTransferAPI) SendDataQueryRequest(r *http.Request, args *SendData
 	}
 
 	requestHashHex := hexutil.Encode(requestHash)
-	err = api.dataQueryProtocol.PutQueryHistory(requestHashHex, request)
+	err = api.dataQueryProtocol.PutQueryHistory(requestHashHex, request, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("failed to insert data query request: %w", err)
 	}

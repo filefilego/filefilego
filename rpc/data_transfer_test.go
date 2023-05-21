@@ -136,7 +136,7 @@ func TestDataTransferAPIMethods(t *testing.T) {
 	copy(req.Hash, hashReq)
 	err = req.Validate()
 	assert.NoError(t, err)
-	err = api.dataQueryProtocol.PutQueryHistory(hexutil.Encode(req.Hash), req)
+	err = api.dataQueryProtocol.PutQueryHistory(hexutil.Encode(req.Hash), req, time.Now().Unix())
 	assert.NoError(t, err)
 }
 
