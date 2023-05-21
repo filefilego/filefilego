@@ -101,7 +101,7 @@ func TestDataQueryProtocol(t *testing.T) {
 	assert.NoError(t, err)
 	req, ok := protocol2.GetQueryHistory(hexutil.Encode(hashOfOldReq))
 	assert.Equal(t, true, ok)
-	req.Timestamp = req.Timestamp - ((dataQueryReqAgeToPurgeInMins + 1) * 60)
+	req.Timestamp -= ((dataQueryReqAgeToPurgeInMins + 1) * 60)
 	err = protocol2.PurgeQueryHistory()
 	assert.NoError(t, err)
 	assert.Len(t, protocol2.queryHistory, 1)
