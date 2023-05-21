@@ -346,6 +346,8 @@ func (p *Protocol) handleIncomingStorageQueryResponse(s network.Stream) {
 			[]byte(tmp.Location),
 			[]byte(tmp.FeesPerByte),
 			tmp.PublicKey,
+			[]byte(fmt.Sprintf("%d", tmp.StorageCapacity)),
+			[]byte(fmt.Sprintf("%d", tmp.Uptime)),
 		},
 		[]byte{},
 	)

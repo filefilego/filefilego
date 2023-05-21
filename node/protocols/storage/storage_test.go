@@ -79,6 +79,8 @@ func TestStorageProtocol(t *testing.T) {
 		Location:                "US",
 		FeesPerByte:             "0x01",
 		PublicKey:               pubKeyBytes,
+		Uptime:                  30,
+		StorageCapacity:         10,
 	}
 
 	data := bytes.Join(
@@ -87,6 +89,8 @@ func TestStorageProtocol(t *testing.T) {
 			[]byte(response.Location),
 			[]byte(response.FeesPerByte),
 			response.PublicKey,
+			[]byte(fmt.Sprintf("%d", response.StorageCapacity)),
+			[]byte(fmt.Sprintf("%d", response.Uptime)),
 		},
 		[]byte{},
 	)

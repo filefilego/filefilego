@@ -25,6 +25,7 @@ type global struct {
 	ValidatorPass                           string
 	SearchEngine                            bool
 	SearchEngineResultCount                 int
+	ShowStorageCapacity                     bool
 	Storage                                 bool
 	StoragePublic                           bool
 	StorageNodeLocation                     string
@@ -155,6 +156,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(SearchEngineResultCount.Name) {
 		conf.Global.SearchEngineResultCount = ctx.Int(SearchEngineResultCount.Name)
+	}
+
+	if ctx.IsSet(StorageCapacity.Name) {
+		conf.Global.ShowStorageCapacity = ctx.Bool(StorageCapacity.Name)
 	}
 
 	if ctx.IsSet(Storage.Name) {

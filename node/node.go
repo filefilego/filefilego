@@ -14,6 +14,7 @@ import (
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgconfig "github.com/filefilego/filefilego/config"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
@@ -91,6 +92,8 @@ type Node struct {
 
 	config      *ffgconfig.Config
 	gossipTopic map[string]*pubsub.Topic
+
+	uptime int64
 }
 
 // New creates a new node.
@@ -152,6 +155,7 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		storageProtocol:         storageProtocol,
 		config:                  cfg,
 		gossipTopic:             make(map[string]*pubsub.Topic),
+		uptime:                  time.Now().Unix(),
 	}, nil
 }
 
@@ -438,11 +442,21 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return fmt.Errorf("failed to get public key bytes: %w", err)
 		}
 
+		storageDirCapacity := uint64(0)
+		if n.config.Global.ShowStorageCapacity {
+			storageDirCapacity, err = common.GetDirectoryFreeSpace(n.config.Global.StorageDir)
+			if err != nil {
+				log.Warnf("failed to get storage folder capacity: %v", err)
+			}
+		}
+
 		response := messages.StorageQueryResponseProto{
 			StorageProviderPeerAddr: n.GetID(),
 			Location:                n.config.Global.StorageNodeLocation,
 			FeesPerByte:             n.config.Global.StorageFeesPerByte,
 			PublicKey:               make([]byte, len(pubKeyBytes)),
+			StorageCapacity:         storageDirCapacity,
+			Uptime:                  time.Now().Unix() - n.uptime,
 		}
 
 		copy(response.PublicKey, pubKeyBytes)
@@ -452,6 +466,8 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 				[]byte(response.Location),
 				[]byte(response.FeesPerByte),
 				response.PublicKey,
+				[]byte(fmt.Sprintf("%d", response.StorageCapacity)),
+				[]byte(fmt.Sprintf("%d", response.Uptime)),
 			},
 			[]byte{},
 		)
