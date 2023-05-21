@@ -92,13 +92,16 @@ func TestDataQueryProtocol(t *testing.T) {
 	dqrequestold := messages.DataQueryRequest{
 		FileHashes:   [][]byte{{12}},
 		FromPeerAddr: h1.ID().String(),
-		Timestamp:    time.Now().Unix() - ((dataQueryReqAgeToPurgeInMins + 1) * 60),
+		Timestamp:    time.Now().Unix(),
 	}
 	hashOfOldReq := dqrequestold.GetHash()
 	dqrequestold.Hash = make([]byte, len(hashOfOldReq))
 	copy(dqrequestold.Hash, hashOfOldReq)
 	err = protocol2.PutQueryHistory(hexutil.Encode(hashOfOldReq), dqrequestold)
 	assert.NoError(t, err)
+	req, ok := protocol2.GetQueryHistory(hexutil.Encode(hashOfOldReq))
+	assert.Equal(t, true, ok)
+	req.Timestamp = req.Timestamp - ((dataQueryReqAgeToPurgeInMins + 1) * 60)
 	err = protocol2.PurgeQueryHistory()
 	assert.NoError(t, err)
 	assert.Len(t, protocol2.queryHistory, 1)
