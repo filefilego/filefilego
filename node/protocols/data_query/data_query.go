@@ -80,6 +80,8 @@ func (d *Protocol) PutQueryHistory(key string, val messages.DataQueryRequest) er
 		return fmt.Errorf("failed to insert data query request: %w", err)
 	}
 
+	val.Timestamp = time.Now().Unix()
+
 	d.queryHistoryMux.Lock()
 	defer d.queryHistoryMux.Unlock()
 	d.queryHistory[key] = val
