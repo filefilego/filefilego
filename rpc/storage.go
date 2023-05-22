@@ -20,12 +20,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	workerCount      = 5
+	queueChannelSize = 1000
+)
+
 // StorageAPI represents the storage rpc service.
 type StorageAPI struct {
 	host            host.Host
 	publisher       NetworkMessagePublisher
 	storageProtocol storageprotocol.Interface
 	storageEngine   storage.Interface
+	jobQueue        *jobQueue
+}
+
+type job struct {
+	ID                  string
+	PeerID              peer.ID
+	FilePath            string
+	ChannelNodeItemHash string
+}
+
+type jobQueue struct {
+	workerCount int
+	jobs        chan job
 }
 
 // NewStorageAPI creates a new storage API to be served using JSONRPC.
@@ -51,7 +69,43 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 		publisher:       publisher,
 		storageProtocol: storageProtocol,
 		storageEngine:   storageEngine,
+		jobQueue: &jobQueue{
+			workerCount: workerCount,
+			jobs:        make(chan job, queueChannelSize),
+		},
 	}, nil
+}
+
+// Start starts the workers in the background for handling data uploading.
+func (api *StorageAPI) Start() {
+	for i := 1; i <= api.jobQueue.workerCount; i++ {
+		go api.startWorker()
+	}
+}
+
+// Stop the workers and gracefully shuts down the worker goroutines.
+func (api *StorageAPI) Stop() {
+	close(api.jobQueue.jobs)
+}
+
+func (api *StorageAPI) addJob(job job) {
+	api.jobQueue.jobs <- job
+}
+
+func (api *StorageAPI) startWorker() {
+	for {
+		job, ok := <-api.jobQueue.jobs
+		if !ok {
+			return
+		}
+
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
+		err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
+		if err != nil {
+			log.Warnf("failed to save file metadata locally: %v", err)
+		}
+	}
 }
 
 // ListUploadedFilesArgs args for listing uploads.
@@ -183,17 +237,14 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 		return errors.New("filepath is empty")
 	}
 
-	go func() {
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
-		api.storageProtocol.SetUploadingStatus(peerID, args.FilePath, fileMetadata.Hash, err)
-		err = api.storageEngine.SaveFileMetadata(args.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
-		if err != nil {
-			log.Warnf("failed to save file metadata locally: %v", err)
-		}
-	}()
+	api.addJob(job{
+		ID:                  args.PeerID + args.FilePath,
+		PeerID:              peerID,
+		FilePath:            args.FilePath,
+		ChannelNodeItemHash: args.ChannelNodeItemHash,
+	})
 
 	response.Success = true
-
 	return nil
 }
 
