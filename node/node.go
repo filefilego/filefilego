@@ -534,7 +534,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 		}
 
 		for _, v := range dataQueryRequest.FileHashes {
-			fileMetaData, err := n.storage.GetFileMetadata(hexutil.EncodeNoPrefix(v))
+			fileMetaData, err := n.storage.GetFileMetadata(hexutil.EncodeNoPrefix(v), n.GetID())
 			if err != nil {
 				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
 				continue

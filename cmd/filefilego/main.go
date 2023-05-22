@@ -205,7 +205,7 @@ func run(ctx *cli.Context) error {
 	} else {
 		// full node dependencies setup
 		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments)
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
 			if err != nil {
 				return fmt.Errorf("failed to setup storage engine: %w", err)
 			}

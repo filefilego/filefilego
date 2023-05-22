@@ -209,13 +209,13 @@ func TestDataVerificationMethods(t *testing.T) {
 	contractStoreVerifier1, err := contract.New(driver3)
 	assert.NoError(t, err)
 
-	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments)
+	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments, h1.ID().String())
 	assert.NoError(t, err)
 
-	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments)
+	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments, h2.ID().String())
 	assert.NoError(t, err)
 
-	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments)
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments, verifier1.ID().String())
 	assert.NoError(t, err)
 
 	genesisblockValid, err := block.GetGenesisBlock()
@@ -289,7 +289,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		FilePath:       uploadedFilepath,
 		Size:           fileSize,
 	}
-	err = strg.SaveFileMetadata("", fileHash, metadata)
+	err = strg.SaveFileMetadata("", fileHash, h1.ID().String(), metadata)
 	assert.NoError(t, err)
 
 	metadata2 := storage.FileMetadata{
@@ -298,14 +298,14 @@ func TestDataVerificationMethods(t *testing.T) {
 		FilePath:       uploadedFile2path,
 		Size:           fileSize2,
 	}
-	err = strg.SaveFileMetadata("", file2Hash, metadata2)
+	err = strg.SaveFileMetadata("", file2Hash, h1.ID().String(), metadata2)
 	assert.NoError(t, err)
 
-	retrievedMetadata, err := strg.GetFileMetadata(fileHash)
+	retrievedMetadata, err := strg.GetFileMetadata(fileHash, protocolH1.host.ID().String())
 	assert.NoError(t, err)
 	assert.Equal(t, metadata, retrievedMetadata)
 
-	retrievedMetadata2, err := strg.GetFileMetadata(file2Hash)
+	retrievedMetadata2, err := strg.GetFileMetadata(file2Hash, protocolH1.host.ID().String())
 	assert.NoError(t, err)
 	assert.Equal(t, metadata2, retrievedMetadata2)
 

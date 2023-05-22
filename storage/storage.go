@@ -32,11 +32,12 @@ const (
 	// UserAccess represents privilege access.
 	UserAccess = "user"
 
-	tokenAccessHours     = 2160
-	tokenPrefix          = "token"
-	fileHashPrefix       = "mdt"
-	fileHashCountPrefix  = "fileHashCount"
-	fileHashToNodePrefix = "fhn"
+	tokenAccessHours      = 2160
+	tokenPrefix           = "token"
+	fileHashPrefix        = "mdt"
+	fileHashSortingPrefix = "mds"
+	fileHashCountPrefix   = "fileHashCount"
+	fileHashToNodePrefix  = "fhn"
 
 	bufferSize = 8192
 )
@@ -48,8 +49,8 @@ type Interface interface {
 	SetEnabled(val bool)
 	CreateSubfolders() (string, error)
 	SaveToken(token AccessToken) error
-	SaveFileMetadata(nodeHash, fileHash string, metadata FileMetadata) error
-	GetFileMetadata(fileHash string) (FileMetadata, error)
+	SaveFileMetadata(nodeHash, fileHash, peerID string, metadata FileMetadata) error
+	GetFileMetadata(fileHash string, peerID string) (FileMetadata, error)
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
@@ -63,6 +64,7 @@ type FileMetadata struct {
 	Hash           string `json:"hash"`
 	FilePath       string `json:"file_path"`
 	Size           int64  `json:"size"`
+	RemotePeer     string `json:"remote_peer"`
 }
 
 // AccessToken represents an access token.
@@ -78,10 +80,11 @@ type Storage struct {
 	storagePath             string
 	enabled                 bool
 	merkleTreeTotalSegments int
+	peerID                  string
 }
 
 // New creates a new storage instance.
-func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
@@ -104,11 +107,16 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		}
 	}
 
+	if peerID == "" {
+		return nil, errors.New("peerID is empty")
+	}
+
 	storage := &Storage{
 		db:                      db,
 		storagePath:             storagePath,
 		enabled:                 enabled,
 		merkleTreeTotalSegments: merkleTreeTotalSegments,
+		peerID:                  peerID,
 	}
 
 	token := AccessToken{
@@ -174,7 +182,7 @@ func (s *Storage) GetTotalFilesStored() uint64 {
 }
 
 // SaveFileMetadata saves a file's metadata in the database.
-func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetadata) error {
+func (s *Storage) SaveFileMetadata(nodeHash, fileHash, peerID string, metadata FileMetadata) error {
 	if metadata.MerkleRootHash == "" || metadata.FilePath == "" || metadata.Hash == "" || metadata.Size == 0 {
 		return errors.New("invalid file metadata")
 	}
@@ -184,24 +192,35 @@ func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetad
 		return fmt.Errorf("failed to marshal file metadata: %w", err)
 	}
 
-	err = s.db.Put(append([]byte(fileHashPrefix), []byte(fileHash)...), data)
+	// save using: filehash + peerID
+	prefix := append([]byte(fileHashPrefix), []byte(fileHash)...)
+	err = s.db.Put(append(prefix, []byte(peerID)...), data)
 	if err != nil {
-		return fmt.Errorf("failed to insert nodeHash %s", fileHash)
+		return fmt.Errorf("failed to insert filehash %s: %w", fileHash, err)
 	}
 
 	idx := s.GetTotalFilesStored()
 	idx++
 	itemsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(itemsUint64, idx)
+
 	err = s.db.Put([]byte(fileHashCountPrefix), itemsUint64)
 	if err != nil {
 		return fmt.Errorf("failed to save files count: %w", err)
 	}
 
+	// save using: count + filehash + peerid
+	prefixSorting := append([]byte(fileHashSortingPrefix), itemsUint64...)
+	prefixSorting = append(prefixSorting, []byte(fileHash)...)
+	err = s.db.Put(append(prefixSorting, []byte(peerID)...), []byte{})
+	if err != nil {
+		return fmt.Errorf("failed to insert filehash to sorted table %s: %w", fileHash, err)
+	}
+
 	if nodeHash != "" {
 		err = s.db.Put(append([]byte(fileHashToNodePrefix), []byte(metadata.Hash)...), []byte(nodeHash))
 		if err != nil {
-			return fmt.Errorf("failed to insert fileHash %s", metadata.Hash)
+			return fmt.Errorf("failed to insert fileHash %s: %w", metadata.Hash, err)
 		}
 	}
 
@@ -209,11 +228,13 @@ func (s *Storage) SaveFileMetadata(nodeHash, fileHash string, metadata FileMetad
 }
 
 // GetFileMetadata gets a file's metadata in the database.
-func (s *Storage) GetFileMetadata(fileHash string) (FileMetadata, error) {
+func (s *Storage) GetFileMetadata(fileHash string, peerID string) (FileMetadata, error) {
 	if fileHash == "" {
 		return FileMetadata{}, errors.New("file hash is empty")
 	}
-	data, err := s.db.Get(append([]byte(fileHashPrefix), []byte(fileHash)...))
+
+	prefix := append([]byte(fileHashPrefix), []byte(fileHash)...)
+	data, err := s.db.Get(append(prefix, []byte(peerID)...))
 	if err != nil {
 		return FileMetadata{}, fmt.Errorf("failed to get file metadata: %w", err)
 	}
@@ -243,7 +264,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, 
 	}
 
 	limit := pageSize
-	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashPrefix)), nil)
+	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashSortingPrefix)), nil)
 	items := make([]FileMetadata, 0)
 	i := 0
 	for iter.Next() {
@@ -261,11 +282,12 @@ func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, 
 			break
 		}
 
-		hash := string(key[len([]byte(fileHashPrefix)):])
-		item, err := s.GetFileMetadata(hash)
+		hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
+		item, err := s.GetFileMetadata(hash[:40], hash[40:])
 		if err != nil {
 			continue
 		}
+
 		items = append(items, item)
 		limit--
 	}
@@ -462,7 +484,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
 	if fileHashExistsInDB {
-		fileMetadata, err = s.GetFileMetadata(nodeHashDB)
+		fileMetadata, err = s.GetFileMetadata(nodeHashDB, s.peerID)
 		if err != nil {
 			os.Remove(newPath)
 			writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
@@ -470,7 +492,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = s.SaveFileMetadata(nodeHash, fHash, fileMetadata)
+	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
 	if err != nil {
 		os.Remove(newPath)
 		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
@@ -614,7 +636,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 
 	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
 	if fileHashExistsInDB {
-		fileMetadata, err = s.GetFileMetadata(nodeHashDB)
+		fileMetadata, err = s.GetFileMetadata(nodeHashDB, s.peerID)
 		if err != nil {
 			log.Errorf("failed to get file merkle root hash: %v", err)
 			os.Remove(newPath)
@@ -622,7 +644,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		}
 	}
 
-	err = s.SaveFileMetadata(nodeHash, fHash, fileMetadata)
+	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
 	if err != nil {
 		log.Errorf("failed to save file metadata: %v", err)
 		os.Remove(newPath)

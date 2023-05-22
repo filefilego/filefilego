@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -34,6 +35,7 @@ func TestNew(t *testing.T) {
 		enabled             bool
 		adminToken          string
 		totalMerkleSegments int
+		peerID              string
 		expErr              string
 	}{
 		"no database": {
@@ -54,11 +56,19 @@ func TestNew(t *testing.T) {
 			adminToken:  "12345",
 			expErr:      "merkle tree total segments is zero",
 		},
+		"no peerID": {
+			db:                  driver,
+			storagePath:         "/tmp/invalidpathffg/",
+			adminToken:          "12345",
+			totalMerkleSegments: 1024,
+			expErr:              "peerID is empty",
+		},
 		"success": {
 			db:                  driver,
 			storagePath:         "/tmp/invalidpathffg/",
 			adminToken:          "12345",
 			totalMerkleSegments: 1024,
+			peerID:              "DKldkldk",
 		},
 	}
 
@@ -66,7 +76,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments)
+			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID)
 			if tt.expErr != "" {
 				assert.Nil(t, storage)
 				assert.EqualError(t, err, tt.expErr)
@@ -88,7 +98,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken", 1024)
+	storage, err := New(driver, storagePath, false, "admintoken", 1024, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv")
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -157,28 +167,30 @@ func TestStorageMethods(t *testing.T) {
 	node1Hash := "nodehash1"
 
 	// invalid file metadata
-	err = storage.SaveFileMetadata(node1Hash, "wdasd", FileMetadata{})
+	err = storage.SaveFileMetadata(node1Hash, "wdasd", "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv", FileMetadata{})
 	assert.EqualError(t, err, "invalid file metadata")
 
 	// valid file metadata
-	fileHash := "filehash123"
+	sha1OfFile, err := crypto.Sha1File("storage.go")
+	assert.NoError(t, err)
+	fileHash := sha1OfFile
 	node1Metadata := FileMetadata{
 		MerkleRootHash: "0x0123",
 		Hash:           fileHash,
-		FilePath:       "/tmp/filename",
+		FilePath:       "storage.go",
 		Size:           123,
 	}
-	err = storage.SaveFileMetadata(node1Hash, fileHash, node1Metadata)
+	err = storage.SaveFileMetadata(node1Hash, fileHash, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv", node1Metadata)
 	assert.NoError(t, err)
 
 	// get file metadata
 	// invalid
-	fileMetadata, err := storage.GetFileMetadata("")
+	fileMetadata, err := storage.GetFileMetadata("", "")
 	assert.EqualError(t, err, "file hash is empty")
 	assert.Equal(t, FileMetadata{}, fileMetadata)
 
 	// valid
-	fileMetadata, err = storage.GetFileMetadata(fileHash)
+	fileMetadata, err = storage.GetFileMetadata(fileHash, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv")
 	assert.NoError(t, err)
 	assert.Equal(t, node1Metadata, fileMetadata)
 
@@ -215,7 +227,7 @@ func TestAuthenticateHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024)
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 
@@ -270,7 +282,7 @@ func TestUploadHandler(t *testing.T) {
 		os.RemoveAll("storagetestuploading.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024)
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 
@@ -336,7 +348,7 @@ func TestUploadHandler(t *testing.T) {
 	// the merkle tree root hash is 32 bytes and 66 in hex encoded.
 	assert.Len(t, fileUploaded.MerkleRootHash, 66)
 
-	fileMetadata, err := storage.GetFileMetadata(fileUploaded.FileHash)
+	fileMetadata, err := storage.GetFileMetadata(fileUploaded.FileHash, "peerID")
 	assert.NoError(t, err)
 
 	if _, err := os.Stat(fileMetadata.FilePath); os.IsNotExist(err) {
