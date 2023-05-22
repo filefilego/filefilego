@@ -892,6 +892,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		err = s.RegisterService(storageAPI, internalrpc.StorageServiceNamespace)
 		assert.NoError(t, err)
 		storageAPI.Start()
+		defer storageAPI.Stop()
 	}
 
 	peers := ffgNode.Peers()

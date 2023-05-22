@@ -462,6 +462,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to register storage rpc api service: %w", err)
 		}
 		storageAPI.Start()
+		defer storageAPI.Stop()
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {

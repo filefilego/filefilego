@@ -83,6 +83,11 @@ func (api *StorageAPI) Start() {
 	}
 }
 
+// Stop the workers and gracefully shuts down the worker goroutines.
+func (api *StorageAPI) Stop() {
+	close(api.jobQueue.jobs)
+}
+
 func (api *StorageAPI) addJob(job job) {
 	api.jobQueue.jobs <- job
 }
