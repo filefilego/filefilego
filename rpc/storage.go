@@ -56,8 +56,9 @@ func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storagePro
 
 // ListUploadedFilesArgs args for listing uploads.
 type ListUploadedFilesArgs struct {
-	CurrentPage int `json:"current_page"`
-	PageSize    int `json:"page_size"`
+	CurrentPage int    `json:"current_page"`
+	PageSize    int    `json:"page_size"`
+	Order       string `json:"order"`
 }
 
 // ListUploadedFilesResponse the response listing uploads.
@@ -68,7 +69,11 @@ type ListUploadedFilesResponse struct {
 
 // ListUploadedFiles lists the uploaded files on this node.
 func (api *StorageAPI) ListUploadedFiles(r *http.Request, args *ListUploadedFilesArgs, response *ListUploadedFilesResponse) error {
-	metadata, totalCount, err := api.storageEngine.ListFiles(args.CurrentPage, args.PageSize)
+	if args.Order != "asc" && args.Order != "desc" {
+		args.Order = "asc"
+	}
+
+	metadata, totalCount, err := api.storageEngine.ListFiles(args.CurrentPage, args.PageSize, args.Order)
 	if err != nil {
 		return fmt.Errorf("failed to list files: %w", err)
 	}

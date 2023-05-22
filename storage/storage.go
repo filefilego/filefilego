@@ -54,7 +54,7 @@ type Interface interface {
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
-	ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, error)
+	ListFiles(currentPage, pageSize int, order string) ([]FileMetadata, uint64, error)
 }
 
 // FileMetadata holds the metadata for a file.
@@ -247,7 +247,7 @@ func (s *Storage) GetFileMetadata(fileHash string, peerID string) (FileMetadata,
 }
 
 // ListFiles the uploaded files.
-func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, error) {
+func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMetadata, uint64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -267,29 +267,69 @@ func (s *Storage) ListFiles(currentPage, pageSize int) ([]FileMetadata, uint64, 
 	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashSortingPrefix)), nil)
 	items := make([]FileMetadata, 0)
 	i := 0
-	for iter.Next() {
-		i++
-		if limit == 0 {
-			break
+
+	if order == "asc" {
+		for iter.Next() {
+			i++
+			if limit == 0 {
+				break
+			}
+
+			if i < start {
+				continue
+			}
+
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
+
+			hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
+			item, err := s.GetFileMetadata(hash[:40], hash[40:])
+			if err != nil {
+				continue
+			}
+
+			items = append(items, item)
+			limit--
+		}
+	} else {
+		if iter.Last() {
+			key := iter.Key()
+			i++
+			if len(key) != 0 && i > start {
+				hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
+				item, err := s.GetFileMetadata(hash[:40], hash[40:])
+				if err == nil {
+					items = append(items, item)
+					limit--
+				}
+			}
 		}
 
-		if i < start {
-			continue
-		}
+		for iter.Prev() {
+			i++
+			if limit == 0 {
+				break
+			}
 
-		key := iter.Key()
-		if len(key) == 0 {
-			break
-		}
+			if i < start {
+				continue
+			}
 
-		hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
-		item, err := s.GetFileMetadata(hash[:40], hash[40:])
-		if err != nil {
-			continue
-		}
+			key := iter.Key()
+			if len(key) == 0 {
+				break
+			}
 
-		items = append(items, item)
-		limit--
+			hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
+			item, err := s.GetFileMetadata(hash[:40], hash[40:])
+			if err != nil {
+				continue
+			}
+			items = append(items, item)
+			limit--
+		}
 	}
 
 	iter.Release()
