@@ -125,7 +125,7 @@ func TestStorageProtocol(t *testing.T) {
 
 	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
 	assert.NoError(t, err)
-	assert.Equal(t, fhash, fhashremote)
+	assert.Equal(t, fhash, fhashremote.Hash)
 	time.Sleep(1 * time.Second)
 
 	metadata, err := protocol2.storage.GetFileMetadata(fhash, protocol1.host.ID().String())

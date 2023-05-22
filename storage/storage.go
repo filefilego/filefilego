@@ -651,16 +651,19 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
-	fhashBytes, err := hexutil.DecodeNoPrefix(fHash)
+	// send back the result to uploader
+	// remove the local file path
+	fileMetadata.FilePath = ""
+	fileMetadataBytes, err := json.Marshal(fileMetadata)
 	if err != nil {
-		log.Errorf("failed to decode file hash: %v", err)
+		log.Errorf("failed to marshal file metadata: %v", err)
 		os.Remove(newPath)
 		return
 	}
 
-	_, err = stream.Write(fhashBytes)
+	_, err = stream.Write(fileMetadataBytes)
 	if err != nil {
-		log.Errorf("failed to write the filehash to the stream: %v", err)
+		log.Errorf("failed to write the uploaded file metadata bytes to the stream: %v", err)
 		os.Remove(newPath)
 		return
 	}

@@ -179,8 +179,12 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 	}
 
 	go func() {
-		fhash, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
-		api.storageProtocol.SetUploadingStatus(peerID, args.FilePath, fhash, err)
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), peerID, args.FilePath, args.ChannelNodeItemHash)
+		api.storageProtocol.SetUploadingStatus(peerID, args.FilePath, fileMetadata.Hash, err)
+		err = api.storageEngine.SaveFileMetadata(args.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
+		if err != nil {
+			log.Warnf("failed to save file metadata locally: %v", err)
+		}
 	}()
 
 	response.Success = true
