@@ -1331,7 +1331,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	}
 
 	fileHashHex := hexutil.EncodeNoPrefix(fileTransferRequest.FileHash)
-	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex)
+	fileMetadata, err := d.storage.GetFileMetadata(fileHashHex, d.host.ID().String())
 	if err != nil {
 		log.Errorf("failed to get file metadata from storage engine in handleIncomingFileTransfer: %v", err)
 		return

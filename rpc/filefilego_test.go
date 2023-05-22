@@ -250,7 +250,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	storage, err := storage.New(blockchainDB, "storagePath", true, "admin", 1024)
+	storage, err := storage.New(blockchainDB, "storagePath", true, "admin", 1024, host.ID().String())
 	assert.NoError(t, err)
 
 	storageProtocol, err := storageprotocol.New(host, storage, nil, false)
