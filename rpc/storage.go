@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -183,6 +185,30 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 
 	response.Success = true
 
+	return nil
+}
+
+// SaveUploadedFileMetadataLocallyArgs args for saving uploaded metadata.
+type SaveUploadedFileMetadataLocallyArgs struct {
+	Files []storage.FileMetadata `json:"files"`
+}
+
+// SaveUploadedFileMetadataLocallyResponse is the response of the saving file metadata operation.
+type SaveUploadedFileMetadataLocallyResponse struct {
+	Success bool `json:"success"`
+}
+
+// SaveUploadedFileMetadataLocally saves a file metadata locally.
+// This is useful when a file is uploaded to other nodes, and the uploading node wants to keep track of where and what has been
+// uploaded to remote nodes.
+func (api *StorageAPI) SaveUploadedFileMetadataLocally(r *http.Request, args *SaveUploadedFileMetadataLocallyArgs, response *SaveUploadedFileMetadataLocallyResponse) error {
+	for _, v := range args.Files {
+		err := api.storageEngine.SaveFileMetadata("", v.Hash, v.RemotePeer, v)
+		if err != nil {
+			log.Warnf("failed to save file metadata: %v", err)
+		}
+	}
+	response.Success = true
 	return nil
 }
 
