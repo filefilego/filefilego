@@ -790,6 +790,48 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 	return nil
 }
 
+// MoveDirectDownloadsToDestinationArgs represents args.
+type MoveDirectDownloadsToDestinationArgs struct {
+	ContractHash      string   `json:"contract_hash"`
+	FileHashes        []string `json:"file_hashes"`
+	RestoredFilePaths []string `json:"restored_file_paths"`
+}
+
+// RequestEncryptionDataFromVerifierResponse represents the response.
+type MoveDirectDownloadsToDestinationResponse struct {
+	RestoredFilePaths []string `json:"restored_file_paths"`
+}
+
+// MoveDirectDownloadsToDestination moves the downloaded files to final destination.
+// These files were directly downloaded from a storage provider with zero fee, so no decryption needed.
+// The contracts were local and never went out to the network. This method was written specifically for direct downloads with zero fees.
+func (api *DataTransferAPI) MoveDirectDownloadsToDestination(r *http.Request, args *MoveDirectDownloadsToDestinationArgs, response *MoveDirectDownloadsToDestinationResponse) error {
+	response.RestoredFilePaths = make([]string, 0)
+	if len(args.FileHashes) == 0 {
+		return errors.New("file hashes are empty")
+	}
+
+	if len(args.FileHashes) != len(args.RestoredFilePaths) {
+		return errors.New("length of file hashes not equal to restore file paths")
+	}
+
+	_, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	for i, v := range args.FileHashes {
+		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), args.ContractHash, v)
+		err := os.Rename(inputEncryptedFilePath, args.RestoredFilePaths[i])
+		if err != nil {
+			return fmt.Errorf("failed to move file %s to %s : %w", inputEncryptedFilePath, args.RestoredFilePaths[i], err)
+		}
+		response.RestoredFilePaths = append(response.RestoredFilePaths, args.RestoredFilePaths[i])
+	}
+
+	return nil
+}
+
 // RequestEncryptionDataFromVerifierArgs represents args.
 type RequestEncryptionDataFromVerifierArgs struct {
 	ContractHash         string   `json:"contract_hash"`
@@ -1099,8 +1141,11 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 }
 
 // CreateContractsFromDataQueryResponseHashArgs represents args.
+// AllowResponseOnlyFromPeer contains a peerID which will filter the data query responses other
+// than the given peer id.
 type CreateContractsFromDataQueryResponsesArgs struct {
-	DataQueryRequestHash string `json:"data_query_request_hash"`
+	DataQueryRequestHash      string `json:"data_query_request_hash"`
+	AllowResponseOnlyFromPeer string `json:"allow_response_only_from_peer"`
 }
 
 // CreateContractsFromDataQueryResponsesResponse represents the response.
@@ -1130,6 +1175,17 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 		return fmt.Errorf("data query responses not found %s", args.DataQueryRequestHash)
 	}
 
+	if args.AllowResponseOnlyFromPeer != "" {
+		tmp := make([]messages.DataQueryResponse, 0)
+		for _, v := range responses {
+			if v.FromPeerAddr == args.AllowResponseOnlyFromPeer {
+				tmp = append(tmp, v)
+			}
+		}
+
+		responses = tmp
+	}
+
 	filesNeeded, err := getFilesNeededFromDataQueryResponses(requests, responses)
 	if err != nil {
 		return fmt.Errorf("failed to get files needed from responses: %w", err)
@@ -1140,6 +1196,41 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 	requesterPubKeyBytes, err := api.host.Peerstore().PubKey(api.host.ID()).Raw()
 	if err != nil {
 		return fmt.Errorf("failed to get node's public key bytes %w", err)
+	}
+
+	downloadContracts := make([]*messages.DownloadContractProto, 0)
+	storageProviderHasZeroFees := false
+	for _, v := range filesNeeded {
+		contract := &messages.DownloadContractProto{
+			FileHosterResponse:         messages.ToDataQueryResponseProto(*v.response),
+			FileRequesterNodePublicKey: requesterPubKeyBytes,
+			FileHashesNeeded:           v.fileHashesNeeded,
+			FileHashesNeededSizes:      v.fileHashesSizesNeeded,
+		}
+
+		if v.response.FeesPerByte == "" || v.response.FeesPerByte == "0" {
+			storageProviderHasZeroFees = true
+		}
+		downloadContracts = append(downloadContracts, contract)
+	}
+
+	// zero fees from storage provider means client can
+	// directly download the data without going through the verifiers
+	// for the purpose of file progress we will create a local contract
+	// and return the result so it can be used by UI
+	// this contract wont be broadcasted and is locally available
+	// just to allow us download the files without changing the current mechanism.
+	if storageProviderHasZeroFees {
+		for _, v := range downloadContracts {
+			contractHash := messages.GetDownloadContractHash(v)
+			v.ContractHash = make([]byte, len(contractHash))
+			copy(v.ContractHash, contractHash)
+
+			_ = api.contractStore.CreateContract(v)
+			response.ContractHashes = append(response.ContractHashes, hexutil.Encode(v.ContractHash))
+		}
+
+		return nil
 	}
 
 	// find all verifiers
@@ -1158,16 +1249,6 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 		peerIDs = append(peerIDs, peerID)
 	}
 
-	downloadContracts := make([]*messages.DownloadContractProto, 0)
-	for _, v := range filesNeeded {
-		contract := &messages.DownloadContractProto{
-			FileHosterResponse:         messages.ToDataQueryResponseProto(*v.response),
-			FileRequesterNodePublicKey: requesterPubKeyBytes,
-			FileHashesNeeded:           v.fileHashesNeeded,
-			FileHashesNeededSizes:      v.fileHashesSizesNeeded,
-		}
-		downloadContracts = append(downloadContracts, contract)
-	}
 	addrsInfos := api.publisherNodesFinder.FindPeers(r.Context(), peerIDs)
 	signedDownloadContracts := make([]*messages.DownloadContractProto, 0)
 	mux := sync.Mutex{}
