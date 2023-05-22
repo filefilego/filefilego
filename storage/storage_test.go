@@ -98,7 +98,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken", 1024, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv")
+	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -167,7 +167,7 @@ func TestStorageMethods(t *testing.T) {
 	node1Hash := "nodehash1"
 
 	// invalid file metadata
-	err = storage.SaveFileMetadata(node1Hash, "wdasd", "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv", FileMetadata{})
+	err = storage.SaveFileMetadata(node1Hash, "wdasd", "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", FileMetadata{})
 	assert.EqualError(t, err, "invalid file metadata")
 
 	// valid file metadata
@@ -180,7 +180,7 @@ func TestStorageMethods(t *testing.T) {
 		FilePath:       "storage.go",
 		Size:           123,
 	}
-	err = storage.SaveFileMetadata(node1Hash, fileHash, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv", node1Metadata)
+	err = storage.SaveFileMetadata(node1Hash, fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
 	assert.NoError(t, err)
 
 	// get file metadata
@@ -190,7 +190,7 @@ func TestStorageMethods(t *testing.T) {
 	assert.Equal(t, FileMetadata{}, fileMetadata)
 
 	// valid
-	fileMetadata, err = storage.GetFileMetadata(fileHash, "QmYvXHbjUJLmzdk3yL7pQCr1RfH45PfumMXnYokQMT98Fv")
+	fileMetadata, err = storage.GetFileMetadata(fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
 	assert.NoError(t, err)
 	assert.Equal(t, node1Metadata, fileMetadata)
 
