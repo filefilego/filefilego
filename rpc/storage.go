@@ -279,35 +279,60 @@ func (api *StorageAPI) SaveUploadedFileMetadataLocally(r *http.Request, args *Sa
 	return nil
 }
 
-// FileUploadProgressArgs args for upload progress.
-type FileUploadProgressArgs struct {
+// FileUploadProgressRequest represents a request.
+type FileUploadProgressRequest struct {
 	PeerID   string `json:"peer_id"`
 	FilePath string `json:"file_path"`
 }
 
-// FileUploadProgressResponse is the response of the progress.
-type FileUploadProgressResponse struct {
-	Progress int    `json:"progress"`
-	FileHash string `json:"file_hash"`
-	Error    string `json:"error"`
+// FileUploadProgressArgs args for upload progress.
+type FileUploadProgressArgs struct {
+	Files []FileUploadProgressRequest `json:"files"`
 }
 
-// FileUploadProgress show the file upload progress and errors
-func (api *StorageAPI) FileUploadProgress(r *http.Request, args *FileUploadProgressArgs, response *FileUploadProgressResponse) error {
-	peerID, err := peer.Decode(args.PeerID)
-	if err != nil {
-		return fmt.Errorf("failed to decode remote peer id: %w", err)
-	}
+// FileUploadProgresResult is the result of uploads.
+type FileUploadProgresResult struct {
+	Progress int                  `json:"progress"`
+	FileHash string               `json:"file_hash"`
+	Error    string               `json:"error"`
+	Metadata storage.FileMetadata `json:"metadata"`
+}
 
-	if args.FilePath == "" {
-		return errors.New("filepath is empty")
-	}
+// FileUploadProgressResponse is the response of the progress.
+type FileUploadProgressResponse struct {
+	Files []FileUploadProgresResult `json:"files"`
+}
 
-	progress, fHash, err := api.storageProtocol.GetUploadProgress(peerID, args.FilePath)
-	response.Progress = progress
-	response.FileHash = fHash
-	if err != nil {
-		response.Error = err.Error()
+// FileUploadsProgress show the file upload progress and errors.
+func (api *StorageAPI) FileUploadsProgress(r *http.Request, args *FileUploadProgressArgs, response *FileUploadProgressResponse) error {
+	response.Files = make([]FileUploadProgresResult, 0)
+	for _, v := range args.Files {
+		peerID, err := peer.Decode(v.PeerID)
+		if err != nil {
+			return fmt.Errorf("failed to decode remote peer id: %w", err)
+		}
+
+		if v.FilePath == "" {
+			return errors.New("filepath is empty")
+		}
+
+		progress, fHash, err := api.storageProtocol.GetUploadProgress(peerID, v.FilePath)
+		resp := FileUploadProgresResult{
+			Progress: progress,
+			FileHash: fHash,
+		}
+		if err != nil {
+			resp.Error = err.Error()
+		}
+
+		if fHash != "" {
+			md, err := api.storageEngine.GetFileMetadata(fHash, v.PeerID)
+			if err == nil {
+				resp.Metadata = md
+			}
+		}
+
+		response.Files = append(response.Files, resp)
 	}
 
 	return nil
