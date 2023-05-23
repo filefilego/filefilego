@@ -294,6 +294,7 @@ type FileUploadProgressArgs struct {
 type FileUploadProgresResult struct {
 	Progress int                  `json:"progress"`
 	FileHash string               `json:"file_hash"`
+	FilePath string               `json:"file_path"`
 	Error    string               `json:"error"`
 	Metadata storage.FileMetadata `json:"metadata"`
 }
@@ -320,6 +321,7 @@ func (api *StorageAPI) FileUploadsProgress(r *http.Request, args *FileUploadProg
 		resp := FileUploadProgresResult{
 			Progress: progress,
 			FileHash: fHash,
+			FilePath: v.FilePath,
 		}
 		if err != nil {
 			resp.Error = err.Error()
