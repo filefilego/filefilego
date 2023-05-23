@@ -183,7 +183,7 @@ func (s *Storage) GetTotalFilesStored() uint64 {
 
 // SaveFileMetadata saves a file's metadata in the database.
 func (s *Storage) SaveFileMetadata(nodeHash, fileHash, peerID string, metadata FileMetadata) error {
-	if metadata.MerkleRootHash == "" || metadata.FilePath == "" || metadata.Hash == "" || metadata.Size == 0 {
+	if metadata.MerkleRootHash == "" || metadata.Hash == "" || metadata.Size == 0 {
 		return errors.New("invalid file metadata")
 	}
 
