@@ -1376,6 +1376,10 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 				break
 			}
 
+			if diff < bufferSize {
+				buf = make([]byte, diff)
+			}
+
 			n, err := input.Read(buf)
 			if n > 0 {
 				wroteN, err := s.Write(buf[:n])
@@ -1394,6 +1398,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 				return
 			}
 		}
+
 		return
 	}
 
