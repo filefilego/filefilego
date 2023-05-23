@@ -137,9 +137,14 @@ func (p *Protocol) SetUploadingStatus(peerID peer.ID, filePath, fileHash string,
 func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
 	fileWithPeer := filePath + peerID.String()
 	progress := p.uploadProgress[fileWithPeer]
-	st := p.uploadStatus[fileWithPeer]
+	st, ok := p.uploadStatus[fileWithPeer]
+	if !ok {
+		st.fileHash = ""
+		st.err = nil
+	}
 	return progress, st.fileHash, st.err
 }
 
