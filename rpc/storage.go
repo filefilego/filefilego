@@ -214,11 +214,16 @@ func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, r
 	return nil
 }
 
-// UploadFileToProviderArgs args for uploading to a provider.
-type UploadFileToProviderArgs struct {
+// UploadFileToProviderRequest
+type UploadFileToProviderRequest struct {
 	PeerID              string `json:"peer_id"`
 	FilePath            string `json:"file_path"`
 	ChannelNodeItemHash string `json:"channel_node_item_hash"`
+}
+
+// UploadFileToProviderArgs args for uploading to a provider.
+type UploadFileToProviderArgs struct {
+	Files []UploadFileToProviderRequest `json:"files"`
 }
 
 // UploadFileToProviderResponse is the response of the uploaded file to provider.
@@ -228,21 +233,23 @@ type UploadFileToProviderResponse struct {
 
 // UploadFileToProvider uploads a file to provider.
 func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToProviderArgs, response *UploadFileToProviderResponse) error {
-	peerID, err := peer.Decode(args.PeerID)
-	if err != nil {
-		return fmt.Errorf("failed to decode remote peer id: %w", err)
-	}
+	for _, v := range args.Files {
+		peerID, err := peer.Decode(v.PeerID)
+		if err != nil {
+			return fmt.Errorf("failed to decode remote peer id: %w", err)
+		}
 
-	if args.FilePath == "" {
-		return errors.New("filepath is empty")
-	}
+		if v.FilePath == "" {
+			return errors.New("filepath is empty")
+		}
 
-	api.addJob(job{
-		ID:                  args.PeerID + args.FilePath,
-		PeerID:              peerID,
-		FilePath:            args.FilePath,
-		ChannelNodeItemHash: args.ChannelNodeItemHash,
-	})
+		api.addJob(job{
+			ID:                  v.PeerID + v.FilePath,
+			PeerID:              peerID,
+			FilePath:            v.FilePath,
+			ChannelNodeItemHash: v.ChannelNodeItemHash,
+		})
+	}
 
 	response.Success = true
 	return nil
