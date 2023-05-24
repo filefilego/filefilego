@@ -245,6 +245,8 @@ func (api *DataTransferAPI) GetDownloadContract(r *http.Request, args *GetDownlo
 		FileHashesSizes:       downloadContract.FileHosterResponse.FileHashesSizes,
 		UnavailableFileHashes: make([]string, len(downloadContract.FileHosterResponse.UnavailableFileHashes)),
 		Timestamp:             downloadContract.FileHosterResponse.Timestamp,
+		FileMerkleRootHashes:  make([]string, len(downloadContract.FileHosterResponse.FileMerkleRootHashes)),
+		FileNames:             make([]string, len(downloadContract.FileHosterResponse.FileNames)),
 	}
 
 	for i, j := range downloadContract.FileHosterResponse.FileHashes {
@@ -254,6 +256,12 @@ func (api *DataTransferAPI) GetDownloadContract(r *http.Request, args *GetDownlo
 	for i, j := range downloadContract.FileHosterResponse.UnavailableFileHashes {
 		dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
 	}
+
+	for i, j := range downloadContract.FileHosterResponse.FileMerkleRootHashes {
+		dqrJSON.FileMerkleRootHashes[i] = hexutil.Encode(j)
+	}
+
+	copy(dqrJSON.FileNames, downloadContract.FileHosterResponse.FileNames)
 
 	jsonContract := DownloadContractJSON{
 		FileHosterResponse:         dqrJSON,
@@ -297,6 +305,8 @@ type DataQueryResponseJSON struct {
 	FileHashesSizes       []uint64 `json:"file_hashes_sizes"`
 	UnavailableFileHashes []string `json:"unavailable_file_hashes"`
 	Timestamp             int64    `json:"timestamp"`
+	FileMerkleRootHashes  []string `json:"file_merkle_root_hashes"`
+	FileNames             []string `json:"file_names"`
 }
 
 // CheckDataQueryResponse returns a list of data query responses.
@@ -319,6 +329,8 @@ func (api *DataTransferAPI) CheckDataQueryResponse(r *http.Request, args *CheckD
 			FileHashesSizes:       v.FileHashesSizes,
 			UnavailableFileHashes: make([]string, len(v.UnavailableFileHashes)),
 			Timestamp:             v.Timestamp,
+			FileMerkleRootHashes:  make([]string, len(v.FileMerkleRootHashes)),
+			FileNames:             make([]string, len(v.FileNames)),
 		}
 
 		for i, j := range v.FileHashes {
@@ -329,6 +341,11 @@ func (api *DataTransferAPI) CheckDataQueryResponse(r *http.Request, args *CheckD
 			dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
+		for i, j := range v.FileMerkleRootHashes {
+			dqrJSON.FileMerkleRootHashes[i] = hexutil.Encode(j)
+		}
+
+		copy(dqrJSON.FileNames, v.FileNames)
 		response.Responses = append(response.Responses, dqrJSON)
 	}
 
@@ -390,6 +407,8 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 			FileHashesSizes:       v.FileHashesSizes,
 			UnavailableFileHashes: make([]string, len(v.UnavailableFileHashes)),
 			Timestamp:             v.Timestamp,
+			FileMerkleRootHashes:  make([]string, len(v.FileMerkleRootHashes)),
+			FileNames:             make([]string, len(v.FileNames)),
 		}
 
 		for i, j := range v.FileHashes {
@@ -400,6 +419,11 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 			dqrJSON.UnavailableFileHashes[i] = hexutil.EncodeNoPrefix(j)
 		}
 
+		for i, j := range v.FileMerkleRootHashes {
+			dqrJSON.FileMerkleRootHashes[i] = hexutil.Encode(j)
+		}
+
+		copy(dqrJSON.FileNames, v.FileNames)
 		response.Responses = append(response.Responses, dqrJSON)
 	}
 
