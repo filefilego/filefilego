@@ -167,13 +167,27 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup global database: %w", err)
 	}
 
+	storageDir := conf.Global.StorageDir
+	storageEnabled := conf.Global.Storage
+	storageAccessToken := conf.Global.StorageToken
+
+	if conf.Global.SuperLightNode {
+		// if its a superlight node, override these vals
+		storageDir = conf.Global.DataDownloadsPath
+		storageAccessToken = "localtoken"
+	}
+
+	storageEngine, err := storage.New(globalDB, storageDir, storageEnabled, storageAccessToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
+	if err != nil {
+		return fmt.Errorf("failed to setup storage engine: %w", err)
+	}
+
 	// setup JSONRPC services
 	s := rpc.NewServer()
 	s.RegisterCodec(json.NewCodec(), "application/json")
 
 	ffgNode := &node.Node{}
 	bchain := &blockchain.Blockchain{}
-	storageEngine := &storage.Storage{}
 	searchEngine := &search.Search{}
 	var storageProtocol *storageprotocol.Protocol
 	dataQueryProtocol, err := dataquery.New(host)
@@ -203,14 +217,6 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light node node: %w", err)
 		}
 	} else {
-		// full node dependencies setup
-		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
-			if err != nil {
-				return fmt.Errorf("failed to setup storage engine: %w", err)
-			}
-		}
-
 		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
