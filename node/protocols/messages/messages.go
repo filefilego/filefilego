@@ -29,6 +29,8 @@ type DataQueryResponse struct {
 	FileHashesSizes       []uint64
 	UnavailableFileHashes [][]byte
 	Timestamp             int64
+	FileMerkleRootHashes  [][]byte
+	FileNames             []string
 }
 
 // ToDataQueryRequest returns a domain DataQueryRequest object.
@@ -107,6 +109,8 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 		FileHashesSizes:       make([]uint64, len(dqr.FileHashesSizes)),
 		UnavailableFileHashes: make([][]byte, len(dqr.UnavailableFileHashes)),
 		Timestamp:             dqr.Timestamp,
+		FileMerkleRootHashes:  make([][]byte, len(dqr.FileMerkleRootHashes)),
+		FileNames:             make([]string, len(dqr.FileNames)),
 	}
 
 	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
@@ -115,6 +119,8 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	copy(r.FileHashes, dqr.FileHashes)
 	copy(r.FileHashesSizes, dqr.FileHashesSizes)
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
+	copy(r.FileMerkleRootHashes, dqr.FileMerkleRootHashes)
+	copy(r.FileNames, dqr.FileNames)
 
 	return r
 }
@@ -131,6 +137,8 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 		FileHashesSizes:       make([]uint64, len(dqr.FileHashesSizes)),
 		UnavailableFileHashes: make([][]byte, len(dqr.UnavailableFileHashes)),
 		Timestamp:             dqr.Timestamp,
+		FileMerkleRootHashes:  make([][]byte, len(dqr.FileMerkleRootHashes)),
+		FileNames:             make([]string, len(dqr.FileNames)),
 	}
 
 	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
@@ -139,6 +147,8 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	copy(r.FileHashes, dqr.FileHashes)
 	copy(r.FileHashesSizes, dqr.FileHashesSizes)
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
+	copy(r.FileMerkleRootHashes, dqr.FileMerkleRootHashes)
+	copy(r.FileNames, dqr.FileNames)
 
 	return &r
 }
@@ -278,6 +288,16 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 		fileHahesNotFound = append(fileHahesNotFound, v...)
 	}
 
+	fileMerkleRootHahes := []byte{}
+	for _, v := range response.FileMerkleRootHashes {
+		fileMerkleRootHahes = append(fileMerkleRootHahes, v...)
+	}
+
+	fileNameBytes := []byte{}
+	for _, v := range response.FileNames {
+		fileNameBytes = append(fileNameBytes, []byte(v)...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
@@ -288,6 +308,8 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 			fileSizes,
 			fileHahesNotFound,
 			timestampBytes,
+			fileMerkleRootHahes,
+			fileNameBytes,
 		},
 		[]byte{},
 	)
@@ -318,6 +340,16 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 		fileHahesNotFound = append(fileHahesNotFound, v...)
 	}
 
+	fileMerkleRootHahes := []byte{}
+	for _, v := range response.FileMerkleRootHashes {
+		fileMerkleRootHahes = append(fileMerkleRootHahes, v...)
+	}
+
+	fileNameBytes := []byte{}
+	for _, v := range response.FileNames {
+		fileNameBytes = append(fileNameBytes, []byte(v)...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
@@ -328,6 +360,8 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 			fileSizes,
 			fileHahesNotFound,
 			timestampBytes,
+			fileMerkleRootHahes,
+			fileNameBytes,
 		},
 		[]byte{},
 	)

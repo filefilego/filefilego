@@ -67,6 +67,8 @@ message DataQueryResponseProto {
     repeated uint64 file_hashes_sizes = 7;
     repeated bytes unavailable_file_hashes = 8;
     int64 timestamp = 9;
+    repeated string file_names = 10;
+    repeated bytes file_merkle_root_hashes = 11;
 }
 
 // DataQueryResponseTransferProto is used to request a data query response from a verifier.
