@@ -531,6 +531,8 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			HashDataQueryRequest:  make([]byte, len(dataQueryRequest.Hash)),
 			PublicKey:             make([]byte, len(pubKeyBytes)),
 			Timestamp:             time.Now().Unix(),
+			FileMerkleRootHashes:  make([][]byte, 0),
+			FileNames:             make([]string, 0),
 		}
 
 		for _, v := range dataQueryRequest.FileHashes {
@@ -541,6 +543,11 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			}
 			response.FileHashes = append(response.FileHashes, v)
 			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
+			merkleRootHash, err := hexutil.Decode(fileMetaData.MerkleRootHash)
+			if err == nil {
+				response.FileMerkleRootHashes = append(response.FileMerkleRootHashes, merkleRootHash)
+				response.FileNames = append(response.FileNames, fileMetaData.FileName)
+			}
 		}
 
 		if len(response.FileHashes) == 0 {
