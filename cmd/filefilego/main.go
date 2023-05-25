@@ -177,6 +177,10 @@ func run(ctx *cli.Context) error {
 		storageAccessToken = "localtoken"
 	}
 
+	if storageDir == "" {
+		storageDir = conf.Global.DataDir
+	}
+
 	storageEngine, err := storage.New(globalDB, storageDir, storageEnabled, storageAccessToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
 	if err != nil {
 		return fmt.Errorf("failed to setup storage engine: %w", err)
