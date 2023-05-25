@@ -1184,6 +1184,9 @@ type filesNeededInDataQueryResponse struct {
 }
 
 // CreateContractsFromDataQueryResponses creates contracts from the available data query responses.
+// If AllowResponseOnlyFromPeer is given the contract will be created for the specific storage provider.
+// If not, then it will try to combine different contracts if missing files are across multiple storage providers.
+// If some of the files were not found from any storage provider, it will fail.
 func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Request, args *CreateContractsFromDataQueryResponsesArgs, response *CreateContractsFromDataQueryResponsesResponse) error {
 	response.ContractHashes = make([]string, 0)
 	requests, ok := api.dataQueryProtocol.GetQueryHistory(args.DataQueryRequestHash)
@@ -1199,24 +1202,43 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 		return fmt.Errorf("data query responses not found %s", args.DataQueryRequestHash)
 	}
 
+	filesNeeded := make([]filesNeededInDataQueryResponse, 0)
+
 	if args.AllowResponseOnlyFromPeer != "" {
-		tmp := make([]messages.DataQueryResponse, 0)
 		for _, v := range responses {
 			if v.FromPeerAddr == args.AllowResponseOnlyFromPeer {
-				tmp = append(tmp, v)
+				fn := filesNeededInDataQueryResponse{
+					response:              &v,
+					fileHashesNeeded:      make([][]byte, 0),
+					fileHashesSizesNeeded: make([]uint64, 0),
+				}
+
+				if len(v.FileHashes) != len(v.FileHashesSizes) {
+					return errors.New("the size of file hashes is not equal to file sizes")
+				}
+
+				for i, j := range v.FileHashes {
+					fn.fileHashesNeeded = append(fn.fileHashesNeeded, j)
+					fn.fileHashesSizesNeeded = append(fn.fileHashesSizesNeeded, v.FileHashesSizes[i])
+				}
+
+				filesNeeded = append(filesNeeded, fn)
 			}
 		}
 
-		responses = tmp
+	} else {
+		var err error
+		filesNeeded, err = getFilesNeededFromDataQueryResponses(requests, responses)
+		if err != nil {
+			return fmt.Errorf("failed to get files needed from responses: %w", err)
+		}
 	}
 
-	filesNeeded, err := getFilesNeededFromDataQueryResponses(requests, responses)
-	if err != nil {
-		return fmt.Errorf("failed to get files needed from responses: %w", err)
+	if len(filesNeeded) == 0 {
+		return errors.New("failed to create a list of needed files for creating a download contract")
 	}
 
 	// TODO: check which one to send and how many contracts from filesNeeded
-
 	requesterPubKeyBytes, err := api.host.Peerstore().PubKey(api.host.ID()).Raw()
 	if err != nil {
 		return fmt.Errorf("failed to get node's public key bytes %w", err)
@@ -1232,9 +1254,10 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 			FileHashesNeededSizes:      v.fileHashesSizesNeeded,
 		}
 
-		if v.response.FeesPerByte == "" || v.response.FeesPerByte == "0" {
+		if v.response.FeesPerByte == "" || v.response.FeesPerByte == "0" || v.response.FeesPerByte == "0x0" {
 			storageProviderHasZeroFees = true
 		}
+
 		downloadContracts = append(downloadContracts, contract)
 	}
 
