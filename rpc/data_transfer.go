@@ -1205,10 +1205,10 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 	filesNeeded := make([]filesNeededInDataQueryResponse, 0)
 
 	if args.AllowResponseOnlyFromPeer != "" {
-		for _, v := range responses {
+		for idx, v := range responses {
 			if v.FromPeerAddr == args.AllowResponseOnlyFromPeer {
 				fn := filesNeededInDataQueryResponse{
-					response:              &v,
+					response:              &responses[idx],
 					fileHashesNeeded:      make([][]byte, 0),
 					fileHashesSizesNeeded: make([]uint64, 0),
 				}
@@ -1225,7 +1225,6 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 				filesNeeded = append(filesNeeded, fn)
 			}
 		}
-
 	} else {
 		var err error
 		filesNeeded, err = getFilesNeededFromDataQueryResponses(requests, responses)
