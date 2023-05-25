@@ -86,7 +86,7 @@ func New(ctx *cli.Context) *Config {
 		Global: global{
 			SearchEngineResultCount:                 100,
 			StorageFileMerkleTreeTotalSegments:      1024,
-			StorageFileSegmentsEncryptionPercentage: 5,
+			StorageFileSegmentsEncryptionPercentage: 1,
 		},
 		RPC: rpc{
 			Whitelist:       []string{},

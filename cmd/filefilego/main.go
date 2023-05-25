@@ -177,8 +177,9 @@ func run(ctx *cli.Context) error {
 		storageAccessToken = "localtoken"
 	}
 
-	if storageDir == "" {
+	if storageDir == "" || storageAccessToken == "" {
 		storageDir = conf.Global.DataDir
+		storageAccessToken = "localtoken"
 	}
 
 	storageEngine, err := storage.New(globalDB, storageDir, storageEnabled, storageAccessToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
