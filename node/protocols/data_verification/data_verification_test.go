@@ -452,6 +452,10 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.NotEmpty(t, res)
 	time.Sleep(200 * time.Millisecond)
 
+	ok, err = protocolH2.VerifierHasEncryptionMetadata(context.TODO(), verifier1.ID(), contractHash)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
 	merkleNodes, err := common.HashFileBlockSegments(res, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
 	merkleRequest := &messages.MerkleTreeNodesOfFileContractProto{
