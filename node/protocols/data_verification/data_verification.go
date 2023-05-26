@@ -50,6 +50,14 @@ const (
 	// ContractVerifierAcceptanceProtocolID is a protocol which accepts incoming download contracts and seal them by verifier.
 	ContractVerifierAcceptanceProtocolID = "/ffg/dataverification_contract_accept/1.0.0"
 
+	// ContractTransactionValidationProtocolID is a protocol used by data requester node to ask data verifier and storage provider
+	// if a transaction containing the download contract was received by their node.
+	ContractTransactionValidationProtocolID = "/ffg/dataverification_contract_validate/1.0.0"
+
+	// VerifierHasEncryptionMetadataProtocolID is mainly used by data requesters to check if the data verifier received the necessary encryption
+	// metadata so requester can ask verifier for decryption metadata.
+	VerifierHasEncryptionMetadataProtocolID = "/ffg/dataverification_has_enc/1.0.0"
+
 	deadlineTimeInSecond = 10
 
 	bufferSize = 8192
@@ -68,6 +76,8 @@ type Interface interface {
 	RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
 	GetDownloadDirectory() string
 	GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int)
+	RequestContractTransactionVerification(ctx context.Context, peerID peer.ID, contractHash []byte) (bool, error)
+	VerifierHasEncryptionMetadata(ctx context.Context, peerID peer.ID, contractHash []byte) (bool, error)
 }
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -138,6 +148,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		p.host.SetStreamHandler(ContractVerifierAcceptanceProtocolID, p.handleIncomingContractVerifierAcceptance)
 		p.host.SetStreamHandler(ReceiveKeyIVRandomizedFileSegmentsAndDataProtocolID, p.handleIncomingKeyIVRandomizedFileSegmentsAndData)
 		p.host.SetStreamHandler(EncryptionDataTransferProtocolID, p.handleIncomingEncryptionDataTransfer)
+		p.host.SetStreamHandler(VerifierHasEncryptionMetadataProtocolID, p.handleIncomingVerifierHasEncryptionMetadata)
 
 		if p.dataVerifierVerificationFees == "" {
 			return nil, errors.New("data verification fees is empty")
@@ -148,6 +159,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		}
 	}
 
+	p.host.SetStreamHandler(ContractTransactionValidationProtocolID, p.handleIncomingContractTransactionValidation)
 	p.host.SetStreamHandler(FileTransferProtocolID, p.handleIncomingFileTransfer)
 	p.host.SetStreamHandler(ContractTransferProtocolID, p.handleIncomingContractTransfer)
 
@@ -665,6 +677,209 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 	}
 
 	return nil
+}
+
+// handleIncomingVerifierHasEncryptionMetadata this protocol is used by nodes to query
+// the data verifier about the state of the encryption metadata transfer.
+// encryption metadata is transferred from storage providers to data verifiers
+// this way requester knows when to ask data verifier for the decryption keys.
+func (d *Protocol) handleIncomingVerifierHasEncryptionMetadata(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingVerifierHasEncryptionMetadata stream: %v", err)
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingVerifierHasEncryptionMetadata stream to buffer: %v", err)
+		return
+	}
+
+	fileTransferRequest := messages.FileTransferInfoProto{}
+	if err := proto.Unmarshal(buf, &fileTransferRequest); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingVerifierHasEncryptionMetadata stream: %v", err)
+		return
+	}
+	contractHash := hexutil.Encode(fileTransferRequest.ContractHash)
+	filesInContract, err := d.contractStore.GetContractFiles(contractHash)
+	if err != nil {
+		log.Errorf("failed to get contract files in handleIncomingVerifierHasEncryptionMetadata stream: %v", err)
+		return
+	}
+
+	foundAtLeastOnePendingDataTransfer := false
+	for _, v := range filesInContract {
+		if !v.ReceivedUnencryptedDataFromFileHoster {
+			foundAtLeastOnePendingDataTransfer = true
+			break
+		}
+	}
+
+	responseByte := []byte{2}
+	if foundAtLeastOnePendingDataTransfer {
+		responseByte = []byte{1}
+	}
+
+	_, err = s.Write(responseByte)
+	if err != nil {
+		log.Errorf("failed to write confirmation byte to stream in handleIncomingVerifierHasEncryptionMetadata: %v", err)
+	}
+}
+
+// VerifierHasEncryptionMetadata asks the verifier if all the files encryption metadata in a contract have been transferred from
+// storage provider to data verifier. This will be used by data requester to know when to ask for decryption metadata
+// from the verifier. This protocol can be polled until it returns true or false indicating an error.
+func (d *Protocol) VerifierHasEncryptionMetadata(ctx context.Context, verifierID peer.ID, contractHash []byte) (bool, error) {
+	request := &messages.FileTransferInfoProto{}
+	if len(contractHash) == 0 {
+		return false, errors.New("contract hash is empty")
+	}
+
+	request.ContractHash = make([]byte, len(contractHash))
+	copy(request.ContractHash, contractHash)
+
+	s, err := d.host.NewStream(ctx, verifierID, VerifierHasEncryptionMetadataProtocolID)
+	if err != nil {
+		return false, fmt.Errorf("failed to create new verifier has encryption metadata stream: %w", err)
+	}
+	defer s.Close()
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal protobuf verifier has encryption metadata message: %w", err)
+	}
+
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 4*common.KB {
+		return false, fmt.Errorf("request size is too large for a verifier has encryption metadata equest: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return false, fmt.Errorf("failed to write verifier has encryption metadata request to stream: %w", err)
+	}
+
+	_ = s.CloseWrite()
+	res := make([]byte, 1)
+
+	_, err = s.Read(res)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response from peer: %w", err)
+	}
+
+	return bytes.Equal(res, []byte{2}), nil
+}
+
+// handleIncomingContractTransactionValidation is used by verifier and storage provider
+// to let the caller know that they have successfully see a transaction paid for the contract
+// and caller can perform any required actions
+func (d *Protocol) handleIncomingContractTransactionValidation(s network.Stream) {
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractTransactionValidation stream: %v", err)
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		log.Errorf("failed to read from handleIncomingContractTransactionValidation stream to buffer: %v", err)
+		return
+	}
+
+	fileTransferRequest := messages.FileTransferInfoProto{}
+	if err := proto.Unmarshal(buf, &fileTransferRequest); err != nil {
+		log.Errorf("failed to unmarshall data from handleIncomingContractTransactionValidation stream: %v", err)
+		return
+	}
+
+	contractHash := hexutil.Encode(fileTransferRequest.ContractHash)
+
+	downloadContract, err := d.contractStore.GetContract(contractHash)
+	if err != nil {
+		log.Errorf("failed to find contract in handleIncomingContractTransactionValidation stream: %v", err)
+		return
+	}
+
+	_, err = d.checkValidateContractCreationInTX(downloadContract.ContractHash, downloadContract)
+	if err != nil {
+		log.Errorf("check and validation of contract in tx failed under handleIncomingContractTransactionValidation: %v", err)
+		return
+	}
+
+	// send a small heartbeat with 1 meaning it was found
+	_, err = s.Write([]byte{1})
+	if err != nil {
+		log.Errorf("failed to write confirmation byte to stream in handleIncomingContractTransactionValidation: %v", err)
+	}
+}
+
+// RequestContractTransactionVerification is used by a data downloader to query storage provider and data verifier about a transaction containing a contract hash.
+// This way data requester can orchestrate the downloading procedure.
+func (d *Protocol) RequestContractTransactionVerification(ctx context.Context, peerID peer.ID, contractHash []byte) (bool, error) {
+	request := &messages.FileTransferInfoProto{}
+	if len(contractHash) == 0 {
+		return false, errors.New("contract hash is empty")
+	}
+
+	request.ContractHash = make([]byte, len(contractHash))
+	copy(request.ContractHash, contractHash)
+
+	s, err := d.host.NewStream(ctx, peerID, ContractTransactionValidationProtocolID)
+	if err != nil {
+		return false, fmt.Errorf("failed to create new request contract transaction stream: %w", err)
+	}
+	defer s.Close()
+
+	requestBytes, err := proto.Marshal(request)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal protobuf request contract transaction message: %w", err)
+	}
+
+	requestBufferSize := 8 + len(requestBytes)
+	if requestBufferSize > 4*common.KB {
+		return false, fmt.Errorf("request size is too large for a request contract transaction: %d", requestBufferSize)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(requestBytes)))
+	copy(requestPayloadWithLength[8:], requestBytes)
+	_, err = s.Write(requestPayloadWithLength)
+	if err != nil {
+		return false, fmt.Errorf("failed to write request contract transaction to stream: %w", err)
+	}
+
+	_ = s.CloseWrite()
+	res := make([]byte, 1)
+	_, err = s.Read(res)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response from peer: %w", err)
+	}
+
+	return bytes.Equal(res, []byte{1}), nil
 }
 
 // handleIncomingEncryptionDataTransfer handles incoming encryption data request.

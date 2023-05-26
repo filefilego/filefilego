@@ -369,6 +369,10 @@ func TestDataVerificationMethods(t *testing.T) {
 	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
 	assert.NoError(t, err)
 
+	ok, err := protocolH2.VerifierHasEncryptionMetadata(context.TODO(), verifier1.ID(), contractHash)
+	assert.Error(t, err)
+	assert.False(t, ok)
+
 	// create a transaction that contains the contract details and perform state update
 	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
 	assert.NoError(t, err)
@@ -437,10 +441,20 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileHashHex := hexutil.EncodeNoPrefix(request.FileHash)
 	fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, request.From, request.To)
 	destinationFilePath := filepath.Join(protocolH2.GetDownloadDirectory(), hexutil.Encode(request.ContractHash), fileNameWithPart)
+
+	// check if transaction is available on remote peer
+	ok, err = protocolH2.RequestContractTransactionVerification(context.TODO(), h1.ID(), request.ContractHash)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
 	res, err := protocolH2.RequestFileTransfer(context.TODO(), destinationFilePath, fileNameWithPart, h1.ID(), request)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
 	time.Sleep(200 * time.Millisecond)
+
+	ok, err = protocolH2.VerifierHasEncryptionMetadata(context.TODO(), verifier1.ID(), contractHash)
+	assert.NoError(t, err)
+	assert.True(t, ok)
 
 	merkleNodes, err := common.HashFileBlockSegments(res, totalDesiredFileSegments, orderedSlice)
 	assert.NoError(t, err)
@@ -591,7 +605,7 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	mempoolTxs := blockchain3.GetTransactionsFromPool()
 	assert.Len(t, mempoolTxs, 1)
-	ok, err := mempoolTxs[0].Validate()
+	ok, err = mempoolTxs[0].Validate()
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
