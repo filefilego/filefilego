@@ -430,6 +430,95 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 	return nil
 }
 
+// RequestContractTransactionVerificationArgs represent args for RequestContractTransactionVerification.
+type RequestContractTransactionVerificationArgs struct {
+	ContractHash string `json:"contract_hash"`
+}
+
+// PauseFileDownloadResponse represent response of RequestContractTransactionVerification.
+type RequestContractTransactionVerificationResponse struct {
+	Verified bool `json:"verified"`
+}
+
+// RequestContractTransactionVerification is used by a data downloader to query storage provider and data verifier about a transaction containing a contract hash.
+func (api *DataTransferAPI) RequestContractTransactionVerification(r *http.Request, args *RequestContractTransactionVerificationArgs, response *RequestContractTransactionVerificationResponse) error {
+	contract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	storageProvider, err := peer.Decode(contract.FileHosterResponse.FromPeerAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode storage provider's peer id: %w", err)
+	}
+
+	contractHashBytes, _ := hexutil.Decode(args.ContractHash)
+
+	pubKeyVerifier, err := ffgcrypto.PublicKeyFromBytes(contract.VerifierPublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get the public key of verifier: %w", err)
+	}
+	verifierPeerID, err := peer.IDFromPublicKey(pubKeyVerifier)
+	if err != nil {
+		return fmt.Errorf("failed to get the verifier's peer id from public key: %w", err)
+	}
+
+	ok, err := api.dataVerificationProtocol.RequestContractTransactionVerification(context.Background(), storageProvider, contractHashBytes)
+	if err != nil {
+		return fmt.Errorf("failed to check for contract transaction verification on storage provider: %w", err)
+	}
+
+	ok2, err := api.dataVerificationProtocol.RequestContractTransactionVerification(context.Background(), verifierPeerID, contractHashBytes)
+	if err != nil {
+		return fmt.Errorf("failed to check for contract transaction verification on verifier: %w", err)
+	}
+
+	if ok && ok2 {
+		response.Verified = true
+	}
+
+	return nil
+}
+
+// VerifierHasEncryptionMetadataArgs represent args for VerifierHasEncryptionMetadataArgs.
+type VerifierHasEncryptionMetadataArgs struct {
+	ContractHash string `json:"contract_hash"`
+}
+
+// VerifierHasEncryptionMetadataResponse represent response of VerifierHasEncryptionMetadataResponse.
+type VerifierHasEncryptionMetadataResponse struct {
+	Verified bool `json:"verified"`
+}
+
+// VerifierHasEncryptionMetadata asks the verifier if all the files encryption metadata in a contract have been transferred.
+func (api *DataTransferAPI) VerifierHasEncryptionMetadata(r *http.Request, args *RequestContractTransactionVerificationArgs, response *RequestContractTransactionVerificationResponse) error {
+	contract, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	contractHashBytes, _ := hexutil.Decode(args.ContractHash)
+	pubKeyVerifier, err := ffgcrypto.PublicKeyFromBytes(contract.VerifierPublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to get the public key of verifier: %w", err)
+	}
+	verifierPeerID, err := peer.IDFromPublicKey(pubKeyVerifier)
+	if err != nil {
+		return fmt.Errorf("failed to get the verifier's peer id from public key: %w", err)
+	}
+
+	ok, err := api.dataVerificationProtocol.RequestContractTransactionVerification(context.Background(), verifierPeerID, contractHashBytes)
+	if err != nil {
+		return fmt.Errorf("failed to check if verifier has encryption metadata: %w", err)
+	}
+
+	if ok {
+		response.Verified = true
+	}
+
+	return nil
+}
+
 // PauseFileDownloadArgs represent args.
 type PauseFileDownloadArgs struct {
 	ContractHash string `json:"contract_hash"`
