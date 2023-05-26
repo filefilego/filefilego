@@ -507,7 +507,7 @@ func (api *DataTransferAPI) VerifierHasEncryptionMetadata(r *http.Request, args 
 		return fmt.Errorf("failed to get the verifier's peer id from public key: %w", err)
 	}
 
-	ok, err := api.dataVerificationProtocol.RequestContractTransactionVerification(context.Background(), verifierPeerID, contractHashBytes)
+	ok, err := api.dataVerificationProtocol.VerifierHasEncryptionMetadata(context.Background(), verifierPeerID, contractHashBytes)
 	if err != nil {
 		return fmt.Errorf("failed to check if verifier has encryption metadata: %w", err)
 	}
