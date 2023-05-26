@@ -72,6 +72,7 @@ type Interface interface {
 	RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
 	GetDownloadDirectory() string
 	GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int)
+	RequestContractTransactionVerification(ctx context.Context, peerID peer.ID, contractHash []byte) (bool, error)
 }
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
