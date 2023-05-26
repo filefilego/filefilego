@@ -369,6 +369,10 @@ func TestDataVerificationMethods(t *testing.T) {
 	verifierAddr, err := ffgcrypto.RawPublicToAddress(verifier1PublicKeyBytes)
 	assert.NoError(t, err)
 
+	ok, err := protocolH2.VerifierHasEncryptionMetadata(context.TODO(), verifier1.ID(), contractHash)
+	assert.Error(t, err)
+	assert.False(t, ok)
+
 	// create a transaction that contains the contract details and perform state update
 	fromaddr, err := ffgcrypto.RawPublicToAddress(h2PublicKeyBytes)
 	assert.NoError(t, err)
@@ -439,7 +443,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	destinationFilePath := filepath.Join(protocolH2.GetDownloadDirectory(), hexutil.Encode(request.ContractHash), fileNameWithPart)
 
 	// check if transaction is available on remote peer
-	ok, err := protocolH2.RequestContractTransactionVerification(context.TODO(), h1.ID(), request.ContractHash)
+	ok, err = protocolH2.RequestContractTransactionVerification(context.TODO(), h1.ID(), request.ContractHash)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
