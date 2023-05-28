@@ -171,6 +171,7 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 	p.mu.Lock()
 	_, ok := p.uploadProgress[fileWithPeer]
 	if ok {
+		p.mu.Unlock()
 		return storage.FileMetadata{}, errors.New("file is already uploaded/uploading to remote node")
 	}
 	p.uploadProgress[fileWithPeer] = 0
