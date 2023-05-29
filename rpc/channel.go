@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -140,11 +141,19 @@ func (api *ChannelAPI) CreateNodeItemsTxDataPayload(r *http.Request, args *Creat
 		}
 
 		if v.FileHash != "" {
-			fileHash, err := hexutil.Decode(v.FileHash)
-			if err != nil {
-				return fmt.Errorf("failed to decode file hash: %w", err)
+			if strings.HasPrefix(v.FileHash, "0x") {
+				fileHash, err := hexutil.Decode(v.FileHash)
+				if err != nil {
+					return fmt.Errorf("failed to decode file hash: %w", err)
+				}
+				item.FileHash = fileHash
+			} else {
+				fileHash, err := hexutil.DecodeNoPrefix(v.FileHash)
+				if err != nil {
+					return fmt.Errorf("failed to decode file hash: %w", err)
+				}
+				item.FileHash = fileHash
 			}
-			item.FileHash = fileHash
 		}
 
 		if v.ContentType != "" {
