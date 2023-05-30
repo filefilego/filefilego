@@ -495,7 +495,11 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return fmt.Errorf("failed to decode storage querier peer id: %w", err)
 		}
 
-		_ = n.FindPeers(ctx, []peer.ID{storageQuerier})
+		querierAddr := n.host.Peerstore().Addrs(storageQuerier)
+		if len(querierAddr) == 0 {
+			_ = n.FindPeers(ctx, []peer.ID{storageQuerier})
+		}
+
 		err = n.storageProtocol.SendStorageQueryResponse(ctx, storageQuerier, &response)
 		if err != nil {
 			log.Warnf("failed to send data query response back to initiator: %v", err)

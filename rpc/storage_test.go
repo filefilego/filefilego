@@ -15,7 +15,7 @@ func TestNewStorageAPI(t *testing.T) {
 	h := newHost(t, "6691")
 	cases := map[string]struct {
 		host            host.Host
-		publisher       NetworkMessagePublisher
+		publisher       PublisherNodesFinder
 		storageProtocol storageprotocol.Interface
 		storageEngine   storage.Interface
 		expErr          string

@@ -28,7 +28,7 @@ const (
 // StorageAPI represents the storage rpc service.
 type StorageAPI struct {
 	host            host.Host
-	publisher       NetworkMessagePublisher
+	publisher       PublisherNodesFinder
 	storageProtocol storageprotocol.Interface
 	storageEngine   storage.Interface
 	jobQueue        *jobQueue
@@ -47,7 +47,7 @@ type jobQueue struct {
 }
 
 // NewStorageAPI creates a new storage API to be served using JSONRPC.
-func NewStorageAPI(host host.Host, publisher NetworkMessagePublisher, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
+func NewStorageAPI(host host.Host, publisher PublisherNodesFinder, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -103,6 +103,11 @@ func (api *StorageAPI) startWorker() {
 		job, ok := <-api.jobQueue.jobs
 		if !ok {
 			return
+		}
+
+		addrStorageProvider := api.host.Peerstore().Addrs(job.PeerID)
+		if len(addrStorageProvider) == 0 {
+			_ = api.publisher.FindPeers(context.Background(), []peer.ID{job.PeerID})
 		}
 
 		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), job.PeerID, job.FilePath, job.ChannelNodeItemHash)
@@ -165,6 +170,11 @@ func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedW
 
 	if args.FileSize == 0 {
 		return fmt.Errorf("file size is empty")
+	}
+
+	addrStorageProvider := api.host.Peerstore().Addrs(peerID)
+	if len(addrStorageProvider) == 0 {
+		_ = api.publisher.FindPeers(r.Context(), []peer.ID{peerID})
 	}
 
 	timeelapsed, err := api.storageProtocol.TestSpeedWithRemotePeer(r.Context(), peerID, args.FileSize)
