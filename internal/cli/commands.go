@@ -77,6 +77,14 @@ var (
 				Description: `
 				Lists all available addresses`,
 			},
+			{
+				Name:   "data_dir",
+				Usage:  "data_dir",
+				Action: ShowDefaultDataDir,
+				Flags:  []cli.Flag{},
+				Description: `
+				Show default data dir`,
+			},
 		},
 	}
 )
@@ -179,5 +187,11 @@ func CreateNodeIDKey(ctx *cli.Context) error {
 		return fmt.Errorf("failed to rename node identity key file: %w", err)
 	}
 
+	return nil
+}
+
+// CreateNodeIDKey creates a node key identity file.
+func ShowDefaultDataDir(ctx *cli.Context) error {
+	fmt.Printf("Default Data Directory: %s", common.DefaultDataDir())
 	return nil
 }
