@@ -93,6 +93,12 @@ func (api *StorageAPI) addJob(job job) {
 }
 
 func (api *StorageAPI) startWorker() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("recovering panic from %v", r)
+		}
+	}()
+
 	for {
 		job, ok := <-api.jobQueue.jobs
 		if !ok {
