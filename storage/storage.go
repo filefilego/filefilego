@@ -491,6 +491,13 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileMetadata, err := s.GetFileMetadata(fHash, s.peerID)
+	if err == nil {
+		os.Remove(old)
+		writeHeaderPayload(w, http.StatusOK, fmt.Sprintf(`{"file_name":"%s","file_hash": "%s", "merkle_root_hash": "%s", "size": %d}`, fileMetadata.FileName, fileMetadata.Hash, fileMetadata.MerkleRootHash, fileMetadata.Size))
+		return
+	}
+
 	newPath := filepath.Join(folderPath, fHash)
 	err = os.Rename(old, newPath)
 	if err != nil {
@@ -514,22 +521,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileName = html.EscapeString(fileName)
-	fileMetadata := FileMetadata{
+	fileMetadata = FileMetadata{
 		FileName:       fileName,
 		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
 		Hash:           fHash,
 		FilePath:       newPath,
 		Size:           fileSize,
-	}
-
-	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
-	if fileHashExistsInDB {
-		fileMetadata, err = s.GetFileMetadata(nodeHashDB, s.peerID)
-		if err != nil {
-			os.Remove(newPath)
-			writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
-			return
-		}
 	}
 
 	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
@@ -639,6 +636,22 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
+	fileMetadata, err := s.GetFileMetadata(fHash, s.peerID)
+	if err == nil {
+		os.Remove(old)
+		fileMetadataBytes, err := json.Marshal(fileMetadata)
+		if err != nil {
+			log.Errorf("failed to marshal file metadata: %v", err)
+		}
+
+		_, err = stream.Write(fileMetadataBytes)
+		if err != nil {
+			log.Errorf("failed to write the uploaded file metadata bytes to the stream: %v", err)
+		}
+
+		return
+	}
+
 	newPath := filepath.Join(folderPath, fHash)
 
 	if !common.FileExists(newPath) {
@@ -666,22 +679,12 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 	}
 
 	fileName = html.EscapeString(fileName)
-	fileMetadata := FileMetadata{
+	fileMetadata = FileMetadata{
 		FileName:       fileName,
 		MerkleRootHash: hexutil.Encode(fMerkleRootHash),
 		Hash:           fHash,
 		FilePath:       newPath,
 		Size:           fileSize,
-	}
-
-	nodeHashDB, fileHashExistsInDB := s.GetNodeHashFromFileHash(fHash)
-	if fileHashExistsInDB {
-		fileMetadata, err = s.GetFileMetadata(nodeHashDB, s.peerID)
-		if err != nil {
-			log.Errorf("failed to get file merkle root hash: %v", err)
-			os.Remove(newPath)
-			return
-		}
 	}
 
 	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
