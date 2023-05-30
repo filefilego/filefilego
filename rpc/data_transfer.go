@@ -682,7 +682,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		// reassemble all file parts
 		filePartInfos := api.contractStore.GetDownoadedFilePartInfos(args.ContractHash, fileHash)
 		outputFilePath := filepath.Join(filepath.Dir(filePartInfos[0].DestinationFilePath), args.FileHash)
-		log.Info("outputfile path ", outputFilePath)
+
 		fileParts := make([]string, len(filePartInfos))
 		for i, v := range filePartInfos {
 			fileParts[i] = v.DestinationFilePath
@@ -792,9 +792,13 @@ type DownloadFileProgressArgs struct {
 }
 
 // DownloadFileProgressResponse represents the response of a download file progress.
+// file_concatenation is true when all files have been reassembled into one file.
+// This is useful to let client know when to send the merkle hashes of the downloaded file
+// because there will be some delay collecting and writing all the parts in one file
 type DownloadFileProgressResponse struct {
-	Error            string `json:"error"`
-	BytesTransferred uint64 `json:"bytes_transferred"`
+	Error             string `json:"error"`
+	BytesTransferred  uint64 `json:"bytes_transferred"`
+	FileConcatenation bool   `json:"file_concatenation"`
 }
 
 // DownloadFileProgress returns the download progress of a file.
@@ -811,6 +815,21 @@ func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *Download
 
 	response.BytesTransferred = api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	response.Error = fileInfo.Error
+
+	// This part is to make sure that the final concateneted file is created and contains all the data.
+	// Calling this function could show the downloaded progress completed, but the file will still
+	// be copied to a final part which will introduce errors specially when we try to send its merkle hashes
+	// to verifier. By checking this, we make sure the parts are not there, therefore parts were converted to final file.
+	filePartInfos := api.contractStore.GetDownoadedFilePartInfos(args.ContractHash, fileHash)
+	concatFinished := true
+	for _, v := range filePartInfos {
+		if common.FileExists(v.DestinationFilePath) {
+			concatFinished = false
+			break
+		}
+	}
+
+	response.FileConcatenation = concatFinished
 
 	return nil
 }
