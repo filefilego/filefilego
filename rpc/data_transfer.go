@@ -378,19 +378,18 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 		peerIDs = append(peerIDs, peerID)
 	}
 
-	addrsInfos := api.publisherNodesFinder.FindPeers(r.Context(), peerIDs)
+	_ = api.publisherNodesFinder.FindPeers(r.Context(), peerIDs)
 	dqrTransferRequest := &messages.DataQueryResponseTransferProto{Hash: dataQueryRequestHashBytes}
-	if len(addrsInfos) > 0 {
-		var wg sync.WaitGroup
-		for _, addInfo := range addrsInfos {
-			wg.Add(1)
-			go func(peerID peer.ID) {
-				defer wg.Done()
-				_ = api.dataQueryProtocol.RequestDataQueryResponseTransfer(r.Context(), peerID, dqrTransferRequest)
-			}(addInfo.ID)
-		}
-		wg.Wait()
+
+	var wg sync.WaitGroup
+	for _, pid := range peerIDs {
+		wg.Add(1)
+		go func(peerID peer.ID) {
+			defer wg.Done()
+			_ = api.dataQueryProtocol.RequestDataQueryResponseTransfer(r.Context(), peerID, dqrTransferRequest)
+		}(pid)
 	}
+	wg.Wait()
 
 	// query again the inmem store to check if data query response from verifiers populated the store
 	responses, _ := api.dataQueryProtocol.GetQueryResponse(args.DataQueryRequestHash)
@@ -463,6 +462,21 @@ func (api *DataTransferAPI) RequestContractTransactionVerification(r *http.Reque
 		return fmt.Errorf("failed to get the verifier's peer id from public key: %w", err)
 	}
 
+	pidsToFind := []peer.ID{}
+	addrStorageProvider := api.host.Peerstore().Addrs(storageProvider)
+	if len(addrStorageProvider) == 0 {
+		pidsToFind = append(pidsToFind, storageProvider)
+	}
+
+	addrVerifier := api.host.Peerstore().Addrs(verifierPeerID)
+	if len(addrVerifier) == 0 {
+		pidsToFind = append(pidsToFind, verifierPeerID)
+	}
+
+	if len(pidsToFind) > 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), pidsToFind)
+	}
+
 	ok, err := api.dataVerificationProtocol.RequestContractTransactionVerification(context.Background(), storageProvider, contractHashBytes)
 	if err != nil {
 		return fmt.Errorf("failed to check for contract transaction verification on storage provider: %w", err)
@@ -505,6 +519,11 @@ func (api *DataTransferAPI) VerifierHasEncryptionMetadata(r *http.Request, args 
 	verifierPeerID, err := peer.IDFromPublicKey(pubKeyVerifier)
 	if err != nil {
 		return fmt.Errorf("failed to get the verifier's peer id from public key: %w", err)
+	}
+
+	addrVerifier := api.host.Peerstore().Addrs(verifierPeerID)
+	if len(addrVerifier) == 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), []peer.ID{verifierPeerID})
 	}
 
 	ok, err := api.dataVerificationProtocol.VerifierHasEncryptionMetadata(context.Background(), verifierPeerID, contractHashBytes)
@@ -575,6 +594,11 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	fileHoster, err := peer.Decode(downloadContract.FileHosterResponse.FromPeerAddr)
 	if err != nil {
 		return fmt.Errorf("failed to decode file hoster's peer id: %w", err)
+	}
+
+	addrFileHoster := api.host.Peerstore().Addrs(fileHoster)
+	if len(addrFileHoster) == 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), []peer.ID{fileHoster})
 	}
 
 	fileSize := uint64(0)
@@ -912,6 +936,11 @@ func (api *DataTransferAPI) SendFileMerkleTreeNodesToVerifier(r *http.Request, a
 		return fmt.Errorf("failed to get verifier's peer id: %w", err)
 	}
 
+	addrVerifier := api.host.Peerstore().Addrs(verifierID)
+	if len(addrVerifier) == 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), []peer.ID{verifierID})
+	}
+
 	err = api.dataVerificationProtocol.SendFileMerkleTreeNodesToVerifier(context.Background(), verifierID, merkleRequest)
 	if err != nil {
 		return fmt.Errorf("failed to send merkle tree nodes to verifier: %w", err)
@@ -1038,6 +1067,11 @@ func (api *DataTransferAPI) RequestEncryptionDataFromVerifierAndDecrypt(r *http.
 		return fmt.Errorf("failed to get verifier's peer id: %w", err)
 	}
 
+	addrVerifier := api.host.Peerstore().Addrs(verifierID)
+	if len(addrVerifier) == 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), []peer.ID{verifierID})
+	}
+
 	encryptionData, err := api.dataVerificationProtocol.RequestEncryptionData(context.Background(), verifierID, encRequest)
 	if err != nil {
 		return fmt.Errorf("failed to request decryption data from verifier: %w", err)
@@ -1121,6 +1155,21 @@ func (api *DataTransferAPI) SendContractToFileHosterAndVerifier(r *http.Request,
 	fileHosterID, err := peer.IDFromPublicKey(publicKeyHoster)
 	if err != nil {
 		return fmt.Errorf("failed to get file hoster's peer id: %w", err)
+	}
+
+	pidsToFind := []peer.ID{}
+	addrStorageProvider := api.host.Peerstore().Addrs(fileHosterID)
+	if len(addrStorageProvider) == 0 {
+		pidsToFind = append(pidsToFind, fileHosterID)
+	}
+
+	addrVerifier := api.host.Peerstore().Addrs(verifierID)
+	if len(addrVerifier) == 0 {
+		pidsToFind = append(pidsToFind, verifierID)
+	}
+
+	if len(pidsToFind) > 0 {
+		_ = api.publisherNodesFinder.FindPeers(r.Context(), pidsToFind)
 	}
 
 	err = api.dataVerificationProtocol.TransferContract(r.Context(), verifierID, downloadContract)
