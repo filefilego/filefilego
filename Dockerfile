@@ -7,7 +7,7 @@ COPY data data
 
 RUN ./filefilego address create_node_key admin
 
-VOLUME [ "/root/.filefilego_data/" ]
+VOLUME [ "/root/filefilego_data/" ]
 
 EXPOSE 8090
 

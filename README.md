@@ -161,8 +161,8 @@ A list of available CLI flags are available below or you can run `./filefilego h
   --node_identity_passphrase value                     Passphrase to unlock the node identity file
   --log_path_line                                      Logs include file path and line number (default: false)
   --log_level value                                    Logging level
-  --data_dir value                                     Data directory to store data/metadata (default: "/home/filefilego/.filefilego_data")
-  --keystore_dir value                                 Keystore directory (default: "/home/filefilego/.filefilego_data/keystore")
+  --data_dir value                                     Data directory to store data/metadata (default: "/home/filefilego/filefilego_data")
+  --keystore_dir value                                 Keystore directory (default: "/home/filefilego/filefilego_data/keystore")
   --validator                                          Enable Validator (default: false)
   --validator_keypath value                            Path to the key for sealing blocks
   --validator_key_pass value                           Passphrase of keyfile [$FFG_VERIFIER_PASSPHRASE]
