@@ -192,6 +192,6 @@ func CreateNodeIDKey(ctx *cli.Context) error {
 
 // CreateNodeIDKey creates a node key identity file.
 func ShowDefaultDataDir(ctx *cli.Context) error {
-	fmt.Printf("Default Data Directory::%s\n", common.DefaultDataDir())
+	fmt.Printf("Default Data Directory::%s", common.DefaultDataDir())
 	return nil
 }
