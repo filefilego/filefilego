@@ -8,12 +8,12 @@ func GetDirectoryFreeSpace(directoryPath string) (uint64, error) {
 
 	pathPtr, err := windows.UTF16PtrFromString(directoryPath)
 	if err != nil {
-		return err
+		return free, err
 	}
 
 	err = windows.GetDiskFreeSpaceEx(pathPtr, &free, &total, &avail)
 	if err != nil {
-		return err
+		return free, err
 	}
 
 	return free, nil
