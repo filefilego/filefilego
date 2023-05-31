@@ -13,12 +13,12 @@ services:
     extra_hosts:
         - "host.docker.internal:host-gateway"
     volumes:
-        - $FFG_VERIFIER_KEYPATH:/root/.filefilego_data/keystore/node_identity.json
+        - $FFG_VERIFIER_KEYPATH:/root/filefilego_data/keystore/node_identity.json
     command:
         - /bin/bash
         - -c
         - |
-          ./filefilego --geolite_db_path=data/GeoLite2-Country.mmdb --debug --validator --validator_keypath="/root/.filefilego_data/keystore/node_identity.json" --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/"
+          ./filefilego --geolite_db_path=data/GeoLite2-Country.mmdb --debug --validator --validator_keypath="/root/filefilego_data/keystore/node_identity.json" --node_identity_passphrase=$FFG_VERIFIER_PASSPHRASE --rpc_services="*" --search_engine --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/"
 
   node1storage:
     hostname: node1storage.local
@@ -32,7 +32,7 @@ services:
         - /bin/bash
         - -c
         - |
-          rm /root/.filefilego_data/keystore/node_identity.json
+          rm /root/filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
           ./filefilego --geolite_db_path=data/GeoLite2-Country.mmdb --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_public --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
@@ -48,7 +48,7 @@ services:
         - /bin/bash
         - -c
         - |
-          rm /root/.filefilego_data/keystore/node_identity.json
+          rm /root/filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
           ./filefilego --show_storage_capacity --geolite_db_path=data/GeoLite2-Country.mmdb --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --node_identity_passphrase=admin --rpc_services="*" --search_engine --storage --storage_public --storage_dir="/home/" --storage_token="admintoken" --storage_fees_byte="0" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
 
@@ -63,7 +63,7 @@ services:
     extra_hosts:
         - "host.docker.internal:host-gateway"
     volumes:
-        - $FFG_VERIFIER1_KEYPATH:/root/.filefilego_data/keystore/node_identity.json
+        - $FFG_VERIFIER1_KEYPATH:/root/filefilego_data/keystore/node_identity.json
     command:
         - /bin/bash
         - -c
@@ -81,7 +81,7 @@ services:
     extra_hosts:
         - "host.docker.internal:host-gateway"
     volumes:
-        - $FFG_VERIFIER2_KEYPATH:/root/.filefilego_data/keystore/node_identity.json
+        - $FFG_VERIFIER2_KEYPATH:/root/filefilego_data/keystore/node_identity.json
     command:
         - /bin/bash
         - -c
@@ -100,6 +100,6 @@ services:
         - /bin/bash
         - -c
         - |
-          rm /root/.filefilego_data/keystore/node_identity.json
+          rm /root/filefilego_data/keystore/node_identity.json
           ./filefilego address create_node_key admin
           ./filefilego --geolite_db_path=data/GeoLite2-Country.mmdb --storage_file_segments_encryption_percentage=5 --storage_file_merkle_tree_total_segments=1024 --debug --super_light_node --node_identity_passphrase=admin --rpc_services="data_transfer,transaction,address,filefilego" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/ffg/Downloads/" --bootstrap_nodes="/dns/validator.local/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"

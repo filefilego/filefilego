@@ -869,11 +869,11 @@ func DefaultDataDir() string {
 	if home != "" {
 		switch runtime.GOOS {
 		case "darwin":
-			return filepath.Join(home, "Library", ".filefilego_data")
+			return filepath.Join(home, "Library", "filefilego_data")
 		case "windows":
-			return filepath.Join(home, "AppData", "Roaming", ".filefilego_data")
+			return filepath.Join(home, "AppData", "Roaming", "filefilego_data")
 		default:
-			return filepath.Join(home, ".filefilego_data")
+			return filepath.Join(home, "filefilego_data")
 		}
 	}
 	return ""
