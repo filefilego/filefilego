@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -81,6 +82,7 @@ func TestStorageProtocol(t *testing.T) {
 		PublicKey:               pubKeyBytes,
 		Uptime:                  30,
 		StorageCapacity:         10,
+		Platform:                runtime.GOOS,
 	}
 
 	data := bytes.Join(
@@ -122,6 +124,12 @@ func TestStorageProtocol(t *testing.T) {
 	fhash, err := ffgcrypto.Sha1File("storage.go")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, fhash)
+
+	// uploada file with cancelled context
+	cancelCtx, cancel := context.WithCancel(context.TODO())
+	cancel()
+	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
+	assert.EqualError(t, err, "failed to create new file upload stream: context canceled")
 
 	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
 	assert.NoError(t, err)

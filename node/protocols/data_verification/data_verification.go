@@ -1413,23 +1413,27 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, destinationFilePath,
 	defer destinationFile.Close()
 
 	buf := make([]byte, bufferSize)
-	for {
-		n, err := s.Read(buf)
-		if n > 0 {
-			wroteN, err := destinationFile.Write(buf[:n])
-			if wroteN != n || err != nil {
-				return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
+	loopFinished := false
+	for !loopFinished {
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("download operation cancelled: %w", ctx.Err())
+		default:
+			n, err := s.Read(buf)
+			if n > 0 {
+				wroteN, err := destinationFile.Write(buf[:n])
+				if wroteN != n || err != nil {
+					return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
+				}
+
+				d.contractStore.IncrementTransferredBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, request.To, uint64(wroteN))
 			}
 
-			d.contractStore.IncrementTransferredBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, request.To, uint64(wroteN))
-		}
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return "", fmt.Errorf("fialed to read file content to buffer: %w", err)
+			if err == io.EOF {
+				loopFinished = true
+			} else if err != nil {
+				return "", fmt.Errorf("fialed to read file content to buffer: %w", err)
+			}
 		}
 	}
 

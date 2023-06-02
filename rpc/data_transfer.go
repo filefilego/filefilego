@@ -538,6 +538,43 @@ func (api *DataTransferAPI) VerifierHasEncryptionMetadata(r *http.Request, args 
 	return nil
 }
 
+// CancelFileDownloadArgs represent args.
+type CancelFileDownloadsByContractHashArgs struct {
+	ContractHash string `json:"contract_hash"`
+}
+
+// CancelFileDownloadResponse represent response.
+type CancelFileDownloadsByContractHashResponse struct {
+	Success bool `json:"success"`
+}
+
+// PauseFileDownload pauses a file download.
+func (api *DataTransferAPI) CancelFileDownloadsByContractHash(r *http.Request, args *CancelFileDownloadsByContractHashArgs, response *CancelFileDownloadsByContractHashResponse) error {
+	_, err := api.contractStore.GetContract(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	files, err := api.contractStore.GetContractFiles(args.ContractHash)
+	if err != nil {
+		return fmt.Errorf("failed to get contract files: %w", err)
+	}
+
+	for _, v := range files {
+		_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + hexutil.EncodeNoPrefix(v.FileHash))
+	}
+
+	destinationContractFolder := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), args.ContractHash)
+	err = os.RemoveAll(destinationContractFolder)
+	if err != nil {
+		return fmt.Errorf("failed to remove the contract folder: %w", err)
+	}
+
+	response.Success = true
+
+	return nil
+}
+
 // PauseFileDownloadArgs represent args.
 type PauseFileDownloadArgs struct {
 	ContractHash string `json:"contract_hash"`
@@ -615,6 +652,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	// trigger a file initialization by seting the size of the file
 	api.contractStore.SetFileSize(args.ContractHash, fileHash, fileSize)
 
+	ctxWithCancel, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		if args.ReDownload {
 			// cancel all pending contexts
@@ -671,7 +710,6 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 					To:           fileRange.to,
 				}
 
-				ctxWithCancel, cancel := context.WithCancel(context.Background())
 				api.contractStore.SetContractFileDownloadContexts(args.ContractHash+args.FileHash, contract.ContextFileDownloadData{
 					From:   fileRange.from + fileRange.availableSize,
 					To:     fileRange.to,

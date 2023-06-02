@@ -134,6 +134,7 @@ func New(db database.Database) (*Store, error) {
 }
 
 // CancelContractFileDownloadContexts cancels all the contexts file part downloads.
+// key is ContractHash + FileHash
 func (c *Store) CancelContractFileDownloadContexts(key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -144,7 +145,9 @@ func (c *Store) CancelContractFileDownloadContexts(key string) error {
 	}
 
 	for _, v := range cfDownloadContexts {
-		v.Cancel()
+		if v.Cancel != nil {
+			v.Cancel()
+		}
 	}
 
 	delete(c.contractfileDownloadContxts, key)
