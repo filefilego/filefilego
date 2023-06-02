@@ -177,6 +177,9 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 	p.uploadProgress[fileWithPeer] = 0
 	p.mu.Unlock()
 
+	// reset the status by setting the error to nil
+	p.SetUploadingStatus(peerID, filePath, "", nil)
+
 	requestBytes, err := proto.Marshal(request)
 	if err != nil {
 		return storage.FileMetadata{}, fmt.Errorf("failed to marshal a file upload request: %w", err)
@@ -196,24 +199,30 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 	}
 
 	buf := make([]byte, bufferSize)
-	for {
-		n, err := input.Read(buf)
-		if n > 0 {
-			_, err := s.Write(buf[:n])
-			if err != nil {
-				return storage.FileMetadata{}, fmt.Errorf("failed to write content to remote stream: %w", err)
+	loopFinished := false
+	for !loopFinished {
+		select {
+		case <-ctx.Done():
+			p.SetUploadingStatus(peerID, filePath, "", errors.New("cancelled"))
+			delete(p.uploadProgress, fileWithPeer)
+			return storage.FileMetadata{}, fmt.Errorf("upload operation cancelled: %w", ctx.Err())
+		default:
+			n, err := input.Read(buf)
+			if n > 0 {
+				_, err := s.Write(buf[:n])
+				if err != nil {
+					return storage.FileMetadata{}, fmt.Errorf("failed to write content to remote stream: %w", err)
+				}
+				uploaded := p.uploadProgress[fileWithPeer]
+				uploaded += n
+				p.uploadProgress[fileWithPeer] = uploaded
 			}
-			uploaded := p.uploadProgress[fileWithPeer]
-			uploaded += n
-			p.uploadProgress[fileWithPeer] = uploaded
-		}
 
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return storage.FileMetadata{}, fmt.Errorf("failed to write the file to remote stream: %w", err)
+			if err == io.EOF {
+				loopFinished = true
+			} else if err != nil {
+				return storage.FileMetadata{}, fmt.Errorf("failed to write the file to remote stream: %w", err)
+			}
 		}
 	}
 

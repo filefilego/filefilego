@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"sync"
 	"time"
 
@@ -457,6 +458,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			PublicKey:               make([]byte, len(pubKeyBytes)),
 			StorageCapacity:         storageDirCapacity,
 			Uptime:                  time.Now().Unix() - n.uptime,
+			Platform:                runtime.GOOS,
 		}
 
 		copy(response.PublicKey, pubKeyBytes)

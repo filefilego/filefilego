@@ -38,6 +38,7 @@ message StorageQueryResponseProto {
     int64 uptime = 7;
     int64 system_uptime = 8;
     uint64 storage_capacity = 9;
+    string platform = 10;
 }
 
 // StorageFileUploadMetadataProto represents a file's name and associated channel node item hash.

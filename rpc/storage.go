@@ -372,6 +372,7 @@ type JSONStorageProvider struct {
 	Country                 *geoip2.Country `json:"country"`
 	UptimeSeconds           int64           `json:"uptime_seconds"`
 	StorageCapacity         uint64          `json:"storage_capacity"`
+	Platform                string          `json:"platform"`
 }
 
 // GetDiscoveredProviders returns a list of discovered storage providers.
@@ -389,6 +390,7 @@ func (api *StorageAPI) GetDiscoveredProviders(r *http.Request, args *EmptyArgs, 
 			Country:                 v.Country,
 			UptimeSeconds:           v.Response.Uptime,
 			StorageCapacity:         v.Response.StorageCapacity,
+			Platform:                v.Response.Platform,
 		}
 	}
 
