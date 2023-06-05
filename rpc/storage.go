@@ -110,7 +110,9 @@ func (api *StorageAPI) startWorker() {
 			_ = api.publisher.FindPeers(context.Background(), []peer.ID{job.PeerID})
 		}
 
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		ctxWithCancel, cancel := context.WithCancel(context.Background())
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
 		err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
 		if err != nil {

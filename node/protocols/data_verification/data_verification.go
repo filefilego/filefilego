@@ -952,7 +952,12 @@ func (d *Protocol) handleIncomingEncryptionDataTransfer(s network.Stream) {
 		if fileInfo.ReceivedUnencryptedDataFromFileHoster {
 			fileHashHex := hexutil.EncodeNoPrefix(fileInfo.FileHash)
 			destinationFilePath := filepath.Join(d.downloadDirectory, verifierSubDirectory, contractHashHex, fileHashHex)
-			_, _, totalSegmentsToEncrypt, encryptEverySegment := common.FileSegmentsInfo(int(fileInfo.FileSize), d.merkleTreeTotalSegments, d.encryptionPercentage)
+			_, _, totalSegmentsToEncrypt, encryptEverySegment, err := common.FileSegmentsInfo(int(fileInfo.FileSize), d.merkleTreeTotalSegments, d.encryptionPercentage)
+			if err != nil {
+				log.Errorf("failed to get file segments info in handleIncomingEncryptionDataTransfer: %v", err)
+				return
+			}
+
 			orderedSliceForRawfile := []int{}
 			for i := 0; i < totalSegmentsToEncrypt; i++ {
 				orderedSliceForRawfile = append(orderedSliceForRawfile, i)
@@ -1152,7 +1157,10 @@ func (d *Protocol) SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.
 		return fmt.Errorf("failed to get stats of input file: %w", err)
 	}
 
-	howManySegmentsAllowedForFile, segmentSizeBytes, totalSegmentsToEncrypt, _ := common.FileSegmentsInfo(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage)
+	howManySegmentsAllowedForFile, segmentSizeBytes, totalSegmentsToEncrypt, _, err := common.FileSegmentsInfo(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage)
+	if err != nil {
+		return fmt.Errorf("failed to get file segment info: %w", err)
+	}
 	contractHashBytes, err := hexutil.Decode(contractHash)
 	if err != nil {
 		return fmt.Errorf("failed to decode contract hash: %w", err)
@@ -1680,7 +1688,11 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 			return
 		}
 
-		howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage)
+		howManySegments, _, _, _, err := common.FileSegmentsInfo(int(fileMetadata.Size), d.merkleTreeTotalSegments, d.encryptionPercentage)
+		if err != nil {
+			log.Errorf("failed to get file segment info in handleIncomingFileTransfer: %v", err)
+			return
+		}
 		randomSlices := common.GenerateRandomIntSlice(howManySegments)
 
 		_ = d.contractStore.SetKeyIVEncryptionTypeRandomizedFileSegments(contractHash, fileTransferRequest.FileHash, key, iv, fileMerkleRootHash, common.EncryptionTypeAES256, randomSlices, uint64(fileMetadata.Size))

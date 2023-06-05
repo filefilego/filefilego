@@ -655,6 +655,8 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	ctxWithCancel, cancel := context.WithCancel(context.Background())
 
 	go func() {
+		defer cancel()
+
 		if args.ReDownload {
 			// cancel all pending contexts
 			_ = api.contractStore.CancelContractFileDownloadContexts(args.ContractHash + args.FileHash)

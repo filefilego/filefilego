@@ -484,6 +484,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if fileSize <= 0 {
+		os.Remove(old)
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "file size is zero"}`)
+		return
+	}
+
 	fHash, err := crypto.Sha1File(old)
 	if err != nil {
 		os.Remove(old)
@@ -507,7 +513,14 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	howManySegments, _, _, _, err := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	if err != nil {
+		log.Errorf("failed to get file segment info: %v", err)
+		os.Remove(old)
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "failed to get file segment info"}`)
+		return
+	}
+
 	orderedSlice := make([]int, howManySegments)
 	for i := 0; i < howManySegments; i++ {
 		orderedSlice[i] = i
@@ -541,6 +554,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // ServeHTTP handles file uploading.
 func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("recovering panic from HandleIncomingFileUploads %v", r)
+		}
+	}()
+
 	c := bufio.NewReader(stream)
 	defer stream.Close()
 
@@ -629,6 +648,12 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
+	if fileSize <= 0 {
+		log.Error("file size is zero")
+		os.Remove(old)
+		return
+	}
+
 	fHash, err := crypto.Sha1File(old)
 	if err != nil {
 		log.Errorf("failed to hash destination file: %v", err)
@@ -665,7 +690,18 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		os.Remove(old)
 	}
 
-	howManySegments, _, _, _ := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	howManySegments, _, _, _, err := common.FileSegmentsInfo(int(fileSize), s.merkleTreeTotalSegments, 0)
+	if err != nil {
+		log.Errorf("failed to get file segment info: segment: %d filesize: %d : %v", howManySegments, fileSize, err)
+		return
+	}
+
+	if howManySegments <= 0 {
+		log.Errorf("invalid file segment: %d filesize: %d", howManySegments, fileSize)
+		os.Remove(newPath)
+		return
+	}
+
 	orderedSlice := make([]int, howManySegments)
 	for i := 0; i < howManySegments; i++ {
 		orderedSlice[i] = i
