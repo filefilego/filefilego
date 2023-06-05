@@ -20,7 +20,7 @@ require (
 	github.com/oschwald/geoip2-golang v1.8.0
 	github.com/rodaine/table v1.1.0
 	github.com/schollz/progressbar/v3 v3.13.1
-	github.com/sirupsen/logrus v1.9.2
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/urfave/cli/v2 v2.25.5
