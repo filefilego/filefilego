@@ -250,7 +250,6 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		select {
 		case <-ctx.Done():
 			p.SetUploadingStatus(peerID, filePath, "", errors.New("cancelled"))
-			delete(p.uploadProgress, fileWithPeer)
 			return storage.FileMetadata{}, fmt.Errorf("upload operation cancelled: %w", ctx.Err())
 		default:
 			n, err := input.Read(buf)
@@ -259,9 +258,12 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 				if err != nil {
 					return storage.FileMetadata{}, fmt.Errorf("failed to write content to remote stream: %w", err)
 				}
+
+				p.mu.Lock()
 				uploaded := p.uploadProgress[fileWithPeer]
 				uploaded += n
 				p.uploadProgress[fileWithPeer] = uploaded
+				p.mu.Unlock()
 			}
 
 			if err == io.EOF {
