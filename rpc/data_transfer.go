@@ -736,6 +736,13 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 		}
 		wg.Wait()
 
+		// if context was canceled just return
+		if ctxWithCancel.Err() != nil {
+			if ctxWithCancel.Err().Error() == "context canceled" {
+				return
+			}
+		}
+
 		// check if all file parts have been downloaded
 		totalDownloaded := api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 		if totalDownloaded != fileSize {
