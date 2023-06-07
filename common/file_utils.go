@@ -158,7 +158,10 @@ type ReadWriteSeekerSyncer interface {
 
 // DecryptFileSegments decrypts the segments and replaces them in the original file and then performs a file block/segment re-arrangement and writes to the output.
 func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input ReadWriteSeekerSyncer, output io.WriteCloser, encryptor DataEncryptor, onlyFileReArrangement bool) error {
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt: %w", err)
+	}
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomizedFileSegments)
 	if !ok || len(ranges) == 0 {
 		return errors.New("failed to prepare file blocks")
@@ -222,7 +225,7 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 		}
 	}
 
-	_, err := input.Seek(0, 0)
+	_, err = input.Seek(0, 0)
 	if err != nil {
 		return fmt.Errorf("failed to seek to the beginning of the file: %w", err)
 	}
@@ -282,7 +285,10 @@ func DecryptFileSegments(fileSize, totalSegments, percentageToEncryptData int, r
 
 // WriteUnencryptedSegments takes the file segments that need to be encrypted and copies them to output before encryption is performed.
 func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser) error {
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	if err != nil {
+		return fmt.Errorf("failed to write unencrypted segments: %w", err)
+	}
 	if len(randomizedFileSegments) != howManySegments {
 		return fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
 	}
@@ -345,7 +351,11 @@ func WriteUnencryptedSegments(fileSize, totalSegments, percentageToEncryptData i
 
 // EncryptAndHashSegments encrypts a file's raw segment given a key and hashes the segment.
 func EncryptAndHashSegments(fileSize, totalSegments int, randomizedFileSegments []int, input io.ReadSeekCloser, encryptor DataEncryptor) ([]FileBlockHash, error) {
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 100)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(fileSize, totalSegments, 100)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt and hash segments: %w", err)
+	}
+
 	if len(randomizedFileSegments) != howManySegments {
 		return nil, fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
 	}
@@ -456,7 +466,10 @@ func getBytesRangesToEncryptAndSend(from, to, segmentSizeBytes int, ranges []Fil
 
 // EncryptWriteOutput uses the stream cipher to encrypt the input reader and write to the output.
 func EncryptWriteOutput(fileSize, from, to, totalSegments, percentageToEncryptData int, randomizedFileSegments []int, input io.ReadSeekCloser, output io.WriteCloser, encryptor DataEncryptor) error {
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(fileSize, totalSegments, percentageToEncryptData)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt and write to output: %w", err)
+	}
 	if len(randomizedFileSegments) != howManySegments {
 		return fmt.Errorf("number of final segments %d is not equal to the randomized file segments list %d", howManySegments, len(randomizedFileSegments))
 	}
@@ -702,7 +715,10 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 		return nil, errors.New("file size is zero")
 	}
 
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(fileSize, totalSegments, 0)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(fileSize, totalSegments, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file segment info: %w", err)
+	}
 	ranges, ok := PrepareFileBlockRanges(0, howManySegments-1, fileSize, howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, randomSegments)
 	if !ok {
 		return nil, errors.New("failed to prepare file block/segment ranges")
@@ -754,7 +770,11 @@ func HashFileBlockSegments(filePath string, totalSegments int, randomSegments []
 }
 
 // FileSegmentsInfo returns the info about the segments of a file and number of encrypted segment given the file size.
-func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int) (int, int, int, int) {
+func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int) (int, int, int, int, error) {
+	if fileSize <= 0 {
+		return 0, 0, 0, 0, errors.New("file size is zero")
+	}
+
 	if percentageToEncrypt > 100 {
 		percentageToEncrypt = 100
 	}
@@ -809,7 +829,7 @@ func FileSegmentsInfo(fileSize int, howManySegments int, percentageToEncrypt int
 		}
 	}
 
-	return howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment
+	return howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, nil
 }
 
 // GetFileMerkleRootHash get a merkle root.

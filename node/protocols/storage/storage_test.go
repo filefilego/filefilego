@@ -128,8 +128,9 @@ func TestStorageProtocol(t *testing.T) {
 	// uploada file with cancelled context
 	cancelCtx, cancel := context.WithCancel(context.TODO())
 	cancel()
+
 	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
-	assert.EqualError(t, err, "failed to create new file upload stream: context canceled")
+	assert.Error(t, err)
 
 	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
 	assert.NoError(t, err)

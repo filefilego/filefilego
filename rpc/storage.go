@@ -89,6 +89,7 @@ func (api *StorageAPI) Stop() {
 }
 
 func (api *StorageAPI) addJob(job job) {
+	api.storageProtocol.ResetProgressAndCancelStatus(job.PeerID, job.FilePath)
 	api.jobQueue.jobs <- job
 }
 
@@ -105,16 +106,26 @@ func (api *StorageAPI) startWorker() {
 			return
 		}
 
+		cancelled, _ := api.storageProtocol.GetCancelFileUploadStatus(job.PeerID, job.FilePath)
+		if cancelled {
+			continue
+		}
+
 		addrStorageProvider := api.host.Peerstore().Addrs(job.PeerID)
 		if len(addrStorageProvider) == 0 {
 			_ = api.publisher.FindPeers(context.Background(), []peer.ID{job.PeerID})
 		}
 
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(context.Background(), job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		ctxWithCancel, cancel := context.WithCancel(context.Background())
+		api.storageProtocol.SetCancelFileUpload(job.PeerID, job.FilePath, false, cancel)
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
-		err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
-		if err != nil {
-			log.Warnf("failed to save file metadata locally: %v", err)
+		if err == nil {
+			err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
+			if err != nil {
+				log.Warnf("failed to save file metadata locally: %v", err)
+			}
 		}
 	}
 }
@@ -271,6 +282,44 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 	return nil
 }
 
+type cancelPayload struct {
+	PeerID   string `json:"peer_id"`
+	FilePath string `json:"file_path"`
+}
+
+// CancelUploadArgs args for canceling a file upload.
+type CancelUploadArgs struct {
+	Files []cancelPayload `json:"files"`
+}
+
+// CancelUploadResponse is the response of a canceled upload.
+type CancelUploadResponse struct {
+	Success bool `json:"success"`
+}
+
+// CancelUpload cancels a file upload.
+func (api *StorageAPI) CancelUpload(r *http.Request, args *CancelUploadArgs, response *CancelUploadResponse) error {
+	for _, v := range args.Files {
+		peerID, err := peer.Decode(v.PeerID)
+		if err != nil {
+			return fmt.Errorf("failed to decode remote peer id: %w", err)
+		}
+
+		if v.FilePath == "" {
+			return errors.New("filepath is empty")
+		}
+
+		_, cancelFunc := api.storageProtocol.GetCancelFileUploadStatus(peerID, v.FilePath)
+		if cancelFunc != nil {
+			cancelFunc()
+		}
+		api.storageProtocol.SetCancelFileUpload(peerID, v.FilePath, true, cancelFunc)
+	}
+
+	response.Success = true
+	return nil
+}
+
 // SaveUploadedFileMetadataLocallyArgs args for saving uploaded metadata.
 type SaveUploadedFileMetadataLocallyArgs struct {
 	Files []storage.FileMetadata `json:"files"`
@@ -341,6 +390,11 @@ func (api *StorageAPI) FileUploadsProgress(r *http.Request, args *FileUploadProg
 		}
 		if err != nil {
 			resp.Error = err.Error()
+		}
+
+		cancelled, _ := api.storageProtocol.GetCancelFileUploadStatus(peerID, v.FilePath)
+		if cancelled {
+			resp.Error = "cancelled"
 		}
 
 		if fHash != "" {

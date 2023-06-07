@@ -50,6 +50,9 @@ type Interface interface {
 	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (storage.FileMetadata, error)
 	GetUploadProgress(peerID peer.ID, filePath string) (int, string, error)
 	SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error)
+	SetCancelFileUpload(peerID peer.ID, filePath string, cancelled bool, cancel context.CancelFunc)
+	GetCancelFileUploadStatus(peerID peer.ID, filePath string) (bool, context.CancelFunc)
+	ResetProgressAndCancelStatus(peerID peer.ID, filePath string)
 }
 
 // GeoIPLocator given an ip address it returns the country info.
@@ -68,6 +71,11 @@ type ProviderWithCountry struct {
 	Response *messages.StorageQueryResponseProto `json:"response"`
 }
 
+type cancelUploadItem struct {
+	cancelFunc context.CancelFunc
+	cancelled  bool
+}
+
 // Protocol wraps the storage protocols and handlers.
 type Protocol struct {
 	host             host.Host
@@ -77,6 +85,7 @@ type Protocol struct {
 	ipLocator        GeoIPLocator
 	uploadProgress   map[string]int
 	uploadStatus     map[string]uploadStatus
+	cancelUploads    map[string]cancelUploadItem
 	mu               sync.RWMutex
 }
 
@@ -102,6 +111,7 @@ func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storage
 		storageProviders: make(map[string]ProviderWithCountry),
 		uploadProgress:   make(map[string]int),
 		uploadStatus:     make(map[string]uploadStatus),
+		cancelUploads:    make(map[string]cancelUploadItem),
 	}
 
 	// all types of nodes listen for this protocol
@@ -131,6 +141,42 @@ func (p *Protocol) SetUploadingStatus(peerID peer.ID, filePath, fileHash string,
 	st.fileHash = fileHash
 
 	p.uploadStatus[fileWithPeer] = st
+}
+
+// ResetProgressAndCancelStatus resets the upload progress and if a previous cancellation was there, deletes it.
+func (p *Protocol) ResetProgressAndCancelStatus(peerID peer.ID, filePath string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	fileWithPeer := filePath + peerID.String()
+	delete(p.uploadStatus, fileWithPeer)
+	delete(p.uploadProgress, fileWithPeer)
+	delete(p.cancelUploads, fileWithPeer)
+}
+
+// SetCancelFileUpload sets a cancel file upload.
+func (p *Protocol) SetCancelFileUpload(peerID peer.ID, filePath string, cancelled bool, cancel context.CancelFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	fileWithPeer := filePath + peerID.String()
+	st := p.cancelUploads[fileWithPeer]
+
+	st.cancelFunc = cancel
+	st.cancelled = cancelled
+
+	p.cancelUploads[fileWithPeer] = st
+}
+
+// GetCancelFileUploadStatus returns the status of a cancelled file upload.
+func (p *Protocol) GetCancelFileUploadStatus(peerID peer.ID, filePath string) (bool, context.CancelFunc) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	fileWithPeer := filePath + peerID.String()
+	st := p.cancelUploads[fileWithPeer]
+
+	return st.cancelled, st.cancelFunc
 }
 
 // GetUploadProgress returns the number of bytes transferred to the remote node.
@@ -204,7 +250,6 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 		select {
 		case <-ctx.Done():
 			p.SetUploadingStatus(peerID, filePath, "", errors.New("cancelled"))
-			delete(p.uploadProgress, fileWithPeer)
 			return storage.FileMetadata{}, fmt.Errorf("upload operation cancelled: %w", ctx.Err())
 		default:
 			n, err := input.Read(buf)
@@ -213,9 +258,12 @@ func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, f
 				if err != nil {
 					return storage.FileMetadata{}, fmt.Errorf("failed to write content to remote stream: %w", err)
 				}
+
+				p.mu.Lock()
 				uploaded := p.uploadProgress[fileWithPeer]
 				uploaded += n
 				p.uploadProgress[fileWithPeer] = uploaded
+				p.mu.Unlock()
 			}
 
 			if err == io.EOF {

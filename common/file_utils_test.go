@@ -57,35 +57,48 @@ func TestDefaultDataDir(t *testing.T) {
 
 func TestFileSegmentsInfo(t *testing.T) {
 	// file size is 11 bytes, with 5 segments and zero encyption
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(11, 5, 0)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(0, 5, 0)
+	assert.EqualError(t, err, "file size is zero")
+	assert.Equal(t, 0, howManySegments)
+	assert.Equal(t, 0, segmentSizeBytes)
+	assert.Equal(t, 0, totalSegmentsToEncrypt)
+	assert.Equal(t, 0, encryptEverySegment)
+
+	// file size is 11 bytes, with 5 segments and zero encyption
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err = FileSegmentsInfo(11, 5, 0)
+	assert.NoError(t, err)
 	assert.Equal(t, 4, howManySegments)
 	assert.Equal(t, 3, segmentSizeBytes)
 	assert.Equal(t, 0, totalSegmentsToEncrypt)
 	assert.Equal(t, 0, encryptEverySegment)
 
 	// file size is 12 bytes, with 6 segments and 4% enc
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment = FileSegmentsInfo(12, 6, 4)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err = FileSegmentsInfo(12, 6, 4)
+	assert.NoError(t, err)
 	assert.Equal(t, 6, howManySegments)
 	assert.Equal(t, 2, segmentSizeBytes)
 	assert.Equal(t, 1, totalSegmentsToEncrypt)
 	assert.Equal(t, 6, encryptEverySegment)
 
 	// file size is 12 bytes, with 6 segments and 100% enc
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment = FileSegmentsInfo(12, 6, 100)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err = FileSegmentsInfo(12, 6, 100)
+	assert.NoError(t, err)
 	assert.Equal(t, 6, howManySegments)
 	assert.Equal(t, 2, segmentSizeBytes)
 	assert.Equal(t, 6, totalSegmentsToEncrypt)
 	assert.Equal(t, 1, encryptEverySegment)
 
 	// file size is 12 bytes, with 6 segments and 50% enc
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment = FileSegmentsInfo(12, 6, 50)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err = FileSegmentsInfo(12, 6, 50)
+	assert.NoError(t, err)
 	assert.Equal(t, 6, howManySegments)
 	assert.Equal(t, 2, segmentSizeBytes)
 	assert.Equal(t, 3, totalSegmentsToEncrypt)
 	assert.Equal(t, 2, encryptEverySegment)
 
 	// file size is 12 bytes, with 6 segments and 50% enc
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment = FileSegmentsInfo(57, 8, 60)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err = FileSegmentsInfo(57, 8, 60)
+	assert.NoError(t, err)
 	assert.Equal(t, 8, howManySegments)
 	assert.Equal(t, 8, segmentSizeBytes)
 	assert.Equal(t, 4, totalSegmentsToEncrypt)
@@ -97,7 +110,8 @@ func TestPrepareFileBlockRanges(t *testing.T) {
 	percentageEcrypt := 21
 	totalSegmentsDesired := 16
 
-	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(filesize, totalSegmentsDesired, percentageEcrypt)
+	howManySegments, segmentSizeBytes, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(filesize, totalSegmentsDesired, percentageEcrypt)
+	assert.NoError(t, err)
 	assert.Equal(t, 15, howManySegments)
 	assert.Equal(t, 4, segmentSizeBytes)
 	assert.Equal(t, 3, totalSegmentsToEncrypt)
@@ -180,7 +194,8 @@ func TestHashFileBlockSegments(t *testing.T) {
 		os.RemoveAll(outputFile)
 	})
 
-	howManySegments, _, _, _ := FileSegmentsInfo(56, 8, 0)
+	howManySegments, _, _, _, err := FileSegmentsInfo(56, 8, 0)
+	assert.NoError(t, err)
 	orderedSlice := make([]int, howManySegments)
 	for i := 0; i < howManySegments; i++ {
 		orderedSlice[i] = i
@@ -208,7 +223,8 @@ func TestGetFileMerkleRootHash(t *testing.T) {
 		os.RemoveAll(outputFile)
 	})
 
-	howManySegments, _, _, _ := FileSegmentsInfo(56, 8, 0)
+	howManySegments, _, _, _, err := FileSegmentsInfo(56, 8, 0)
+	assert.NoError(t, err)
 	orderedSlice := make([]int, howManySegments)
 	for i := 0; i < howManySegments; i++ {
 		orderedSlice[i] = i
@@ -249,7 +265,8 @@ func TestEncryptDecryption(t *testing.T) {
 	inputStats, err := input.Stat()
 	assert.NoError(t, err)
 
-	howManySegmentsForInputFile, _, _, _ := FileSegmentsInfo(int(inputStats.Size()), totalSegments, 0)
+	howManySegmentsForInputFile, _, _, _, err := FileSegmentsInfo(int(inputStats.Size()), totalSegments, 0)
+	assert.NoError(t, err)
 	orderedSlice := make([]int, howManySegmentsForInputFile)
 	for i := 0; i < howManySegmentsForInputFile; i++ {
 		orderedSlice[i] = i
@@ -381,8 +398,8 @@ func TestTestEncryptAndVerifyMerkle(t *testing.T) {
 	input.Close()
 
 	// get the possible file segment size given the filesize and desired segment size.
-	howManySegmentsAllowedForFile, _, totalSegmentsToEncrypt, encryptEverySegment := FileSegmentsInfo(int(inputStats.Size()), totalSegmentsDesired, percentageEcrypt)
-
+	howManySegmentsAllowedForFile, _, totalSegmentsToEncrypt, encryptEverySegment, err := FileSegmentsInfo(int(inputStats.Size()), totalSegmentsDesired, percentageEcrypt)
+	assert.NoError(t, err)
 	// ordered slice to get the merkle tree nodes of a file in order
 	orderedSlice := make([]int, howManySegmentsAllowedForFile)
 	for i := 0; i < howManySegmentsAllowedForFile; i++ {
