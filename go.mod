@@ -25,7 +25,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/urfave/cli/v2 v2.25.6
 	golang.org/x/crypto v0.9.0
-	golang.org/x/sys v0.8.0
+	golang.org/x/sys v0.9.0
 	google.golang.org/protobuf v1.30.0
 )
 
