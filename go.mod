@@ -12,8 +12,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/rpc v1.2.0
-	github.com/libp2p/go-libp2p v0.27.6
-	github.com/libp2p/go-libp2p-kad-dht v0.24.1
+	github.com/libp2p/go-libp2p v0.27.7
+	github.com/libp2p/go-libp2p-kad-dht v0.24.2
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
 	github.com/microcosm-cc/bluemonday v1.0.24
 	github.com/multiformats/go-multiaddr v0.9.0
