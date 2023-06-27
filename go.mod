@@ -12,8 +12,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/rpc v1.2.0
-	github.com/libp2p/go-libp2p v0.27.6
-	github.com/libp2p/go-libp2p-kad-dht v0.24.1
+	github.com/libp2p/go-libp2p v0.27.7
+	github.com/libp2p/go-libp2p-kad-dht v0.24.2
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
 	github.com/microcosm-cc/bluemonday v1.0.24
 	github.com/multiformats/go-multiaddr v0.9.0
@@ -23,10 +23,10 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
-	github.com/urfave/cli/v2 v2.25.6
+	github.com/urfave/cli/v2 v2.25.7
 	golang.org/x/crypto v0.10.0
 	golang.org/x/sys v0.9.0
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.31.0
 )
 
 require (
