@@ -47,7 +47,6 @@ import (
 	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	goleveldberrors "github.com/syndtr/goleveldb/leveldb/errors"
-	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/urfave/cli/v2"
 )
 
@@ -147,13 +146,8 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup pub sub: %w", err)
 	}
 
-	opt := &opt.Options{
-		BlockCacheCapacity: 16 * opt.MiB,
-		WriteBuffer:        8 * opt.MiB,
-	}
-
 	levelDBPath := filepath.Join(conf.Global.DataDir, "blockchain.db")
-	db, err := leveldb.OpenFile(levelDBPath, opt)
+	db, err := leveldb.OpenFile(levelDBPath, nil)
 	if _, corrupted := err.(*goleveldberrors.ErrCorrupted); corrupted {
 		db, err = leveldb.RecoverFile(levelDBPath, nil)
 	}
