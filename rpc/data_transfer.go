@@ -434,7 +434,7 @@ type RequestContractTransactionVerificationArgs struct {
 	ContractHash string `json:"contract_hash"`
 }
 
-// PauseFileDownloadResponse represent response of RequestContractTransactionVerification.
+// RequestContractTransactionVerificationResponse represent response of RequestContractTransactionVerification.
 type RequestContractTransactionVerificationResponse struct {
 	Verified bool `json:"verified"`
 }
@@ -538,17 +538,17 @@ func (api *DataTransferAPI) VerifierHasEncryptionMetadata(r *http.Request, args 
 	return nil
 }
 
-// CancelFileDownloadArgs represent args.
+// CancelFileDownloadsByContractHashArgs represent args.
 type CancelFileDownloadsByContractHashArgs struct {
 	ContractHash string `json:"contract_hash"`
 }
 
-// CancelFileDownloadResponse represent response.
+// CancelFileDownloadsByContractHashResponse represent response.
 type CancelFileDownloadsByContractHashResponse struct {
 	Success bool `json:"success"`
 }
 
-// PauseFileDownload pauses a file download.
+// CancelFileDownloadsByContractHash cancels file download by contract.
 func (api *DataTransferAPI) CancelFileDownloadsByContractHash(r *http.Request, args *CancelFileDownloadsByContractHashArgs, response *CancelFileDownloadsByContractHashResponse) error {
 	_, err := api.contractStore.GetContract(args.ContractHash)
 	if err != nil {
@@ -591,7 +591,7 @@ func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDo
 		return fmt.Errorf("contract not found: %w", err)
 	}
 
-	_, err = hexutil.DecodeNoPrefix(args.FileHash)
+	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
 	if err != nil {
 		return fmt.Errorf("failed to decode file hash: %w", err)
 	}
@@ -600,6 +600,8 @@ func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDo
 	if err != nil {
 		return fmt.Errorf("failed to cancel download contexts: %w", err)
 	}
+
+	api.contractStore.PauseContractFileDownload(args.ContractHash, fileHash)
 
 	return nil
 }
@@ -627,6 +629,9 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 	if err != nil {
 		return fmt.Errorf("failed to decode file hash: %w", err)
 	}
+
+	// if there is a paused file just clear it
+	api.contractStore.ClearPausedFileDownload(args.ContractHash, fileHash)
 
 	fileHoster, err := peer.Decode(downloadContract.FileHosterResponse.FromPeerAddr)
 	if err != nil {
@@ -870,6 +875,7 @@ type DownloadFileProgressResponse struct {
 	Error             string `json:"error"`
 	BytesTransferred  uint64 `json:"bytes_transferred"`
 	FileConcatenation bool   `json:"file_concatenation"`
+	Paused            bool   `json:"paused"`
 }
 
 // DownloadFileProgress returns the download progress of a file.
@@ -887,6 +893,7 @@ func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *Download
 	response.BytesTransferred = api.contractStore.GetTransferredBytes(args.ContractHash, fileHash)
 	response.Error = fileInfo.Error
 
+	response.Paused = api.contractStore.IsPausedFileDownload(args.ContractHash, fileHash)
 	// This part is to make sure that the final concateneted file is created and contains all the data.
 	// Calling this function could show the downloaded progress completed, but the file will still
 	// be copied to a final part which will introduce errors specially when we try to send its merkle hashes
