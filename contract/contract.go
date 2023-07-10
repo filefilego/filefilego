@@ -45,6 +45,9 @@ type Interface interface {
 	PurgeInactiveContracts(int64) error
 	SetContractFileDownloadContexts(key string, ctxData ContextFileDownloadData)
 	CancelContractFileDownloadContexts(key string) error
+	PauseContractFileDownload(contractHash string, fileHash []byte)
+	ClearPausedFileDownload(contractHash string, fileHash []byte)
+	IsPausedFileDownload(contractHash string, fileHash []byte) bool
 	ResetTransferredBytes(contractHash string, fileHash []byte) error
 }
 
@@ -92,6 +95,8 @@ type Store struct {
 	contracts                   map[string]*messages.DownloadContractProto
 	releasedContractFees        map[string]struct{}
 	bytesTransferred            map[string]map[string]map[string]BytesTransferStats
+	// pausedContractFilesDownload map key is contractHash + fileHash
+	pausedContractFilesDownload map[string]bool
 	mu                          sync.RWMutex
 	muRC                        sync.RWMutex
 }
@@ -107,11 +112,12 @@ const (
 )
 
 type persistedData struct {
-	FileContracts        map[string][]FileInfo
-	Contracts            map[string]*messages.DownloadContractProto
-	ReleasedContractFees map[string]struct{}
-	ContractsCreatedAt   map[string]int64
-	BytesTransferred     map[string]map[string]map[string]BytesTransferStats
+	FileContracts               map[string][]FileInfo
+	Contracts                   map[string]*messages.DownloadContractProto
+	ReleasedContractFees        map[string]struct{}
+	ContractsCreatedAt          map[string]int64
+	BytesTransferred            map[string]map[string]map[string]BytesTransferStats
+	PausedContractFilesDownload map[string]bool
 }
 
 // New constructs a contract store.
@@ -128,6 +134,7 @@ func New(db database.Database) (*Store, error) {
 		contracts:                   make(map[string]*messages.DownloadContractProto),
 		releasedContractFees:        make(map[string]struct{}),
 		bytesTransferred:            make(map[string]map[string]map[string]BytesTransferStats),
+		pausedContractFilesDownload: make(map[string]bool),
 	}
 
 	return store, nil
@@ -340,6 +347,37 @@ func (c *Store) GetTransferredBytes(contractHash string, fileHash []byte) uint64
 	}
 
 	return total
+}
+
+// PauseContractFileDownload pauses a file download.
+func (c *Store) PauseContractFileDownload(contractHash string, fileHash []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fhash := hexutil.EncodeNoPrefix(fileHash)
+	c.pausedContractFilesDownload[contractHash+fhash] = true
+}
+
+// ClearPausedFileDownload clears a file download.
+func (c *Store) ClearPausedFileDownload(contractHash string, fileHash []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fhash := hexutil.EncodeNoPrefix(fileHash)
+	_, ok := c.pausedContractFilesDownload[contractHash+fhash]
+	if ok {
+		c.pausedContractFilesDownload[contractHash+fhash] = false
+	}
+}
+
+// IsPausedFileDownload returns true if a file is paused.
+func (c *Store) IsPausedFileDownload(contractHash string, fileHash []byte) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	fhash := hexutil.EncodeNoPrefix(fileHash)
+	paused := c.pausedContractFilesDownload[contractHash+fhash]
+	return paused
 }
 
 // ReleaseContractFees stores an inmem indication that contract fees were released to file hoster.
@@ -725,11 +763,12 @@ func (c *Store) persistToDB() error {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	data := persistedData{
-		FileContracts:        c.fileContracts,
-		ContractsCreatedAt:   c.contractsCreatedAt,
-		Contracts:            c.contracts,
-		ReleasedContractFees: c.releasedContractFees,
-		BytesTransferred:     c.bytesTransferred,
+		FileContracts:               c.fileContracts,
+		ContractsCreatedAt:          c.contractsCreatedAt,
+		Contracts:                   c.contracts,
+		ReleasedContractFees:        c.releasedContractFees,
+		BytesTransferred:            c.bytesTransferred,
+		PausedContractFilesDownload: c.pausedContractFilesDownload,
 	}
 	err := enc.Encode(data)
 	if err != nil {
@@ -772,6 +811,7 @@ func (c *Store) LoadFromDB() error {
 	c.fileContracts = pd.FileContracts
 	c.releasedContractFees = pd.ReleasedContractFees
 	c.bytesTransferred = pd.BytesTransferred
+	c.pausedContractFilesDownload = pd.PausedContractFilesDownload
 
 	return nil
 }
