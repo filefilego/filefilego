@@ -121,6 +121,10 @@ func TestStorageProtocol(t *testing.T) {
 	providers := protocol2.GetDiscoveredStorageProviders()
 	assert.Len(t, providers, 1)
 
+	numPeers, err := protocol1.SendDiscoveredStorageTransferRequest(context.TODO(), h2.ID())
+	assert.NoError(t, err)
+	assert.Equal(t, 1, numPeers)
+
 	fhash, err := ffgcrypto.Sha1File("storage.go")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, fhash)

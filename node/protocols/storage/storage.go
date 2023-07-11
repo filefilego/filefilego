@@ -34,6 +34,8 @@ import (
 const (
 	// ProtocolID represents the response protocol id and version.
 	ProtocolID = "/ffg/storagequery_response/1.0.0"
+	// DiscoveredPeersProtocolID is a discovered peer protocol id and version.
+	DiscoveredPeersProtocolID = "/ffg/disc_peers/1.0.0"
 	// SpeedTestProtocolID is a speed test protocol id and version.
 	SpeedTestProtocolID = "/ffg/storage_speed/1.0.0"
 	// FileUploadProtocolID is a file upload protocol id and version.
@@ -53,6 +55,7 @@ type Interface interface {
 	SetCancelFileUpload(peerID peer.ID, filePath string, cancelled bool, cancel context.CancelFunc)
 	GetCancelFileUploadStatus(peerID peer.ID, filePath string) (bool, context.CancelFunc)
 	ResetProgressAndCancelStatus(peerID peer.ID, filePath string)
+	SendDiscoveredStorageTransferRequest(ctx context.Context, peerID peer.ID) (int, error)
 }
 
 // GeoIPLocator given an ip address it returns the country info.
@@ -118,6 +121,8 @@ func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storage
 	// its a callback when a storage providers wants to communicate back to the node which
 	// requested storage discovery.
 	p.host.SetStreamHandler(ProtocolID, p.handleIncomingStorageQueryResponse)
+	p.host.SetStreamHandler(DiscoveredPeersProtocolID, p.handleIncomingDiscoveredStorageTransfer)
+
 	if p.storagePublic {
 		p.host.SetStreamHandler(FileUploadProtocolID, p.HandleIncomingFileUploads)
 		p.host.SetStreamHandler(SpeedTestProtocolID, p.handleIncomingSpeedTest)
@@ -375,6 +380,59 @@ func (p *Protocol) TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, 
 	elapsed := time.Since(start)
 
 	return elapsed, nil
+}
+
+// handleIncomingDiscoveredStorageTransfer is used to serve the current discovered storage providers from this peer.
+// its used by clients behind NAT to discover storage providers.
+func (p *Protocol) handleIncomingDiscoveredStorageTransfer(s network.Stream) {
+	defer s.Close()
+	providers := p.GetDiscoveredStorageProviders()
+	data, err := json.Marshal(providers)
+	if err != nil {
+		log.Warnf("failed to marshal storage providers: %v", err)
+		return
+	}
+
+	_, err = s.Write(data)
+	if err != nil {
+		log.Warnf("failed to write storage providers to stream: %v", err)
+	}
+}
+
+// SendDiscoveredStorageTransferRequest sends a request to remote peer to get its discovered storage peers.
+// it returns the number of peers transferred.
+func (p *Protocol) SendDiscoveredStorageTransferRequest(ctx context.Context, peerID peer.ID) (int, error) {
+	s, err := p.host.NewStream(ctx, peerID, DiscoveredPeersProtocolID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to peer for sending data query response: %w", err)
+	}
+	defer s.Close()
+
+	maxBytes := int64(2 * common.MB)
+	limitReader := io.LimitReader(s, maxBytes)
+	buffer, err := io.ReadAll(limitReader)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read storage providers data from stream: %w", err)
+	}
+
+	if len(buffer) == 0 {
+		return 0, errors.New("failed to read data from stream")
+	}
+
+	providers := make([]ProviderWithCountry, 0)
+
+	err = json.Unmarshal(buffer, &providers)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unmarshal storage providers envelope: %w", err)
+	}
+
+	p.mu.Lock()
+	for _, v := range providers {
+		p.storageProviders[v.Response.StorageProviderPeerAddr] = v
+	}
+	p.mu.Unlock()
+
+	return len(providers), nil
 }
 
 // handleIncomingStorageQueryResponse handles incoming storage query responses from storage provider nodes.

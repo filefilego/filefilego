@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
+	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/storage"
@@ -238,6 +241,47 @@ func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, r
 
 	response.Success = true
 
+	return nil
+}
+
+// FindProvidersFromPeers connects to other peers (mostly validators) and gets their discovered peers.
+func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, response *FindProvidersResponse) error {
+	// find all verifiers
+	verfiers := block.GetBlockVerifiers()
+	peerIDs := make([]peer.ID, 0)
+	for _, v := range verfiers {
+		publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
+		if err != nil {
+			continue
+		}
+
+		peerID, err := peer.IDFromPublicKey(publicKey)
+		if err != nil {
+			continue
+		}
+		peerIDs = append(peerIDs, peerID)
+	}
+
+	api.publisher.FindPeers(r.Context(), peerIDs)
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	for _, pid := range peerIDs {
+		wg.Add(1)
+		go func(peerID peer.ID) {
+			defer wg.Done()
+
+			_, err := api.storageProtocol.SendDiscoveredStorageTransferRequest(ctx, peerID)
+			if err != nil {
+				log.Warnf("failed to get storage providers from verifier: %v", err)
+			}
+		}(pid)
+	}
+	wg.Wait()
+
+	response.Success = true
 	return nil
 }
 
