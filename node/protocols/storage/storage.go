@@ -415,7 +415,7 @@ func (p *Protocol) SendDiscoveredStorageTransferRequest(ctx context.Context, pee
 		return 0, fmt.Errorf("failed to read storage providers data from stream: %w", err)
 	}
 
-	if len(buffer) <= 0 {
+	if len(buffer) == 0 {
 		return 0, errors.New("failed to read data from stream")
 	}
 
