@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
@@ -33,6 +35,7 @@ import (
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	dataverification "github.com/filefilego/filefilego/node/protocols/data_verification"
+	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	internalrpc "github.com/filefilego/filefilego/rpc"
 	"github.com/filefilego/filefilego/search"
@@ -271,6 +274,33 @@ func run(ctx *cli.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to setup validator: %w", err)
 			}
+
+			go func() {
+				for {
+					<-time.After(time.Minute)
+
+					m := &messages.StorageQueryRequestProto{
+						FromPeerAddr:      host.ID().String(),
+						PreferredLocation: "",
+					}
+
+					payload := messages.GossipPayload{
+						Message: &messages.GossipPayload_StorageQuery{
+							StorageQuery: m,
+						},
+					}
+
+					payloadBytes, err := proto.Marshal(&payload)
+					if err != nil {
+						continue
+					}
+
+					err = ffgNode.PublishMessageToNetwork(context.Background(), common.FFGNetPubSubStorageQuery, payloadBytes)
+					if err != nil {
+						log.Warnf("failed to publish storage query request: %v", err)
+					}
+				}
+			}()
 
 			go func(validator *validator.Validator) {
 				for {
