@@ -16,7 +16,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.24.2
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
 	github.com/microcosm-cc/bluemonday v1.0.24
-	github.com/multiformats/go-multiaddr v0.10.0
+	github.com/multiformats/go-multiaddr v0.10.1
 	github.com/oschwald/geoip2-golang v1.9.0
 	github.com/rodaine/table v1.1.0
 	github.com/schollz/progressbar/v3 v3.13.1
