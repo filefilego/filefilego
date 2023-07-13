@@ -1037,11 +1037,20 @@ func (api *DataTransferAPI) MoveDirectDownloadsToDestination(r *http.Request, ar
 
 	for i, v := range args.FileHashes {
 		inputEncryptedFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), args.ContractHash, v)
-		err := os.Rename(inputEncryptedFilePath, args.RestoredFilePaths[i])
-		if err != nil {
-			return fmt.Errorf("failed to move file %s to %s : %w", inputEncryptedFilePath, args.RestoredFilePaths[i], err)
+		restoredFile := args.RestoredFilePaths[i]
+		// if the destination file exists, prepend the current timestamp to the file name
+		if common.FileExists(restoredFile) {
+			dir, fileName := filepath.Split(restoredFile)
+			timeNow := time.Now().Unix()
+			finalName := fmt.Sprintf("%d_%s", timeNow, fileName)
+			restoredFile = filepath.Join(dir, finalName)
 		}
-		response.RestoredFilePaths = append(response.RestoredFilePaths, args.RestoredFilePaths[i])
+
+		err := os.Rename(inputEncryptedFilePath, restoredFile)
+		if err != nil {
+			return fmt.Errorf("failed to move file %s to %s : %w", inputEncryptedFilePath, restoredFile, err)
+		}
+		response.RestoredFilePaths = append(response.RestoredFilePaths, restoredFile)
 	}
 
 	return nil

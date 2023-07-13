@@ -490,6 +490,8 @@ func (d *Protocol) DecryptFile(filePath, decryptedFilePath string, key, iv []byt
 		return "", fmt.Errorf("failed to open output file in decryptFile: %w", err)
 	}
 
+	defer outputFile.Close()
+
 	err = common.DecryptFileSegments(int(inputStats.Size()), d.merkleTreeTotalSegments, d.encryptionPercentage, randomizedFileSegments, inputFile, outputFile, encryptor, onlyFileReArrangement)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt file segments in decryptFile: %w", err)
@@ -1711,6 +1713,8 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 		return
 	}
 
+	defer input.Close()
+
 	encryptor, err := common.NewEncryptor(fileContractInfo.EncryptionType, fileContractInfo.Key, fileContractInfo.IV)
 	if err != nil {
 		log.Errorf("failed to setup encryptor in handleIncomingFileTransfer: %v", err)
@@ -1742,11 +1746,6 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	err = common.EncryptWriteOutput(int(fileMetadata.Size), int(fileTransferRequest.From), int(fileTransferRequest.To), d.merkleTreeTotalSegments, d.encryptionPercentage, fileContractInfo.RandomSegments, input, s, encryptor)
 	if err != nil {
 		log.Errorf("failed to encryptWriteOutput in handleIncomingFileTransfer: %v", err)
-		return
-	}
-
-	err = input.Close()
-	if err != nil {
 		return
 	}
 }
