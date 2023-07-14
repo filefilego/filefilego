@@ -252,6 +252,66 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 	return api.validateBroadcastTxSetResponse(r.Context(), &tx, response)
 }
 
+// CreateTransaction creates a transaction and returns the json encoded payload.
+// it uses the same arguments as SendTransactionArgs.
+// this method is used for a client to create and sign and a transaction without broadcasting it to the network.
+func (api *TransactionAPI) CreateTransaction(r *http.Request, args *SendTransactionArgs, response *TransactionResponse) error {
+	if args.AccessToken == "" {
+		return errors.New("access token is empty")
+	}
+
+	ok, unlockedKey, err := api.keystore.Authorized(args.AccessToken)
+	if err != nil || !ok {
+		return errors.New("unauthorized access")
+	}
+
+	txNounce, err := hexutil.DecodeUint64(args.Nounce)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction nounce: %w", err)
+	}
+
+	txNounceBytes := hexutil.EncodeUint64ToBytes(txNounce)
+
+	txData, err := hexutil.Decode(args.Data)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction data: %w", err)
+	}
+
+	mainChain, err := hexutil.Decode(transaction.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to decode chainID: %w", err)
+	}
+
+	publicKeyBytes, err := unlockedKey.Key.PublicKey.Raw()
+	if err != nil {
+		return fmt.Errorf("failed to get public key of unlocked account: %w", err)
+	}
+
+	tx := transaction.Transaction{
+		PublicKey:       publicKeyBytes,
+		Nounce:          txNounceBytes,
+		Data:            txData,
+		From:            args.From,
+		To:              args.To,
+		Value:           args.Value,
+		TransactionFees: args.TransactionFees,
+		Chain:           mainChain,
+	}
+
+	if err := tx.Sign(unlockedKey.Key.PrivateKey); err != nil {
+		return fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	ok, err = tx.Validate()
+	if err != nil || !ok {
+		return fmt.Errorf("failed to validate transaction: %w", err)
+	}
+
+	response.Transaction = toJSONTransaction(tx)
+
+	return nil
+}
+
 // MemPoolResponse represents the mempool hashes.
 type MemPoolResponse struct {
 	TransactionHashes []string `json:"transaction_hashes"`
