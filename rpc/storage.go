@@ -187,11 +187,13 @@ func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedW
 	}
 
 	addrStorageProvider := api.host.Peerstore().Addrs(peerID)
+	childCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 	if len(addrStorageProvider) == 0 {
-		_ = api.publisher.FindPeers(r.Context(), []peer.ID{peerID})
+		_ = api.publisher.FindPeers(childCtx, []peer.ID{peerID})
 	}
 
-	timeelapsed, err := api.storageProtocol.TestSpeedWithRemotePeer(r.Context(), peerID, args.FileSize)
+	timeelapsed, err := api.storageProtocol.TestSpeedWithRemotePeer(childCtx, peerID, args.FileSize)
 	if err != nil {
 		return fmt.Errorf("failed to perform speed test: %w", err)
 	}

@@ -35,7 +35,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const findPeerTimeoutSeconds = 5
+const findPeerTimeoutSeconds = 8
 
 // PublishSubscriber is a pub sub interface.
 type PublishSubscriber interface {
