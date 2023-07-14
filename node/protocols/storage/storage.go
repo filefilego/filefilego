@@ -349,7 +349,7 @@ func (p *Protocol) handleIncomingSpeedTest(s network.Stream) {
 func (p *Protocol) TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error) {
 	s, err := p.host.NewStream(ctx, peerID, SpeedTestProtocolID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to connect to peer for sending data query response: %w", err)
+		return 0, fmt.Errorf("failed to connect to peer for speed test: %w", err)
 	}
 	defer s.Close()
 
