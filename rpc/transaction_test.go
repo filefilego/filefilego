@@ -129,6 +129,19 @@ func TestTransactionAPIMethods(t *testing.T) {
 	assert.Equal(t, jsonTx.TransactionFees, sendTransactionResponse.Transaction.TransactionFees)
 	assert.Equal(t, jsonTx.Value, sendTransactionResponse.Transaction.Value)
 
+	sendTransactionResponse = &TransactionResponse{}
+	err = transactionAPI.CreateTransaction(&http.Request{}, sendTransactionArgs, sendTransactionResponse)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, sendTransactionResponse.Transaction.Hash)
+	assert.NotEmpty(t, sendTransactionResponse.Transaction.Signature)
+	assert.Equal(t, jsonTx.Chain, sendTransactionResponse.Transaction.Chain)
+	assert.Equal(t, jsonTx.Data, sendTransactionResponse.Transaction.Data)
+	assert.Equal(t, k.Address, sendTransactionResponse.Transaction.From)
+	assert.Equal(t, jsonTx.Nounce, sendTransactionResponse.Transaction.Nounce)
+	assert.Equal(t, jsonTx.To, sendTransactionResponse.Transaction.To)
+	assert.Equal(t, jsonTx.TransactionFees, sendTransactionResponse.Transaction.TransactionFees)
+	assert.Equal(t, jsonTx.Value, sendTransactionResponse.Transaction.Value)
+
 	// Pool
 	memPoolResponse := &MemPoolResponse{}
 	err = transactionAPI.Pool(&http.Request{}, &EmptyArgs{}, memPoolResponse)
