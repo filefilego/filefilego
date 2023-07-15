@@ -20,7 +20,7 @@ func TestNew(t *testing.T) {
 		os.RemoveAll("file.db")
 	})
 	cases := map[string]struct {
-		dbEngine DBPutGetter
+		dbEngine DBPutGetDeleter
 		expErr   string
 	}{
 		"no engine": {
@@ -97,5 +97,9 @@ func (e dbEngineStub) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
 }
 
 func (e dbEngineStub) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
+	return nil
+}
+
+func (e dbEngineStub) Delete(key []byte, wo *opt.WriteOptions) error {
 	return nil
 }

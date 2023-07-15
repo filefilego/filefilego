@@ -488,7 +488,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
-		storageAPI, err := internalrpc.NewStorageAPI(host, ffgNode, storageProtocol, storageEngine)
+		storageAPI, err := internalrpc.NewStorageAPI(host, keystore, ffgNode, storageProtocol, storageEngine)
 		if err != nil {
 			return fmt.Errorf("failed to setup storage rpc api: %w", err)
 		}
