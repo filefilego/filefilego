@@ -129,9 +129,12 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, fhash)
 
-	// uploada file with cancelled context
+	// uploads file with cancelled context
 	cancelCtx, cancel := context.WithCancel(context.TODO())
 	cancel()
+
+	// reset the upload progress so we can reupload
+	protocol1.uploadProgress = make(map[string]int)
 
 	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
 	assert.Error(t, err)
