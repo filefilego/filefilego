@@ -54,7 +54,8 @@ type Interface interface {
 	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
-	ListFiles(currentPage, pageSize int, order string) ([]FileMetadata, uint64, error)
+	ListFiles(currentPage, pageSize int, order string) ([]FileMetadataWithDBKey, uint64, error)
+	DeleteFileFromDB(key string) error
 }
 
 // FileMetadata holds the metadata for a file.
@@ -65,6 +66,12 @@ type FileMetadata struct {
 	FilePath       string `json:"file_path"`
 	Size           int64  `json:"size"`
 	RemotePeer     string `json:"remote_peer"`
+}
+
+// FileMetadataWithDBKey holds the file metatada and the key.
+type FileMetadataWithDBKey struct {
+	FileMetadata
+	Key string `json:"key"`
 }
 
 // AccessToken represents an access token.
@@ -246,8 +253,36 @@ func (s *Storage) GetFileMetadata(fileHash string, peerID string) (FileMetadata,
 	return metadata, nil
 }
 
+// DeleteFileFromDB deletes a file from local db.
+func (s *Storage) DeleteFileFromDB(key string) error {
+	keyBytes, err := hexutil.Decode(key)
+	if err != nil {
+		return fmt.Errorf("failed to decode key: %w", err)
+	}
+
+	// check if the file is locally available
+	hash := string(keyBytes[8+len([]byte(fileHashSortingPrefix)):])
+	item, err := s.GetFileMetadata(hash[:40], hash[40:])
+	if err != nil {
+		return fmt.Errorf("failed to find file metadata: %w", err)
+	}
+	if common.FileExists(item.FilePath) {
+		err = os.Remove(item.FilePath)
+		if err != nil {
+			return fmt.Errorf("failed to remove file from local node: %w", err)
+		}
+	}
+
+	err = s.db.Delete(keyBytes)
+	if err != nil {
+		return fmt.Errorf("failed to delete from db: %w", err)
+	}
+
+	return nil
+}
+
 // ListFiles the uploaded files.
-func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMetadata, uint64, error) {
+func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMetadataWithDBKey, uint64, error) {
 	if currentPage < 0 {
 		currentPage = 0
 	}
@@ -265,7 +300,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 
 	limit := pageSize
 	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashSortingPrefix)), nil)
-	items := make([]FileMetadata, 0)
+	items := make([]FileMetadataWithDBKey, 0)
 	i := 0
 
 	if order == "asc" {
@@ -290,7 +325,12 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 				continue
 			}
 
-			items = append(items, item)
+			kitem := FileMetadataWithDBKey{
+				FileMetadata: item,
+				Key:          hexutil.Encode(key),
+			}
+
+			items = append(items, kitem)
 			limit--
 		}
 	} else {
@@ -301,7 +341,12 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 				hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
 				item, err := s.GetFileMetadata(hash[:40], hash[40:])
 				if err == nil {
-					items = append(items, item)
+					kitem := FileMetadataWithDBKey{
+						FileMetadata: item,
+						Key:          hexutil.Encode(key),
+					}
+
+					items = append(items, kitem)
 					limit--
 				}
 			}
@@ -327,7 +372,13 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 			if err != nil {
 				continue
 			}
-			items = append(items, item)
+
+			kitem := FileMetadataWithDBKey{
+				FileMetadata: item,
+				Key:          hexutil.Encode(key),
+			}
+
+			items = append(items, kitem)
 			limit--
 		}
 	}

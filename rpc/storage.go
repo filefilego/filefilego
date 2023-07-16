@@ -14,6 +14,7 @@ import (
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
+	"github.com/filefilego/filefilego/keystore"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/storage"
@@ -31,6 +32,7 @@ const (
 // StorageAPI represents the storage rpc service.
 type StorageAPI struct {
 	host            host.Host
+	keystore        keystore.KeyLockUnlockLister
 	publisher       PublisherNodesFinder
 	storageProtocol storageprotocol.Interface
 	storageEngine   storage.Interface
@@ -50,9 +52,13 @@ type jobQueue struct {
 }
 
 // NewStorageAPI creates a new storage API to be served using JSONRPC.
-func NewStorageAPI(host host.Host, publisher PublisherNodesFinder, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
+func NewStorageAPI(host host.Host, keystore keystore.KeyLockUnlockLister, publisher PublisherNodesFinder, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
+	}
+
+	if keystore == nil {
+		return nil, errors.New("keystore is nil")
 	}
 
 	if publisher == nil {
@@ -69,6 +75,7 @@ func NewStorageAPI(host host.Host, publisher PublisherNodesFinder, storageProtoc
 
 	return &StorageAPI{
 		host:            host,
+		keystore:        keystore,
 		publisher:       publisher,
 		storageProtocol: storageProtocol,
 		storageEngine:   storageEngine,
@@ -142,8 +149,8 @@ type ListUploadedFilesArgs struct {
 
 // ListUploadedFilesResponse the response listing uploads.
 type ListUploadedFilesResponse struct {
-	Files []storage.FileMetadata `json:"files"`
-	Total uint64                 `json:"total"`
+	Files []storage.FileMetadataWithDBKey `json:"files"`
+	Total uint64                          `json:"total"`
 }
 
 // ListUploadedFiles lists the uploaded files on this node.
@@ -157,9 +164,41 @@ func (api *StorageAPI) ListUploadedFiles(r *http.Request, args *ListUploadedFile
 		return fmt.Errorf("failed to list files: %w", err)
 	}
 
-	response.Files = make([]storage.FileMetadata, len(metadata))
+	response.Files = make([]storage.FileMetadataWithDBKey, len(metadata))
 	response.Total = totalCount
 	copy(response.Files, metadata)
+
+	return nil
+}
+
+// DeleteUploadedFilesArgs args for deleting file uploads.
+type DeleteUploadedFilesArgs struct {
+	Key         string `json:"key"`
+	AccessToken string `json:"access_token"`
+}
+
+// DeleteUploadedFilesResponse is the response of the deletion
+type DeleteUploadedFilesResponse struct {
+	Success bool `json:"success"`
+}
+
+// ListUploadedFiles lists the uploaded files on this node.
+func (api *StorageAPI) DeleteUploadedFile(r *http.Request, args *DeleteUploadedFilesArgs, response *DeleteUploadedFilesResponse) error {
+	ok, _, _ := api.keystore.Authorized(args.AccessToken)
+	if !ok {
+		return errors.New("not authorized to delete file")
+	}
+
+	if args.Key == "" {
+		return errors.New("key is required")
+	}
+
+	err := api.storageEngine.DeleteFileFromDB(args.Key)
+	if err != nil {
+		return fmt.Errorf("failed to delete file from db: %w", err)
+	}
+
+	response.Success = true
 
 	return nil
 }

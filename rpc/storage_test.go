@@ -3,6 +3,7 @@ package rpc
 import (
 	"testing"
 
+	"github.com/filefilego/filefilego/keystore"
 	"github.com/filefilego/filefilego/node"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/storage"
@@ -15,6 +16,7 @@ func TestNewStorageAPI(t *testing.T) {
 	h := newHost(t, "6691")
 	cases := map[string]struct {
 		host            host.Host
+		keystore        keystore.KeyLockUnlockLister
 		publisher       PublisherNodesFinder
 		storageProtocol storageprotocol.Interface
 		storageEngine   storage.Interface
@@ -23,23 +25,31 @@ func TestNewStorageAPI(t *testing.T) {
 		"no host": {
 			expErr: "host is nil",
 		},
-		"no publisher": {
+		"no keystore": {
 			host:   h,
-			expErr: "publisher is nil",
+			expErr: "keystore is nil",
+		},
+		"no publisher": {
+			host:     h,
+			keystore: &keystore.Store{},
+			expErr:   "publisher is nil",
 		},
 		"no storageProtocol": {
 			host:      h,
+			keystore:  &keystore.Store{},
 			publisher: &node.Node{},
 			expErr:    "storageProtocol is nil",
 		},
 		"no storageEngine": {
 			host:            h,
+			keystore:        &keystore.Store{},
 			publisher:       &node.Node{},
 			storageProtocol: &storageprotocol.Protocol{},
 			expErr:          "storageEngine is nil",
 		},
 		"success": {
 			host:            h,
+			keystore:        &keystore.Store{},
 			publisher:       &node.Node{},
 			storageProtocol: &storageprotocol.Protocol{},
 			storageEngine:   &storage.Storage{},
@@ -50,7 +60,7 @@ func TestNewStorageAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewStorageAPI(tt.host, tt.publisher, tt.storageProtocol, tt.storageEngine)
+			api, err := NewStorageAPI(tt.host, tt.keystore, tt.publisher, tt.storageProtocol, tt.storageEngine)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
