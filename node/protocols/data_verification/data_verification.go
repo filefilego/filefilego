@@ -99,10 +99,22 @@ type Protocol struct {
 	dataVerifierVerificationFees string
 	dataVerifierTransactionFees  string
 	storageFeesPerByte           string
+	allowZeroFeesDataUnder512KB  bool
 }
 
 // New creates a data verification protocol.
-func New(h host.Host, contractStore contract.Interface, storage storage.Interface, blockchain blockchain.Interface, publisher NetworkMessagePublisher, merkleTreeTotalSegments, encryptionPercentage int, downloadDirectory string, dataVerifier bool, dataVerifierVerificationFees, dataVerifierTransactionFees string, storageFeesPerByte string) (*Protocol, error) {
+func New(h host.Host,
+	contractStore contract.Interface,
+	storage storage.Interface,
+	blockchain blockchain.Interface,
+	publisher NetworkMessagePublisher,
+	merkleTreeTotalSegments, encryptionPercentage int,
+	downloadDirectory string,
+	dataVerifier bool,
+	dataVerifierVerificationFees, dataVerifierTransactionFees string,
+	storageFeesPerByte string,
+	allowZeroFeesDataUnder512KB bool,
+) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -140,6 +152,7 @@ func New(h host.Host, contractStore contract.Interface, storage storage.Interfac
 		dataVerifierVerificationFees: dataVerifierVerificationFees,
 		dataVerifierTransactionFees:  dataVerifierTransactionFees,
 		storageFeesPerByte:           storageFeesPerByte,
+		allowZeroFeesDataUnder512KB:  allowZeroFeesDataUnder512KB,
 	}
 
 	// the following protocols are hanlded by verifier
@@ -1567,7 +1580,9 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	}
 
 	// check if the storage fees is zero or not set
-	if d.storageFeesPerByte == "" || d.storageFeesPerByte == "0" {
+	// or if its less than 512KB. We allow any files in the network to be downloaded without fees if its 512KB or less.
+	// this consensus among the storage provider peers in the network allows a better UI experience to serve images and small media
+	if d.allowZeroFeesDataUnder512KB && (fileMetadata.Size <= common.KB*512 || d.storageFeesPerByte == "" || d.storageFeesPerByte == "0") {
 		input, err := os.Open(fileMetadata.FilePath)
 		if err != nil {
 			log.Errorf("failed to open file in handleIncomingFileTransfer: %v", err)

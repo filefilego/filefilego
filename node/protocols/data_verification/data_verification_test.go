@@ -55,6 +55,7 @@ func TestNew(t *testing.T) {
 		dataVerifierVerificationFees string
 		dataVerifierTransactionFees  string
 		storageFeesPerByte           string
+		allowZeroFeesDataUnder512KB  bool
 		expErr                       string
 	}{
 		"no host": {
@@ -120,7 +121,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees, tt.dataVerifierTransactionFees, tt.storageFeesPerByte)
+			protocol, err := New(tt.host, tt.contractStore, tt.storage, tt.blockchain, tt.publisher, tt.merkleTreeTotalSegments, tt.encryptionPercentage, tt.downloadDirectory, tt.dataVerifier, tt.dataVerifierVerificationFees, tt.dataVerifierTransactionFees, tt.storageFeesPerByte, tt.allowZeroFeesDataUnder512KB)
 			if tt.expErr != "" {
 				assert.Nil(t, protocol)
 				assert.EqualError(t, err, tt.expErr)
@@ -236,15 +237,15 @@ func TestDataVerificationMethods(t *testing.T) {
 	err = blockchain3.InitOrLoad(true)
 	assert.NoError(t, err)
 
-	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "1")
+	protocolH1, err := New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "1", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
-	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "", "", "1")
+	protocolH2, err := New(h2, contractStore2, strg2, blockchain2, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download2"), false, "", "", "1", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH2)
 
-	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7", "0x1", "1")
+	protocolVerifier1, err := New(verifier1, contractStoreVerifier1, strg3, blockchain3, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_downloadverifier"), true, "7", "0x1", "1", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolVerifier1)
 
@@ -622,7 +623,7 @@ func TestDataVerificationMethods(t *testing.T) {
 	assert.Equal(t, uint64(fileSize2), transferredBytes)
 
 	// recreate the protocol with zero fees so we can download the data directly
-	protocolH1, err = New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "0")
+	protocolH1, err = New(h1, contractStore, strg, blockchain1, publisher, totalDesiredFileSegments, totalFileEncryptionPercentage, filepath.Join(currentDir, "data_download"), false, "", "", "0", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocolH1)
 
