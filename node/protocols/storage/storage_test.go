@@ -133,11 +133,11 @@ func TestStorageProtocol(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.TODO())
 	cancel()
 
-	// reset the upload progress so we can reupload
-	protocol1.uploadProgress = make(map[string]int)
-
 	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
 	assert.Error(t, err)
+
+	// reset the upload progress so we can reupload
+	protocol1.uploadProgress = make(map[string]int)
 
 	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
 	assert.NoError(t, err)
