@@ -229,7 +229,7 @@ func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, ar
 		return fmt.Errorf("failed to decode peer: %w", err)
 	}
 
-	ctxWithCancel, cancel := context.WithCancel(context.Background())
+	ctxWithCancel, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	downloadedMedia := make([]string, 0)
