@@ -83,6 +83,15 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 		return nil, errors.New("data directory is empty")
 	}
 
+	// create the media cache directory
+	cacheDir := filepath.Join(dataDirectory, mediaCacheDirectory)
+	if !common.DirExists(cacheDir) {
+		err := common.CreateDirectory(cacheDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create cache directory: %w", err)
+		}
+	}
+
 	return &DataTransferAPI{
 		host:                     host,
 		dataQueryProtocol:        dataQueryProtocol,
