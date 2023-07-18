@@ -73,7 +73,7 @@ type Interface interface {
 	RequestEncryptionData(ctx context.Context, verifierID peer.ID, request *messages.KeyIVRequestsProto) (*messages.KeyIVRandomizedFileSegmentsEnvelopeProto, error)
 	SendFileMerkleTreeNodesToVerifier(ctx context.Context, verifierID peer.ID, request *messages.MerkleTreeNodesOfFileContractProto) error
 	SendKeyIVRandomizedFileSegmentsAndDataToVerifier(ctx context.Context, verifierID peer.ID, filePath string, contractHash string, fileHash []byte) error
-	RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error)
+	RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto, withProgres bool) (string, error)
 	GetDownloadDirectory() string
 	GetMerkleTreeFileSegmentsEncryptionPercentage() (int, int)
 	RequestContractTransactionVerification(ctx context.Context, peerID peer.ID, contractHash []byte) (bool, error)
@@ -1386,7 +1386,7 @@ func (d *Protocol) handleIncomingMerkleTreeNodes(s network.Stream) {
 
 // RequestFileTransfer requests a file download from the file hoster.
 // Request is initiated from the downloader peer.
-func (d *Protocol) RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto) (string, error) {
+func (d *Protocol) RequestFileTransfer(ctx context.Context, destinationFilePath, fileNameWithPart string, fileHosterID peer.ID, request *messages.FileTransferInfoProto, withProgres bool) (string, error) {
 	if request.FileSize == 0 {
 		return "", errors.New("file size in the request is zero")
 	}
@@ -1448,8 +1448,9 @@ func (d *Protocol) RequestFileTransfer(ctx context.Context, destinationFilePath,
 				if wroteN != n || err != nil {
 					return "", fmt.Errorf("failed to write the total content of buffer (buf: %d, output: %d) to output file: %w", n, wroteN, err)
 				}
-
-				d.contractStore.IncrementTransferredBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, request.To, uint64(wroteN))
+				if withProgres {
+					d.contractStore.IncrementTransferredBytes(contractHashHex, request.FileHash, fileNameWithPart, destinationFilePath, request.From, request.To, uint64(wroteN))
+				}
 			}
 
 			if err == io.EOF {

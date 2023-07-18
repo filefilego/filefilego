@@ -881,7 +881,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	assert.NoError(t, err)
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
-		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keyst)
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keyst, conf.Global.DataDir)
 		assert.NoError(t, err)
 		err = s.RegisterService(dataTransferAPI, internalrpc.DataTransferServiceNamespace)
 		assert.NoError(t, err)
