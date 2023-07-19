@@ -502,7 +502,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
-		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keystore)
+		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keystore, conf.Global.DataDir)
 		if err != nil {
 			return fmt.Errorf("failed to setup data transfer rpc api: %w", err)
 		}

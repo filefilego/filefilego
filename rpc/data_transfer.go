@@ -34,6 +34,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const mediaCacheDirectory = "cache"
+
 // PublisherNodesFinder is an interface that specifies finding nodes and publishing a message to the network functionalities.
 type PublisherNodesFinder interface {
 	NetworkMessagePublisher
@@ -48,10 +50,11 @@ type DataTransferAPI struct {
 	publisherNodesFinder     PublisherNodesFinder
 	contractStore            contract.Interface
 	keystore                 keystore.KeyAuthorizer
+	dataDirectory            string
 }
 
 // NewDataTransferAPI creates a new data transfer API to be served using JSONRPC.
-func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder, contractStore contract.Interface, keystore keystore.KeyAuthorizer) (*DataTransferAPI, error) {
+func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, dataVerificationProtocol dataverification.Interface, publisherNodeFinder PublisherNodesFinder, contractStore contract.Interface, keystore keystore.KeyAuthorizer, dataDirectory string) (*DataTransferAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -76,6 +79,19 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 		return nil, errors.New("keystore is nil")
 	}
 
+	if dataDirectory == "" {
+		return nil, errors.New("data directory is empty")
+	}
+
+	// create the media cache directory
+	cacheDir := filepath.Join(dataDirectory, mediaCacheDirectory)
+	if !common.DirExists(cacheDir) {
+		err := common.CreateDirectory(cacheDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create cache directory: %w", err)
+		}
+	}
+
 	return &DataTransferAPI{
 		host:                     host,
 		dataQueryProtocol:        dataQueryProtocol,
@@ -83,6 +99,7 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 		publisherNodesFinder:     publisherNodeFinder,
 		contractStore:            contractStore,
 		keystore:                 keystore,
+		dataDirectory:            dataDirectory,
 	}, nil
 }
 
@@ -125,6 +142,144 @@ func (api *DataTransferAPI) RebroadcastDataQueryRequest(r *http.Request, args *R
 	}
 
 	response.Success = true
+
+	return nil
+}
+
+// DiscoverDownloadMediaFileRequestArgs request arguments.
+type DiscoverDownloadMediaFileRequestArgs struct {
+	FileHashes string `json:"file_hashes"`
+}
+
+// DiscoverDownloadMediaFileRequestResponse is a response.
+type DiscoverDownloadMediaFileRequestResponse struct {
+	DownloadedFils []string `json:"downloaded_files"`
+}
+
+// DiscoverDownloadMediaFileRequest discovers and download media files below or equal to 512KB.
+// this is useful for displaying images within the network.
+func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, args *DiscoverDownloadMediaFileRequestArgs, response *DiscoverDownloadMediaFileRequestResponse) error {
+	hashes := strings.Split(args.FileHashes, ",")
+	count := 0
+	for _, v := range hashes {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			count++
+		}
+	}
+
+	if count > 5 {
+		return errors.New("number of hashes exceed 5 media files")
+	}
+
+	req := &SendDataQueryRequestArgs{
+		FileHashes: args.FileHashes,
+	}
+	resp := &SendDataQueryRequestResponse{}
+	err := api.SendDataQueryRequest(r, req, resp)
+	if err != nil {
+		return fmt.Errorf("failed to search for media file: %w", err)
+	}
+
+	responses := make(map[string]DataQueryResponseJSON)
+	for i := 0; i < 200; i++ {
+		time.Sleep(50 * time.Millisecond)
+		// after 4 seconds rebroadcast
+		if i == 80 {
+			_ = api.RebroadcastDataQueryRequest(r, &RebroadcastDataQueryRequestArgs{Hash: resp.Hash}, &RebroadcastDataQueryRequestResponse{})
+		}
+		// request from verifier after 4 and 8 seconds
+		dqResponsesVerifiers := &CheckDataQueryResponse{}
+		if i == 80 || i == 160 {
+			_ = api.RequestDataQueryResponseFromVerifiers(r, &CheckDataQueryResponseArgs{DataQueryRequestHash: resp.Hash}, dqResponsesVerifiers)
+		}
+
+		for _, v := range dqResponsesVerifiers.Responses {
+			responses[v.FromPeerAddr] = v
+		}
+
+		dqResponses := &CheckDataQueryResponse{}
+		err := api.CheckDataQueryResponse(r, &CheckDataQueryResponseArgs{DataQueryRequestHash: resp.Hash}, dqResponses)
+		if err != nil {
+			continue
+		}
+
+		for _, v := range dqResponses.Responses {
+			responses[v.FromPeerAddr] = v
+		}
+
+		breakLoop := false
+		for _, v := range responses {
+			if len(v.UnavailableFileHashes) == 0 {
+				breakLoop = true
+				break
+			}
+		}
+
+		if breakLoop {
+			break
+		}
+	}
+
+	if len(responses) == 0 {
+		return errors.New("failed to find media file")
+	}
+
+	selectedDataQueryResponse := DataQueryResponseJSON{}
+	for _, v := range responses {
+		if len(v.UnavailableFileHashes) == 0 {
+			selectedDataQueryResponse = v
+			break
+		}
+	}
+
+	remotePeer, err := peer.Decode(selectedDataQueryResponse.FromPeerAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode peer: %w", err)
+	}
+
+	ctxWithCancel, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	downloadedMedia := make([]string, 0)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i, v := range selectedDataQueryResponse.FileHashes {
+		fsize := selectedDataQueryResponse.FileHashesSizes[i]
+		wg.Add(1)
+		go func(v string, size uint64) {
+			defer wg.Done()
+			fileHash, err := hexutil.DecodeNoPrefix(v)
+			if err != nil {
+				return
+			}
+			request := &messages.FileTransferInfoProto{
+				ContractHash: []byte{1}, // a single byte is enough to fill the placeholder
+				FileHash:     fileHash,
+				FileSize:     size,
+				From:         0,
+				To:           int64(size),
+			}
+
+			destinationFilePath := filepath.Join(api.dataDirectory, mediaCacheDirectory, v)
+			if common.FileExists(destinationFilePath) {
+				mu.Lock()
+				downloadedMedia = append(downloadedMedia, destinationFilePath)
+				mu.Unlock()
+				return
+			}
+
+			finalPath, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, destinationFilePath, "", remotePeer, request, false)
+			if err == nil {
+				mu.Lock()
+				downloadedMedia = append(downloadedMedia, finalPath)
+				mu.Unlock()
+			}
+		}(v, fsize)
+	}
+	wg.Wait()
+
+	response.DownloadedFils = downloadedMedia
 
 	return nil
 }
@@ -728,7 +883,7 @@ func (api *DataTransferAPI) DownloadFile(r *http.Request, args *DownloadFileArgs
 				fileNameWithPart := fmt.Sprintf("%s_part_%d_%d", fileHashHex, fileRange.from, fileRange.to)
 				destinationFilePath := filepath.Join(api.dataVerificationProtocol.GetDownloadDirectory(), hexutil.Encode(request.ContractHash), fileNameWithPart)
 
-				_, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, destinationFilePath, fileNameWithPart, fileHoster, request)
+				_, err := api.dataVerificationProtocol.RequestFileTransfer(ctxWithCancel, destinationFilePath, fileNameWithPart, fileHoster, request, true)
 				// if the context wasnt canceled set the error
 				if err != nil && !errors.Is(err, context.Canceled) {
 					fileHashHex := hexutil.EncodeNoPrefix(fileHash)

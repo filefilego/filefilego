@@ -36,6 +36,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		publisherNodesFinder     PublisherNodesFinder
 		contractStore            contract.Interface
 		keystore                 keystore.KeyAuthorizer
+		dataDirectory            string
 		expErr                   string
 	}{
 		"no host": {
@@ -71,6 +72,15 @@ func TestNewDataTransferAPI(t *testing.T) {
 			contractStore:            &contract.Store{},
 			expErr:                   "keystore is nil",
 		},
+		"data dir empty": {
+			host:                     h,
+			dataQueryProtocol:        &dataquery.Protocol{},
+			dataVerificationProtocol: &dataverification.Protocol{},
+			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
+			contractStore:            &contract.Store{},
+			keystore:                 &keyAuthorizerStub{},
+			expErr:                   "data directory is empty",
+		},
 		"success": {
 			host:                     h,
 			dataQueryProtocol:        &dataquery.Protocol{},
@@ -78,6 +88,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 			publisherNodesFinder:     &networkMessagePublisherNodesFinderStub{},
 			contractStore:            &contract.Store{},
 			keystore:                 &keyAuthorizerStub{},
+			dataDirectory:            "./",
 		},
 	}
 
@@ -85,7 +96,7 @@ func TestNewDataTransferAPI(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder, tt.contractStore, tt.keystore)
+			api, err := NewDataTransferAPI(tt.host, tt.dataQueryProtocol, tt.dataVerificationProtocol, tt.publisherNodesFinder, tt.contractStore, tt.keystore, tt.dataDirectory)
 			if tt.expErr != "" {
 				assert.Nil(t, api)
 				assert.EqualError(t, err, tt.expErr)
@@ -104,6 +115,7 @@ func TestDataTransferAPIMethods(t *testing.T) {
 		db1.Close()
 		os.RemoveAll("file_transfer_api.db")
 		os.RemoveAll("data_download")
+		os.RemoveAll("cache")
 		os.RemoveAll("keystore")
 	})
 	db, err := database.New(db1)
@@ -121,7 +133,7 @@ func TestDataTransferAPIMethods(t *testing.T) {
 	assert.NoError(t, err)
 	keystore, err := keystore.New(filepath.Join(currentDir, "keystore"), randomKeyForJWT)
 	assert.NoError(t, err)
-	api, err := NewDataTransferAPI(h, dq, dv, &networkMessagePublisherNodesFinderStub{}, contractStore, keystore)
+	api, err := NewDataTransferAPI(h, dq, dv, &networkMessagePublisherNodesFinderStub{}, contractStore, keystore, filepath.Join(currentDir, "cache"))
 	assert.NoError(t, err)
 	assert.NotNil(t, api)
 
