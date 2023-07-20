@@ -34,7 +34,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const mediaCacheDirectory = "cache"
+// MediaCacheDirectory is the name of the cache directory
+const MediaCacheDirectory = "cache"
 
 // PublisherNodesFinder is an interface that specifies finding nodes and publishing a message to the network functionalities.
 type PublisherNodesFinder interface {
@@ -84,7 +85,7 @@ func NewDataTransferAPI(host host.Host, dataQueryProtocol dataquery.Interface, d
 	}
 
 	// create the media cache directory
-	cacheDir := filepath.Join(dataDirectory, mediaCacheDirectory)
+	cacheDir := filepath.Join(dataDirectory, MediaCacheDirectory)
 	if !common.DirExists(cacheDir) {
 		err := common.CreateDirectory(cacheDir)
 		if err != nil {
@@ -165,7 +166,7 @@ func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, ar
 	for _, v := range hashes {
 		v = strings.TrimSpace(v)
 		if v != "" {
-			destinationFilePath := filepath.Join(api.dataDirectory, mediaCacheDirectory, v)
+			destinationFilePath := filepath.Join(api.dataDirectory, MediaCacheDirectory, v)
 			if common.FileExists(destinationFilePath) {
 				downloadedMedia = append(downloadedMedia, destinationFilePath)
 			}
@@ -271,7 +272,7 @@ func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, ar
 				To:           int64(size),
 			}
 
-			destinationFilePath := filepath.Join(api.dataDirectory, mediaCacheDirectory, v)
+			destinationFilePath := filepath.Join(api.dataDirectory, MediaCacheDirectory, v)
 			if common.FileExists(destinationFilePath) {
 				mu.Lock()
 				downloadedMedia = append(downloadedMedia, destinationFilePath)

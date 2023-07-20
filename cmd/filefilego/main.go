@@ -534,6 +534,9 @@ func run(ctx *cli.Context) error {
 		})
 	}
 
+	// cached media route
+	r.Handle("/media", serveMediaFile(conf.Global.DataDir, internalrpc.MediaCacheDirectory))
+
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {
 		r.Handle("/uploads", storageEngine)
@@ -622,5 +625,37 @@ func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Ha
 
 		r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		handler.ServeHTTP(w, r)
+	})
+}
+
+func serveMediaFile(dataDir, cacheDir string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		hash := r.URL.Query().Get("hash")
+		imgType := r.URL.Query().Get("type")
+		filePath := filepath.Join(dataDir, cacheDir, hash)
+		if !common.FileExists(filePath) {
+			http.NotFound(w, r)
+			return
+		}
+
+		contentType := "image/jpeg"
+		switch imgType {
+		case "png":
+			contentType = "image/png"
+		case "gif":
+			contentType = "image/gif"
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		http.ServeFile(w, r, filePath)
 	})
 }
