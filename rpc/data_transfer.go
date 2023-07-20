@@ -159,17 +159,28 @@ type DiscoverDownloadMediaFileRequestResponse struct {
 // DiscoverDownloadMediaFileRequest discovers and download media files below or equal to 512KB.
 // this is useful for displaying images within the network.
 func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, args *DiscoverDownloadMediaFileRequestArgs, response *DiscoverDownloadMediaFileRequestResponse) error {
+	downloadedMedia := make([]string, 0)
 	hashes := strings.Split(args.FileHashes, ",")
 	count := 0
 	for _, v := range hashes {
 		v = strings.TrimSpace(v)
 		if v != "" {
+			destinationFilePath := filepath.Join(api.dataDirectory, mediaCacheDirectory, v)
+			if common.FileExists(destinationFilePath) {
+				downloadedMedia = append(downloadedMedia, destinationFilePath)
+			}
 			count++
 		}
 	}
 
 	if count > 5 {
 		return errors.New("number of hashes exceed 5 media files")
+	}
+
+	// if media is already cached
+	if len(downloadedMedia) == count {
+		response.DownloadedFils = downloadedMedia
+		return nil
 	}
 
 	req := &SendDataQueryRequestArgs{
@@ -241,7 +252,6 @@ func (api *DataTransferAPI) DiscoverDownloadMediaFileRequest(r *http.Request, ar
 	ctxWithCancel, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	downloadedMedia := make([]string, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for i, v := range selectedDataQueryResponse.FileHashes {
