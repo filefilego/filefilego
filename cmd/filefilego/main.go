@@ -640,6 +640,11 @@ func serveMediaFile(dataDir, cacheDir string) http.Handler {
 		}
 
 		hash := r.URL.Query().Get("hash")
+		if strings.Contains(hash, ".") {
+			http.NotFound(w, r)
+			return
+		}
+
 		imgType := r.URL.Query().Get("type")
 		filePath := filepath.Join(dataDir, cacheDir, hash)
 		if !common.FileExists(filePath) {
