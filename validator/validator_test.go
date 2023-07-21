@@ -29,10 +29,10 @@ func TestNew(t *testing.T) {
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
 	cases := map[string]struct {
-		node       NetworkMessagePublisher
-		blockchain blockchain.Interface
-		privateKey crypto.PrivKey
-		expErr     string
+		node        NetworkMessagePublisher
+		blockchain  blockchain.Interface
+		privateKeys []crypto.PrivKey
+		expErr      string
 	}{
 		"empty node": {
 			expErr: "node is nil",
@@ -44,12 +44,12 @@ func TestNew(t *testing.T) {
 		"empty privateKey": {
 			node:       &node.Node{},
 			blockchain: &blockchain.Blockchain{},
-			expErr:     "privateKey is nil",
+			expErr:     "privateKeys is empty",
 		},
 		"success": {
-			node:       &node.Node{},
-			blockchain: &blockchain.Blockchain{},
-			privateKey: kp.PrivateKey,
+			node:        &node.Node{},
+			blockchain:  &blockchain.Blockchain{},
+			privateKeys: []crypto.PrivKey{kp.PrivateKey},
 		},
 	}
 
@@ -57,7 +57,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			miner, err := New(tt.node, tt.blockchain, tt.privateKey)
+			miner, err := New(tt.node, tt.blockchain, tt.privateKeys)
 			if tt.expErr != "" {
 				assert.Nil(t, miner)
 				assert.EqualError(t, err, tt.expErr)
@@ -96,9 +96,10 @@ func TestValidatorMethods(t *testing.T) {
 		Address:   kp.Address,
 		PublicKey: hexutil.Encode(pubKeyBytes),
 	})
-	miner, err := New(&node.Node{}, bchain, kp.PrivateKey)
+	miner, err := New(&node.Node{}, bchain, []crypto.PrivKey{kp.PrivateKey})
 	assert.NoError(t, err)
-	coinbaseTX, err := miner.getCoinbaseTX()
+	pk, addr := miner.getPK()
+	coinbaseTX, err := miner.getCoinbaseTX(pk, addr)
 	assert.NoError(t, err)
 	assert.NotNil(t, coinbaseTX)
 	ok, err := coinbaseTX.Validate()
@@ -196,17 +197,17 @@ func TestValidatorMethods(t *testing.T) {
 	assert.Equal(t, uint64(1), bchain.GetHeight())
 
 	// seal a block
-	_, err = miner.SealBlock(time.Now().Unix())
+	_, _, err = miner.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(2), bchain.GetHeight())
 
 	// one more
-	_, err = miner.SealBlock(time.Now().Unix())
+	_, _, err = miner.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(3), bchain.GetHeight())
 
 	// one more with past timestamp should give error
-	_, err = miner.SealBlock(time.Now().Unix() - 10)
+	_, _, err = miner.SealBlock(time.Now().Unix() - 10)
 	assert.ErrorContains(t, err, "failed to update blockchain: previous block timestamp")
 	assert.Equal(t, uint64(3), bchain.GetHeight())
 }

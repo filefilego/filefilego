@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -26,15 +27,16 @@ type NetworkMessagePublisher interface {
 
 // Validator struct.
 type Validator struct {
-	node       NetworkMessagePublisher
-	blockchain blockchain.Interface
-	privateKey crypto.PrivKey
-
-	address string
+	node        NetworkMessagePublisher
+	blockchain  blockchain.Interface
+	privateKeys []crypto.PrivKey
+	idx         int
+	mu          sync.Mutex
+	address     []string
 }
 
 // New constructs a new validator.
-func New(node NetworkMessagePublisher, bchain blockchain.Interface, privateKey crypto.PrivKey) (*Validator, error) {
+func New(node NetworkMessagePublisher, bchain blockchain.Interface, privateKeys []crypto.PrivKey) (*Validator, error) {
 	if node == nil {
 		return nil, errors.New("node is nil")
 	}
@@ -43,39 +45,57 @@ func New(node NetworkMessagePublisher, bchain blockchain.Interface, privateKey c
 		return nil, errors.New("blockchain is nil")
 	}
 
-	if privateKey == nil {
-		return nil, errors.New("privateKey is nil")
+	if len(privateKeys) == 0 {
+		return nil, errors.New("privateKeys is empty")
 	}
 
-	rawPubKey, err := privateKey.GetPublic().Raw()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get public key bytes: %w", err)
+	v := &Validator{
+		node:        node,
+		blockchain:  bchain,
+		privateKeys: make([]crypto.PrivKey, 0),
+		address:     make([]string, 0),
 	}
 
-	verifierAddr, err := ffgcrypto.RawPublicToAddress(rawPubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get address from public key: %w", err)
-	}
-
-	isVerifier := false
-	allVerifiers := block.GetBlockVerifiers()
-	for _, verifier := range allVerifiers {
-		if verifier.Address == verifierAddr {
-			isVerifier = true
-			break
+	for _, privateKey := range privateKeys {
+		rawPubKey, err := privateKey.GetPublic().Raw()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get public key bytes: %w", err)
 		}
+
+		verifierAddr, err := ffgcrypto.RawPublicToAddress(rawPubKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get address from public key: %w", err)
+		}
+
+		isVerifier := false
+		allVerifiers := block.GetBlockVerifiers()
+		for _, verifier := range allVerifiers {
+			if verifier.Address == verifierAddr {
+				isVerifier = true
+				break
+			}
+		}
+
+		if !isVerifier {
+			return nil, errors.New("validator key is not a verifier")
+		}
+
+		v.privateKeys = append(v.privateKeys, privateKey)
+		v.address = append(v.address, verifierAddr)
 	}
 
-	if !isVerifier {
-		return nil, errors.New("validator key is not a verifier")
-	}
+	return v, nil
+}
 
-	return &Validator{
-		node:       node,
-		blockchain: bchain,
-		privateKey: privateKey,
-		address:    verifierAddr,
-	}, nil
+func (m *Validator) getPK() (crypto.PrivKey, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	k := m.privateKeys[m.idx]
+	add := m.address[m.idx]
+	m.idx = (m.idx + 1) % len(m.privateKeys)
+
+	return k, add
 }
 
 func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
@@ -134,13 +154,13 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 	return validatedTransaction
 }
 
-func (m *Validator) getCoinbaseTX() (*transaction.Transaction, error) {
+func (m *Validator) getCoinbaseTX(pk crypto.PrivKey, address string) (*transaction.Transaction, error) {
 	mainChain, err := hexutil.Decode(transaction.ChainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
 	}
 
-	publicKeyBytes, err := m.privateKey.GetPublic().Raw()
+	publicKeyBytes, err := pk.GetPublic().Raw()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public key bytes: %w", err)
 	}
@@ -154,15 +174,15 @@ func (m *Validator) getCoinbaseTX() (*transaction.Transaction, error) {
 	coinbaseTx := transaction.Transaction{
 		PublicKey:       make([]byte, len(publicKeyBytes)),
 		Nounce:          []byte{0},
-		From:            m.address,
-		To:              m.address,
+		From:            address,
+		To:              address,
 		Value:           hexutil.EncodeBig(blockReward),
 		TransactionFees: "0x0",
 		Chain:           mainChain,
 	}
 	copy(coinbaseTx.PublicKey, publicKeyBytes)
 
-	err = coinbaseTx.Sign(m.privateKey)
+	err = coinbaseTx.Sign(pk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign coinbase transaction: %w", err)
 	}
@@ -186,17 +206,18 @@ func (m *Validator) BroadcastBlock(ctx context.Context, validBlock *block.Block)
 }
 
 // SealBlock seals a block.
-func (m *Validator) SealBlock(timestamp int64) (*block.Block, error) {
-	coinbaseTX, err := m.getCoinbaseTX()
+func (m *Validator) SealBlock(timestamp int64) (*block.Block, string, error) {
+	pk, addr := m.getPK()
+	coinbaseTX, err := m.getCoinbaseTX(pk, addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get coinbase transaction: %w", err)
+		return nil, "", fmt.Errorf("failed to get coinbase transaction: %w", err)
 	}
 	mempoolTransactions := m.prepareMempoolTransactions()
 	mempoolTransactions = prependTransaction(mempoolTransactions, *coinbaseTX)
 
 	lastBlockHash := m.blockchain.GetLastBlockHash()
 	if lastBlockHash == nil {
-		return nil, errors.New("failed to get last block hash from db")
+		return nil, "", errors.New("failed to get last block hash from db")
 	}
 
 	block := block.Block{
@@ -206,17 +227,17 @@ func (m *Validator) SealBlock(timestamp int64) (*block.Block, error) {
 		Number:            m.blockchain.GetHeight() + 1,
 	}
 
-	err = block.Sign(m.privateKey)
+	err = block.Sign(pk)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign block: %w", err)
+		return nil, "", fmt.Errorf("failed to sign block: %w", err)
 	}
 
 	err = m.blockchain.PerformStateUpdateFromBlock(block)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update blockchain: %w", err)
+		return nil, "", fmt.Errorf("failed to update blockchain: %w", err)
 	}
 
-	return &block, nil
+	return &block, addr, nil
 }
 
 func prependTransaction(x []transaction.Transaction, y transaction.Transaction) []transaction.Transaction {

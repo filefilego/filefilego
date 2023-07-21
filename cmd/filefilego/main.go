@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
+
 	"github.com/oschwald/geoip2-golang"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -260,17 +262,35 @@ func run(ctx *cli.Context) error {
 
 		// validator node
 		if conf.Global.Validator && !conf.Global.SuperLightNode {
-			keyData, err := os.ReadFile(conf.Global.ValidatorKeypath)
+			dirEntries, err := os.ReadDir(conf.Global.ValidatorKeypath)
 			if err != nil {
-				return fmt.Errorf("failed to read validator key file: %w", err)
+				return fmt.Errorf("failed to read keypath directory: %w", err)
 			}
 
-			key, err := keystore.UnmarshalKey(keyData, conf.Global.ValidatorPass)
-			if err != nil {
-				return fmt.Errorf("failed to restore validator private key file: %w", err)
+			privKeys := make([]crypto.PrivKey, 0)
+			for _, entry := range dirEntries {
+				if entry.IsDir() {
+					continue
+				}
+
+				if filepath.Ext(entry.Name()) != ".json" {
+					continue
+				}
+
+				keyData, err := os.ReadFile(filepath.Join(conf.Global.ValidatorKeypath, entry.Name()))
+				if err != nil {
+					return fmt.Errorf("failed to read validator key file: %w", err)
+				}
+
+				key, err := keystore.UnmarshalKey(keyData, conf.Global.ValidatorPass)
+				if err != nil {
+					return fmt.Errorf("failed to restore validator private key file: %w", err)
+				}
+
+				privKeys = append(privKeys, key.PrivateKey)
 			}
 
-			blockValidator, err := validator.New(ffgNode, bchain, key.PrivateKey)
+			blockValidator, err := validator.New(ffgNode, bchain, privKeys)
 			if err != nil {
 				return fmt.Errorf("failed to setup validator: %w", err)
 			}
@@ -306,12 +326,12 @@ func run(ctx *cli.Context) error {
 				for {
 					tickDuration := blockValidatorIntervalSeconds * time.Second
 					<-time.After(tickDuration)
-					sealedBlock, err := validator.SealBlock(time.Now().Unix())
+					sealedBlock, addr, err := validator.SealBlock(time.Now().Unix())
 					if err != nil {
 						log.Errorf("sealing block failed: %v", err)
 						continue
 					}
-					log.Infof("block %d sealed from verifier %s", sealedBlock.Number, key.Address)
+					log.Infof("block %d sealed from verifier %s", sealedBlock.Number, addr)
 					// broadcast
 					go func() {
 						log.Infof("broadcasting block %d to %d peers", sealedBlock.Number, ffgNode.Peers().Len()-1)

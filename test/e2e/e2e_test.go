@@ -49,6 +49,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	libcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -117,7 +118,7 @@ func TestE2E(t *testing.T) {
 	balanceOfVerifier, err := v1Client.Balance(context.TODO(), kpV1.Address)
 	assert.NoError(t, err)
 	assert.Equal(t, "0", balanceOfVerifier.Balance)
-	sealedBlock, err := validator.SealBlock(time.Now().Unix())
+	sealedBlock, _, err := validator.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.NotNil(t, sealedBlock)
 	assert.Equal(t, uint64(1), v1Bchain.GetHeight())
@@ -357,7 +358,7 @@ func TestE2E(t *testing.T) {
 	tx1Response, err := v1Client.SendRawTransaction(context.TODO(), string(JSONTx1Bytes))
 	assert.NoError(t, err)
 	assert.Equal(t, tx1Response.Transaction, JSONTx1)
-	sealedBlock2, err := validator.SealBlock(time.Now().Unix())
+	sealedBlock2, _, err := validator.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.NotNil(t, sealedBlock2)
 	assert.Equal(t, uint64(2), v1Bchain.GetHeight())
@@ -555,7 +556,7 @@ func TestE2E(t *testing.T) {
 	assert.True(t, found)
 
 	// validator mines a block
-	sealedBlock3, err := validator.SealBlock(time.Now().Unix())
+	sealedBlock3, _, err := validator.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.NotNil(t, sealedBlock3)
 
@@ -626,7 +627,7 @@ func TestE2E(t *testing.T) {
 	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), mempoolTxs[0].Value)
 
 	// seal block
-	sealedBlock4, err := validator.SealBlock(time.Now().Unix())
+	sealedBlock4, _, err := validator.SealBlock(time.Now().Unix())
 	assert.NoError(t, err)
 	assert.NotNil(t, sealedBlock4)
 
@@ -793,7 +794,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 
 		// validator node
 		if conf.Global.Validator && !conf.Global.SuperLightNode {
-			blockValidator, err = validator.New(ffgNode, bchain, kp.PrivateKey)
+			blockValidator, err = validator.New(ffgNode, bchain, []libcrypto.PrivKey{kp.PrivateKey})
 			assert.NoError(t, err)
 		}
 	}
