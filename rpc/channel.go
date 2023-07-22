@@ -258,6 +258,9 @@ type GetNodeItemArgs struct {
 	CurrentPage int    `json:"current_page"`
 	PageSize    int    `json:"page_size"`
 	Order       string `json:"order"`
+	// ChildNodeItemsType denotes which types to be included in the node child items.
+	ChildNodeItemsType   string `json:"child_node_items_type"`
+	ExcludeChildItemType string `json:"exclude_child_item_type"`
 }
 
 // NodeItemJSON represents a node item json.
@@ -304,7 +307,7 @@ func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, respo
 
 	response.Node = transformNodeItemToJSON(item)
 
-	childs, totalChilds, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize, args.Order)
+	childs, totalChilds, err := api.blockchain.GetChildNodeItems(item.NodeHash, args.CurrentPage, args.PageSize, args.Order, args.ChildNodeItemsType, args.ExcludeChildItemType)
 	if err == nil {
 		response.TotalChildNodes = totalChilds
 		response.Node.Nodes = make([]NodeItemJSON, len(childs))
