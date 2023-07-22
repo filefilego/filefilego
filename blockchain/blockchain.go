@@ -1153,10 +1153,6 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 	i := 0
 
 	if order == "asc" {
-		// move the iterator to the correct starting position for pagination.
-		// for i < start && iter.Next() {
-		// 	i++
-		// }
 		for iter.Next() {
 			key := iter.Key()
 			if len(key) == 0 {
