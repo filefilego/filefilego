@@ -72,7 +72,7 @@ type Interface interface {
 	GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error)
 	GetChannels(currentPage, pageSize int, order string) ([]*NodeItem, error)
 	GetChannelsCount() uint64
-	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string) ([]*NodeItem, uint64, error)
+	GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string, childItemsType string, excludeChildType string) ([]*NodeItem, uint64, error)
 	GetNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetParentNodeItem(nodeHash []byte) (*NodeItem, error)
 	GetDownloadContractInTransactionDataTransactionHash(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
@@ -1129,9 +1129,9 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte, childItem
 }
 
 // GetChildNodeItems returns a list of child nodes of a node.
-func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string) ([]*NodeItem, uint64, error) {
-	if currentPage < 0 {
-		currentPage = 0
+func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize int, order string, childItemsType string, excludeChildType string) ([]*NodeItem, uint64, error) {
+	if currentPage <= 0 {
+		currentPage = 1
 	}
 
 	if pageSize == 0 {
@@ -1140,28 +1140,24 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 		pageSize = 1000
 	}
 
-	start := (currentPage) * pageSize
+	start := (currentPage - 1) * pageSize
 	if start < 0 {
 		start = 0
 	}
 
-	limit := pageSize
 	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), nodeHash...)
 	iter := b.db.NewIterator(util.BytesPrefix(prefixWithNodeNodes), nil)
+	defer iter.Release()
+
 	childNodes := make([]*NodeItem, 0)
 	i := 0
 
 	if order == "asc" {
+		// move the iterator to the correct starting position for pagination.
+		// for i < start && iter.Next() {
+		// 	i++
+		// }
 		for iter.Next() {
-			i++
-			if limit == 0 {
-				break
-			}
-
-			if i < start {
-				continue
-			}
-
 			key := iter.Key()
 			if len(key) == 0 {
 				break
@@ -1171,47 +1167,76 @@ func (b *Blockchain) GetChildNodeItems(nodeHash []byte, currentPage, pageSize in
 			if err != nil {
 				continue
 			}
+
+			if excludeChildType != "" && item.NodeType.String() == excludeChildType {
+				continue
+			}
+
+			if childItemsType != "" && item.NodeType.String() != childItemsType {
+				continue
+			}
+			i++
+			if i <= start {
+				continue
+			}
+
 			childNodes = append(childNodes, item)
-			limit--
+			if len(childNodes) == pageSize {
+				break
+			}
 		}
 	} else {
 		if iter.Last() {
-			key := iter.Key()
-			i++
-			if len(key) != 0 && i > start {
-				item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
-				if err == nil {
-					childNodes = append(childNodes, item)
-					limit--
+			if currentPage > 1 {
+				for i <= start && iter.Prev() {
+					i++
+				}
+			} else {
+				for i < start && iter.Prev() {
+					i++
 				}
 			}
 		}
 
-		for iter.Prev() {
-			i++
-			if limit == 0 {
-				break
-			}
-
-			if i < start {
-				continue
-			}
-
+		// move one step forward and copy the element
+		if iter.Next() {
 			key := iter.Key()
-			if len(key) == 0 {
-				break
+			if len(key) != 0 {
+				item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+				if err == nil {
+					childNodes = append(childNodes, item)
+				}
 			}
+		}
 
-			item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
-			if err != nil {
-				continue
+		if len(childNodes) != pageSize {
+			for iter.Prev() {
+				key := iter.Key()
+				if len(key) == 0 {
+					break
+				}
+
+				item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+				if err != nil {
+					continue
+				}
+
+				if excludeChildType != "" && item.NodeType.String() == excludeChildType {
+					continue
+				}
+
+				if childItemsType != "" && item.NodeType.String() != childItemsType {
+					continue
+				}
+
+				childNodes = append(childNodes, item)
+				if len(childNodes) == pageSize {
+					break
+				}
 			}
-			childNodes = append(childNodes, item)
-			limit--
 		}
 	}
 
-	iter.Release()
 	err := iter.Error()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to release get child nodes iterator: %w", err)
@@ -1425,7 +1450,7 @@ func (b *Blockchain) GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []by
 		node := el.Value.(*NodeItem)
 		if node.NodeType == NodeItemType_DIR || node.NodeType == NodeItemType_ENTRY {
 			path += node.Name + "/"
-			childs, _, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize, order)
+			childs, _, err := b.GetChildNodeItems(entryOrFolderHash, currentPage, pageSize, order, "", "")
 			if err == nil {
 				for _, v := range childs {
 					if v.NodeType == NodeItemType_DIR {
