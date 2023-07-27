@@ -93,7 +93,8 @@ func TestStorageMethods(t *testing.T) {
 	driver, err := database.New(db)
 	assert.NoError(t, err)
 	storagePath := "/tmp/invalidpathffg2"
-	common.WriteToFile([]byte("hello world"), "testfile.txt")
+	_, err = common.WriteToFile([]byte("hello world"), "testfile.txt")
+	assert.NoError(t, err)
 	t.Cleanup(func() {
 		db.Close()
 		os.Remove("testfile.txt")
@@ -224,7 +225,6 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, uploadedData, 0)
 	assert.Equal(t, uint64(0), totalCount)
-
 }
 
 func TestAuthenticateHandler(t *testing.T) {
