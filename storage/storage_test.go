@@ -93,8 +93,11 @@ func TestStorageMethods(t *testing.T) {
 	driver, err := database.New(db)
 	assert.NoError(t, err)
 	storagePath := "/tmp/invalidpathffg2"
+	_, err = common.WriteToFile([]byte("hello world"), "testfile.txt")
+	assert.NoError(t, err)
 	t.Cleanup(func() {
 		db.Close()
+		os.Remove("testfile.txt")
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
@@ -171,13 +174,13 @@ func TestStorageMethods(t *testing.T) {
 	assert.EqualError(t, err, "invalid file metadata")
 
 	// valid file metadata
-	sha1OfFile, err := crypto.Sha1File("storage.go")
+	sha1OfFile, err := crypto.Sha1File("testfile.txt")
 	assert.NoError(t, err)
 	fileHash := sha1OfFile
 	node1Metadata := FileMetadata{
 		MerkleRootHash: "0x0123",
 		Hash:           fileHash,
-		FilePath:       "storage.go",
+		FilePath:       "testfile.txt",
 		Size:           123,
 	}
 	err = storage.SaveFileMetadata(node1Hash, fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
@@ -214,6 +217,14 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, uploadedData, 1)
 	assert.Equal(t, uint64(1), totalCount)
+
+	// delete the file
+	err = storage.DeleteFileFromDB(uploadedData[0].Key)
+	assert.NoError(t, err)
+	uploadedData, totalCount, err = storage.ListFiles(0, 100, "asc")
+	assert.NoError(t, err)
+	assert.Len(t, uploadedData, 0)
+	assert.Equal(t, uint64(0), totalCount)
 }
 
 func TestAuthenticateHandler(t *testing.T) {
