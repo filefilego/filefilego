@@ -129,6 +129,7 @@ func (api *StorageAPI) startWorker() {
 		ctxWithCancel, cancel := context.WithCancel(context.Background())
 		api.storageProtocol.SetCancelFileUpload(job.PeerID, job.FilePath, false, cancel)
 		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+		fileMetadata.Timestamp = time.Now().Unix()
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
 		if err == nil {

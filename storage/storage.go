@@ -66,6 +66,7 @@ type FileMetadata struct {
 	FilePath       string `json:"file_path"`
 	Size           int64  `json:"size"`
 	RemotePeer     string `json:"remote_peer"`
+	Timestamp      int64  `json:"timestamp"`
 }
 
 // FileMetadataWithDBKey holds the file metatada and the key.
@@ -601,6 +602,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Hash:           fHash,
 		FilePath:       newPath,
 		Size:           fileSize,
+		Timestamp:      time.Now().Unix(),
 	}
 
 	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
@@ -782,6 +784,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		Hash:           fHash,
 		FilePath:       newPath,
 		Size:           fileSize,
+		Timestamp:      time.Now().Unix(),
 	}
 
 	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)

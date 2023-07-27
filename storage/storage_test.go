@@ -182,6 +182,7 @@ func TestStorageMethods(t *testing.T) {
 		Hash:           fileHash,
 		FilePath:       "testfile.txt",
 		Size:           123,
+		Timestamp:      time.Now().Unix(),
 	}
 	err = storage.SaveFileMetadata(node1Hash, fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
 	assert.NoError(t, err)
