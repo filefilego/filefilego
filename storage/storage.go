@@ -278,6 +278,16 @@ func (s *Storage) DeleteFileFromDB(key string) error {
 		return fmt.Errorf("failed to delete from db: %w", err)
 	}
 
+	idx := s.GetTotalFilesStored()
+	idx--
+	itemsUint64 := make([]byte, 8)
+	binary.BigEndian.PutUint64(itemsUint64, idx)
+
+	err = s.db.Put([]byte(fileHashCountPrefix), itemsUint64)
+	if err != nil {
+		return fmt.Errorf("failed to decrement saved files count: %w", err)
+	}
+
 	return nil
 }
 
