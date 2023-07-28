@@ -144,19 +144,19 @@ func (api *StorageAPI) startWorker() {
 	}
 }
 
-// ExportUploadedFileArgs args for exporting file uploads.
-type ExportUploadedFileArgs struct {
+// ExportUploadedFilesArgs args for exporting file uploads.
+type ExportUploadedFilesArgs struct {
 	AccessToken    string `json:"access_token"`
 	SaveToFilePath string `json:"save_to_filepath"`
 }
 
-// ExportUploadedFileResponse the response of uploads exporting.
-type ExportUploadedFileResponse struct {
+// ExportUploadedFilesResponse the response of uploads exporting.
+type ExportUploadedFilesResponse struct {
 	SavedFilePath string `json:"saved_filepath"`
 }
 
-// ExportUploadedFile exports the uploaded file to the given destination folder.
-func (api *StorageAPI) ExportUploadedFile(r *http.Request, args *ExportUploadedFileArgs, response *ExportUploadedFileResponse) error {
+// ExportUploadedFiles exports the uploaded file to the given destination folder.
+func (api *StorageAPI) ExportUploadedFiles(r *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
 	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
 		return errors.New("not authorized")
@@ -192,19 +192,19 @@ func (api *StorageAPI) ExportUploadedFile(r *http.Request, args *ExportUploadedF
 	return nil
 }
 
-// ImportUploadedFileArgs args for restoring file uploads.
-type ImportUploadedFileArgs struct {
+// ImportUploadedFilesArgs args for restoring file uploads.
+type ImportUploadedFilesArgs struct {
 	AccessToken string `json:"access_token"`
 	FilePath    string `json:"filepath"`
 }
 
 // ExportUploadedFileResponse the response of restoring.
-type ImportUploadedFileResponse struct {
+type ImportUploadedFilesResponse struct {
 	Success bool `json:"success"`
 }
 
 // ImportUploadedFile restores the uploaded files.
-func (api *StorageAPI) ImportUploadedFile(r *http.Request, args *ImportUploadedFileArgs, response *ImportUploadedFileResponse) error {
+func (api *StorageAPI) ImportUploadedFile(r *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
 	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
 		return errors.New("not authorized")
