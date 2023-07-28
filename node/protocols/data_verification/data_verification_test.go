@@ -289,6 +289,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		Hash:           fileHash,
 		FilePath:       uploadedFilepath,
 		Size:           fileSize,
+		Timestamp:      time.Now().Unix(),
 	}
 	err = strg.SaveFileMetadata("", fileHash, h1.ID().String(), metadata)
 	assert.NoError(t, err)
@@ -298,6 +299,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		Hash:           file2Hash,
 		FilePath:       uploadedFile2path,
 		Size:           fileSize2,
+		Timestamp:      time.Now().Unix(),
 	}
 	err = strg.SaveFileMetadata("", file2Hash, h1.ID().String(), metadata2)
 	assert.NoError(t, err)

@@ -547,6 +547,12 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
 				continue
 			}
+
+			if !common.FileExists(fileMetaData.FilePath) {
+				response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
+				continue
+			}
+
 			response.FileHashes = append(response.FileHashes, v)
 			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
 			merkleRootHash, err := hexutil.Decode(fileMetaData.MerkleRootHash)

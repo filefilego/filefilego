@@ -97,6 +97,7 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	t.Cleanup(func() {
 		db.Close()
+		os.Remove("exported_files.json")
 		os.Remove("testfile.txt")
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
@@ -178,10 +179,12 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	fileHash := sha1OfFile
 	node1Metadata := FileMetadata{
+		FileName:       "testfile.txt",
 		MerkleRootHash: "0x0123",
 		Hash:           fileHash,
 		FilePath:       "testfile.txt",
 		Size:           123,
+		Timestamp:      time.Now().Unix(),
 	}
 	err = storage.SaveFileMetadata(node1Hash, fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
 	assert.NoError(t, err)
@@ -218,6 +221,12 @@ func TestStorageMethods(t *testing.T) {
 	assert.Len(t, uploadedData, 1)
 	assert.Equal(t, uint64(1), totalCount)
 
+	exportedFiles, err := storage.ExportFiles()
+	assert.NoError(t, err)
+	encodedBytes, err := json.Marshal(exportedFiles)
+	assert.NoError(t, err)
+	_, err = common.WriteToFile(encodedBytes, "exported_files.json")
+	assert.NoError(t, err)
 	// delete the file
 	err = storage.DeleteFileFromDB(uploadedData[0].Key)
 	assert.NoError(t, err)
@@ -225,6 +234,18 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, uploadedData, 0)
 	assert.Equal(t, uint64(0), totalCount)
+
+	// read again the files
+	exportedFiles, err = storage.ExportFiles()
+	assert.NoError(t, err)
+	assert.Len(t, exportedFiles, 0)
+
+	n, err := storage.ImportFiles("exported_files.json")
+	assert.Equal(t, 1, n)
+	assert.NoError(t, err)
+	exportedFiles, err = storage.ExportFiles()
+	assert.NoError(t, err)
+	assert.Len(t, exportedFiles, 1)
 }
 
 func TestAuthenticateHandler(t *testing.T) {
