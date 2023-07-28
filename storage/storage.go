@@ -56,6 +56,8 @@ type Interface interface {
 	HandleIncomingFileUploads(stream network.Stream)
 	ListFiles(currentPage, pageSize int, order string) ([]FileMetadataWithDBKey, uint64, error)
 	DeleteFileFromDB(key string) error
+	ExportFiles() ([]FileMetadataWithDBKey, error)
+	ImportFiles(string) (int, error)
 }
 
 // FileMetadata holds the metadata for a file.
@@ -290,6 +292,72 @@ func (s *Storage) DeleteFileFromDB(key string) error {
 	}
 
 	return nil
+}
+
+// ExportFiles gets all the uploaded files list
+func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
+	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashSortingPrefix)), nil)
+	items := make([]FileMetadataWithDBKey, 0)
+	for iter.Next() {
+		key := iter.Key()
+		if len(key) == 0 {
+			break
+		}
+
+		hash := string(key[8+len([]byte(fileHashSortingPrefix)):])
+		item, err := s.GetFileMetadata(hash[:40], hash[40:])
+		if err != nil {
+			continue
+		}
+
+		kitem := FileMetadataWithDBKey{
+			FileMetadata: item,
+			Key:          hexutil.Encode(key),
+		}
+		items = append(items, kitem)
+	}
+
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return nil, fmt.Errorf("failed to release uploaded files iterator: %w", err)
+	}
+
+	return items, nil
+}
+
+// ImportFiles gets all the uploaded files list
+func (s *Storage) ImportFiles(importedFile string) (int, error) {
+	data, err := os.ReadFile(importedFile)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read import file content: %w", err)
+	}
+	files := make([]FileMetadataWithDBKey, 0)
+	err = json.Unmarshal(data, &files)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unmarshal file metadata: %w", err)
+	}
+
+	imported := 0
+	for _, v := range files {
+		k, err := hexutil.Decode(v.Key)
+		if err != nil {
+			continue
+		}
+
+		dt, err := s.db.Get(k)
+		if err != nil || len(dt) == 0 {
+			fileBytes, err := json.Marshal(v.FileMetadata)
+			if err == nil {
+				err := s.db.Put(k, fileBytes)
+				if err == nil {
+					imported++
+				}
+			}
+		}
+	}
+
+	return imported, nil
 }
 
 // ListFiles the uploaded files.
