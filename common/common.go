@@ -60,3 +60,8 @@ func LeftPad2Len(s string, padStr string, overallLen int) string {
 	retStr := strings.Repeat(padStr, padCountInt) + s
 	return retStr[(len(retStr) - overallLen):]
 }
+
+// IsValidPath checks if path contains more than one "." character.
+func IsValidPath(s string) bool {
+	return !strings.Contains(s, "..")
+}

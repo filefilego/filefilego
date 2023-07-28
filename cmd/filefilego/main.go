@@ -7,6 +7,7 @@ import (
 	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -717,6 +718,7 @@ func serveUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) ht
 		}
 
 		outPutLocation := r.URL.Query().Get("location")
+
 		if !common.DirExists(outPutLocation) {
 			http.Error(w, "output directory doesn't exist", http.StatusBadRequest)
 			return
@@ -729,7 +731,7 @@ func serveUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) ht
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"file":"` + writtenTo + `"}`))
+		_, _ = w.Write([]byte(`{"file":"` + html.EscapeString(writtenTo) + `"}`))
 	})
 }
 
@@ -751,6 +753,11 @@ func importUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) h
 		}
 
 		importedFile := r.URL.Query().Get("location")
+		if !common.IsValidPath(importedFile) {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+
 		if !common.FileExists(importedFile) {
 			http.Error(w, "import file doesn't exist", http.StatusBadRequest)
 			return

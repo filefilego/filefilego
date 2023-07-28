@@ -23,3 +23,8 @@ func TestFormatBigWithSeperator(t *testing.T) {
 func TestLeftPad2Len(t *testing.T) {
 	assert.Equal(t, ",1000", LeftPad2Len("1000", ",", 5))
 }
+
+func TestIsValidPath(t *testing.T) {
+	assert.Equal(t, false, IsValidPath("/home/x/../ffg.bin"))
+	assert.Equal(t, true, IsValidPath("./home/./ffg.bin"))
+}
