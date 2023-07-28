@@ -718,6 +718,10 @@ func serveUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) ht
 		}
 
 		outPutLocation := r.URL.Query().Get("location")
+		if !common.IsValidPath(outPutLocation) {
+			http.Error(w, "output directory is invalid", http.StatusBadRequest)
+			return
+		}
 
 		if !common.DirExists(outPutLocation) {
 			http.Error(w, "output directory doesn't exist", http.StatusBadRequest)
