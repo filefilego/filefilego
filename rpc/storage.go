@@ -203,8 +203,8 @@ type ImportUploadedFilesResponse struct {
 	Success bool `json:"success"`
 }
 
-// ImportUploadedFile restores the uploaded files.
-func (api *StorageAPI) ImportUploadedFile(r *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
+// ImportUploadedFiles restores the uploaded files.
+func (api *StorageAPI) ImportUploadedFiles(r *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
 	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
 		return errors.New("not authorized")
