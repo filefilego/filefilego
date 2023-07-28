@@ -282,7 +282,12 @@ func (s *Storage) DeleteFileFromDB(key string) error {
 	}
 
 	idx := s.GetTotalFilesStored()
-	idx--
+	if idx == 0 {
+		idx = 0
+	} else {
+		idx--
+	}
+
 	itemsUint64 := make([]byte, 8)
 	binary.BigEndian.PutUint64(itemsUint64, idx)
 
@@ -342,6 +347,7 @@ func (s *Storage) ImportFiles(importedFile string) (int, error) {
 	for _, v := range files {
 		k, err := hexutil.Decode(v.Key)
 		if err != nil {
+			log.Warnf("failed to marshal decode key: %v", err)
 			continue
 		}
 
@@ -353,6 +359,8 @@ func (s *Storage) ImportFiles(importedFile string) (int, error) {
 				if err == nil {
 					imported++
 				}
+			} else {
+				log.Warnf("failed to marshal file metadata: %v", err)
 			}
 		}
 	}
