@@ -7,7 +7,6 @@ import (
 	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"net"
 	"net/http"
@@ -557,8 +556,6 @@ func run(ctx *cli.Context) error {
 
 	// cached media route
 	r.Handle("/media", serveMediaFile(conf.Global.DataDir, internalrpc.MediaCacheDirectory))
-	r.Handle("/files/export", serveUploadedFiles(storageEngine, keystore))
-	r.Handle("/files/import", importUploadedFiles(storageEngine, keystore))
 
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {
@@ -685,94 +682,5 @@ func serveMediaFile(dataDir, cacheDir string) http.Handler {
 
 		w.Header().Set("Content-Type", contentType)
 		http.ServeFile(w, r, filePath)
-	})
-}
-
-func serveUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		accessToken := r.URL.Query().Get("access_token")
-		if ok, _, _ := ks.Authorized(accessToken); !ok {
-			http.Error(w, "not authorized", http.StatusForbidden)
-			return
-		}
-
-		data, err := storage.ExportFiles()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		encodedBytes, err := jsonencoder.Marshal(data)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		outPutLocation := r.URL.Query().Get("location")
-		if !common.IsValidPath(outPutLocation) {
-			http.Error(w, "output directory is invalid", http.StatusBadRequest)
-			return
-		}
-
-		if !common.DirExists(outPutLocation) {
-			http.Error(w, "output directory doesn't exist", http.StatusBadRequest)
-			return
-		}
-
-		finalPath := filepath.Join(outPutLocation, fmt.Sprintf("%s_%d.json", "exported_files", time.Now().Unix()))
-		writtenTo, err := common.WriteToFile(encodedBytes, finalPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"file":"` + html.EscapeString(writtenTo) + `"}`))
-	})
-}
-
-func importUploadedFiles(storage storage.Interface, ks keystore.KeyAuthorizer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		accessToken := r.URL.Query().Get("access_token")
-		if ok, _, _ := ks.Authorized(accessToken); !ok {
-			http.Error(w, "not authorized", http.StatusForbidden)
-			return
-		}
-
-		importedFile := r.URL.Query().Get("location")
-		if !common.IsValidPath(importedFile) {
-			http.Error(w, "invalid path", http.StatusBadRequest)
-			return
-		}
-
-		if !common.FileExists(importedFile) {
-			http.Error(w, "import file doesn't exist", http.StatusBadRequest)
-			return
-		}
-
-		_, err := storage.ImportFiles(importedFile)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
 	})
 }
