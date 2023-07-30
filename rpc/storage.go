@@ -2,9 +2,12 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -133,12 +136,97 @@ func (api *StorageAPI) startWorker() {
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
 		if err == nil {
-			err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
+			err = api.storageEngine.SaveFileMetadata(fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
 			if err != nil {
 				log.Warnf("failed to save file metadata locally: %v", err)
 			}
 		}
 	}
+}
+
+// ExportUploadedFilesArgs args for exporting file uploads.
+type ExportUploadedFilesArgs struct {
+	AccessToken    string `json:"access_token"`
+	SaveToFilePath string `json:"save_to_filepath"`
+}
+
+// ExportUploadedFilesResponse the response of uploads exporting.
+type ExportUploadedFilesResponse struct {
+	SavedFilePath string `json:"saved_filepath"`
+}
+
+// ExportUploadedFiles exports the uploaded file to the given destination folder.
+func (api *StorageAPI) ExportUploadedFiles(r *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {
+	accessToken := args.AccessToken
+	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
+		return errors.New("not authorized")
+	}
+
+	data, err := api.storageEngine.ExportFiles()
+	if err != nil {
+		return fmt.Errorf("failed to export files: %w", err)
+	}
+
+	encodedBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal exported files: %w", err)
+	}
+
+	outPutLocation := args.SaveToFilePath
+	if !common.IsValidPath(outPutLocation) {
+		return errors.New("output directory is invalid")
+	}
+
+	if !common.DirExists(outPutLocation) {
+		return errors.New("output directory doesn't exist")
+	}
+
+	finalPath := filepath.Join(outPutLocation, fmt.Sprintf("%s_%d.json", "exported_files", time.Now().Unix()))
+	writtenTo, err := common.WriteToFile(encodedBytes, finalPath)
+	if err != nil {
+		return fmt.Errorf("failed to write exported files to file: %w", err)
+	}
+
+	response.SavedFilePath = html.EscapeString(writtenTo)
+
+	return nil
+}
+
+// ImportUploadedFilesArgs args for restoring file uploads.
+type ImportUploadedFilesArgs struct {
+	AccessToken string `json:"access_token"`
+	FilePath    string `json:"filepath"`
+}
+
+// ExportUploadedFileResponse the response of restoring.
+type ImportUploadedFilesResponse struct {
+	Success bool `json:"success"`
+}
+
+// ImportUploadedFiles restores the uploaded files.
+func (api *StorageAPI) ImportUploadedFiles(r *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
+	accessToken := args.AccessToken
+	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
+		return errors.New("not authorized")
+	}
+
+	importedFile := args.FilePath
+	if !common.IsValidPath(importedFile) {
+		return errors.New("invalid path")
+	}
+
+	if !common.FileExists(importedFile) {
+		return errors.New("import file doesn't exist")
+	}
+
+	_, err := api.storageEngine.ImportFiles(importedFile)
+	if err != nil {
+		return fmt.Errorf("failed to restore files: %w", err)
+	}
+
+	response.Success = true
+
+	return nil
 }
 
 // ListUploadedFilesArgs args for listing uploads.
@@ -421,7 +509,7 @@ type SaveUploadedFileMetadataLocallyResponse struct {
 // uploaded to remote nodes.
 func (api *StorageAPI) SaveUploadedFileMetadataLocally(r *http.Request, args *SaveUploadedFileMetadataLocallyArgs, response *SaveUploadedFileMetadataLocallyResponse) error {
 	for _, v := range args.Files {
-		err := api.storageEngine.SaveFileMetadata("", v.Hash, v.RemotePeer, v)
+		err := api.storageEngine.SaveFileMetadata(v.Hash, v.RemotePeer, v)
 		if err != nil {
 			log.Warnf("failed to save file metadata: %v", err)
 		}
