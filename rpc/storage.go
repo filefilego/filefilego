@@ -136,7 +136,7 @@ func (api *StorageAPI) startWorker() {
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
 		if err == nil {
-			err = api.storageEngine.SaveFileMetadata(job.ChannelNodeItemHash, fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
+			err = api.storageEngine.SaveFileMetadata(fileMetadata.Hash, fileMetadata.RemotePeer, fileMetadata)
 			if err != nil {
 				log.Warnf("failed to save file metadata locally: %v", err)
 			}
@@ -509,7 +509,7 @@ type SaveUploadedFileMetadataLocallyResponse struct {
 // uploaded to remote nodes.
 func (api *StorageAPI) SaveUploadedFileMetadataLocally(r *http.Request, args *SaveUploadedFileMetadataLocallyArgs, response *SaveUploadedFileMetadataLocallyResponse) error {
 	for _, v := range args.Files {
-		err := api.storageEngine.SaveFileMetadata("", v.Hash, v.RemotePeer, v)
+		err := api.storageEngine.SaveFileMetadata(v.Hash, v.RemotePeer, v)
 		if err != nil {
 			log.Warnf("failed to save file metadata: %v", err)
 		}

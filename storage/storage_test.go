@@ -167,11 +167,8 @@ func TestStorageMethods(t *testing.T) {
 	assert.EqualError(t, err, "access token is expired")
 	assert.Equal(t, AccessToken{}, tk)
 
-	// save file metadata
-	node1Hash := "nodehash1"
-
 	// invalid file metadata
-	err = storage.SaveFileMetadata(node1Hash, "wdasd", "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", FileMetadata{})
+	err = storage.SaveFileMetadata("wdasd", "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", FileMetadata{})
 	assert.EqualError(t, err, "invalid file metadata")
 
 	// valid file metadata
@@ -186,7 +183,7 @@ func TestStorageMethods(t *testing.T) {
 		Size:           123,
 		Timestamp:      time.Now().Unix(),
 	}
-	err = storage.SaveFileMetadata(node1Hash, fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
+	err = storage.SaveFileMetadata(fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", node1Metadata)
 	assert.NoError(t, err)
 
 	// get file metadata
@@ -199,22 +196,6 @@ func TestStorageMethods(t *testing.T) {
 	fileMetadata, err = storage.GetFileMetadata(fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
 	assert.NoError(t, err)
 	assert.Equal(t, node1Metadata, fileMetadata)
-
-	// given file hash we retrieve the nodehash
-	// empty filehash
-	retrivedNodeHash, found := storage.GetNodeHashFromFileHash("")
-	assert.Equal(t, false, found)
-	assert.Equal(t, "", retrivedNodeHash)
-
-	// non existing filehash
-	retrivedNodeHash, found = storage.GetNodeHashFromFileHash("34423u4234")
-	assert.Equal(t, false, found)
-	assert.Equal(t, "", retrivedNodeHash)
-
-	// valid filehash
-	retrivedNodeHash, found = storage.GetNodeHashFromFileHash(fileHash)
-	assert.Equal(t, true, found)
-	assert.Equal(t, node1Hash, retrivedNodeHash)
 
 	uploadedData, totalCount, err := storage.ListFiles(0, 100, "asc")
 	assert.NoError(t, err)
@@ -234,6 +215,10 @@ func TestStorageMethods(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, uploadedData, 0)
 	assert.Equal(t, uint64(0), totalCount)
+
+	// delete the file metadata now
+	err = storage.DeleteFileMetadata(fileHash, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
+	assert.NoError(t, err)
 
 	// read again the files
 	exportedFiles, err = storage.ExportFiles()

@@ -291,7 +291,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
 	}
-	err = strg.SaveFileMetadata("", fileHash, h1.ID().String(), metadata)
+	err = strg.SaveFileMetadata(fileHash, h1.ID().String(), metadata)
 	assert.NoError(t, err)
 
 	metadata2 := storage.FileMetadata{
@@ -301,7 +301,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		Size:           fileSize2,
 		Timestamp:      time.Now().Unix(),
 	}
-	err = strg.SaveFileMetadata("", file2Hash, h1.ID().String(), metadata2)
+	err = strg.SaveFileMetadata(file2Hash, h1.ID().String(), metadata2)
 	assert.NoError(t, err)
 
 	retrievedMetadata, err := strg.GetFileMetadata(fileHash, protocolH1.host.ID().String())

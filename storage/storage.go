@@ -37,7 +37,6 @@ const (
 	fileHashPrefix        = "mdt"
 	fileHashSortingPrefix = "mds"
 	fileHashCountPrefix   = "fileHashCount"
-	fileHashToNodePrefix  = "fhn"
 
 	bufferSize = 8192
 )
@@ -49,9 +48,9 @@ type Interface interface {
 	SetEnabled(val bool)
 	CreateSubfolders() (string, error)
 	SaveToken(token AccessToken) error
-	SaveFileMetadata(nodeHash, fileHash, peerID string, metadata FileMetadata) error
+	SaveFileMetadata(fileHash, peerID string, metadata FileMetadata) error
+	DeleteFileMetadata(fileHash, peerID string) error
 	GetFileMetadata(fileHash string, peerID string) (FileMetadata, error)
-	GetNodeHashFromFileHash(fileHash string) (string, bool)
 	CanAccess(token string) (bool, AccessToken, error)
 	HandleIncomingFileUploads(stream network.Stream)
 	ListFiles(currentPage, pageSize int, order string) ([]FileMetadataWithDBKey, uint64, error)
@@ -191,8 +190,18 @@ func (s *Storage) GetTotalFilesStored() uint64 {
 	return binary.BigEndian.Uint64(countBytes)
 }
 
+// DeleteFileMetadata deletes the  metadata from the db.
+func (s *Storage) DeleteFileMetadata(fileHash, peerID string) error {
+	prefix := append([]byte(fileHashPrefix), []byte(fileHash)...)
+	err := s.db.Delete(append(prefix, []byte(peerID)...))
+	if err != nil {
+		return fmt.Errorf("failed to delete file metadata: %w", err)
+	}
+	return nil
+}
+
 // SaveFileMetadata saves a file's metadata in the database.
-func (s *Storage) SaveFileMetadata(nodeHash, fileHash, peerID string, metadata FileMetadata) error {
+func (s *Storage) SaveFileMetadata(fileHash, peerID string, metadata FileMetadata) error {
 	if metadata.MerkleRootHash == "" || metadata.Hash == "" || metadata.Size == 0 {
 		return errors.New("invalid file metadata")
 	}
@@ -225,13 +234,6 @@ func (s *Storage) SaveFileMetadata(nodeHash, fileHash, peerID string, metadata F
 	err = s.db.Put(append(prefixSorting, []byte(peerID)...), []byte{})
 	if err != nil {
 		return fmt.Errorf("failed to insert filehash to sorted table %s: %w", fileHash, err)
-	}
-
-	if nodeHash != "" {
-		err = s.db.Put(append([]byte(fileHashToNodePrefix), []byte(metadata.Hash)...), []byte(nodeHash))
-		if err != nil {
-			return fmt.Errorf("failed to insert fileHash %s: %w", metadata.Hash, err)
-		}
 	}
 
 	return nil
@@ -296,6 +298,14 @@ func (s *Storage) DeleteFileFromDB(key string) error {
 		return fmt.Errorf("failed to decrement saved files count: %w", err)
 	}
 
+	fileHash := hash[:40]
+	peerID := hash[40:]
+
+	err = s.DeleteFileMetadata(fileHash, peerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete file from db: %w", err)
+	}
+
 	return nil
 }
 
@@ -351,17 +361,20 @@ func (s *Storage) ImportFiles(importedFile string) (int, error) {
 			continue
 		}
 
-		dt, err := s.db.Get(k)
-		if err != nil || len(dt) == 0 {
-			fileBytes, err := json.Marshal(v.FileMetadata)
-			if err == nil {
-				err := s.db.Put(k, fileBytes)
-				if err == nil {
-					imported++
-				}
+		hash := string(k[8+len([]byte(fileHashSortingPrefix)):])
+		fileHash := hash[:40]
+		peerID := hash[40:]
+
+		m, err := s.GetFileMetadata(fileHash, peerID)
+		if err != nil {
+			err = s.SaveFileMetadata(fileHash, peerID, v.FileMetadata)
+			if err != nil {
+				log.Warnf("failed to restore file info: %v", err)
 			} else {
-				log.Warnf("failed to marshal file metadata: %v", err)
+				imported++
 			}
+		} else {
+			log.Warnf("item already exists %v", m)
 		}
 	}
 
@@ -481,19 +494,6 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 	return items, idx, nil
 }
 
-// GetNodeHashFromFileHash gets the node's Hash given a fileHash.
-func (s *Storage) GetNodeHashFromFileHash(fileHash string) (string, bool) {
-	if fileHash == "" {
-		return "", false
-	}
-
-	nodeData, err := s.db.Get(append([]byte(fileHashToNodePrefix), []byte(fileHash)...))
-	if err != nil {
-		return "", false
-	}
-	return string(nodeData), true
-}
-
 // CanAccess authorizes access.
 func (s *Storage) CanAccess(token string) (bool, AccessToken, error) {
 	if token == "" {
@@ -563,7 +563,6 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodeHash := ""
 	tmpFileHex := ""
 	fileName := ""
 	for {
@@ -574,15 +573,6 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		formName := part.FormName()
-		if formName == "node_hash" {
-			nodeHashData, err := io.ReadAll(part)
-			if err != nil {
-				log.Warnf("failed to read from multipart: %v", err)
-			}
-			nodeHash = string(nodeHashData)
-			continue
-		}
-
 		if formName == "file" {
 			fileName = part.FileName()
 			tmpFileName, err := crypto.RandomEntropy(40)
@@ -681,7 +671,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Timestamp:      time.Now().Unix(),
 	}
 
-	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
+	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
 	if err != nil {
 		os.Remove(newPath)
 		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
@@ -727,7 +717,6 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
-	nodeHash := request.ChannelNodeHash
 	fileName := request.FileName
 
 	if !validateFileName(fileName) {
@@ -863,7 +852,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		Timestamp:      time.Now().Unix(),
 	}
 
-	err = s.SaveFileMetadata(nodeHash, fHash, s.peerID, fileMetadata)
+	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
 	if err != nil {
 		log.Errorf("failed to save file metadata: %v", err)
 		os.Remove(newPath)
