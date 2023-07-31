@@ -73,7 +73,8 @@ type FileMetadata struct {
 // FileMetadataWithDBKey holds the file metatada and the key.
 type FileMetadataWithDBKey struct {
 	FileMetadata
-	Key string `json:"key"`
+	Key     string `json:"key"`
+	Deleted bool   `json:"deleted"`
 }
 
 // AccessToken represents an access token.
@@ -309,7 +310,7 @@ func (s *Storage) DeleteFileFromDB(key string) error {
 	return nil
 }
 
-// ExportFiles gets all the uploaded files list
+// ExportFiles gets all the uploaded files.
 func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
 	iter := s.db.NewIterator(util.BytesPrefix([]byte(fileHashSortingPrefix)), nil)
 	items := make([]FileMetadataWithDBKey, 0)
@@ -329,6 +330,11 @@ func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
 			FileMetadata: item,
 			Key:          hexutil.Encode(key),
 		}
+
+		if !common.FileExists(item.FilePath) {
+			kitem.Deleted = true
+		}
+
 		items = append(items, kitem)
 	}
 
@@ -430,6 +436,10 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 				Key:          hexutil.Encode(key),
 			}
 
+			if !common.FileExists(item.FilePath) {
+				kitem.Deleted = true
+			}
+
 			items = append(items, kitem)
 			limit--
 		}
@@ -444,6 +454,10 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 					kitem := FileMetadataWithDBKey{
 						FileMetadata: item,
 						Key:          hexutil.Encode(key),
+					}
+
+					if !common.FileExists(item.FilePath) {
+						kitem.Deleted = true
 					}
 
 					items = append(items, kitem)
@@ -476,6 +490,10 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 			kitem := FileMetadataWithDBKey{
 				FileMetadata: item,
 				Key:          hexutil.Encode(key),
+			}
+
+			if !common.FileExists(item.FilePath) {
+				kitem.Deleted = true
 			}
 
 			items = append(items, kitem)
