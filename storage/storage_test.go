@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
 	"github.com/stretchr/testify/assert"
@@ -346,11 +347,11 @@ func TestUploadHandler(t *testing.T) {
 	writer := multipart.NewWriter(pw)
 	go func() {
 		defer writer.Close()
-		nodeWriter, err := writer.CreateFormField("node_hash")
+		ownerPubKey, err := writer.CreateFormField("public_key_owner")
 		if err != nil {
 			t.Error(err)
 		}
-		_, err = nodeWriter.Write([]byte("nodehash123"))
+		_, err = ownerPubKey.Write([]byte{2})
 		if err != nil {
 			t.Error(err)
 		}
@@ -388,7 +389,8 @@ func TestUploadHandler(t *testing.T) {
 
 	fileMetadata, err := storage.GetFileMetadata(fileUploaded.FileHash, "peerID")
 	assert.NoError(t, err)
-
+	// check if owner is equal to the byte supplied above
+	assert.Equal(t, hexutil.Encode([]byte{2}), fileMetadata.PublicKeyOwner)
 	if _, err := os.Stat(fileMetadata.FilePath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to exist", fileMetadata.FilePath)
 	}
