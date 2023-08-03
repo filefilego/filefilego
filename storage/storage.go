@@ -572,7 +572,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	can, _, err := s.CanAccess(r.Header.Get("Authorization"))
+	can, userAccessToken, err := s.CanAccess(r.Header.Get("Authorization"))
 	if !can {
 		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
 		return
@@ -593,6 +593,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tmpFileHex := ""
 	fileName := ""
 	publicKeyOwner := ""
+	fileFeesPerByte := ""
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -608,6 +609,17 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				log.Warnf("failed to read owner's public key from multipart: %v", err)
 			}
 			publicKeyOwner = hexutil.Encode(pubKey)
+			continue
+		}
+
+		if formName == "fees_per_byte" {
+			feesPerByte, err := io.ReadAll(part)
+			if err != nil {
+				log.Warnf("failed to read fees per byte for multipart: %v", err)
+			}
+
+			fileFeesPerByte = string(feesPerByte)
+
 			continue
 		}
 
@@ -699,6 +711,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// if access token is of non-admin type then remove any
+	// fees associated with this upload
+	if userAccessToken.AccessType != AdminAccess {
+		fileFeesPerByte = ""
+	}
+
 	fileName = html.EscapeString(fileName)
 	fileMetadata = FileMetadata{
 		FileName:       fileName,
@@ -708,6 +726,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
 		PublicKeyOwner: publicKeyOwner,
+		FeesPerByte:    fileFeesPerByte,
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
@@ -881,6 +900,11 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
+	feesPerByte := ""
+	if request.FeesPerByte != "" && s.allowFeesOverride {
+		feesPerByte = request.FeesPerByte
+	}
+
 	fileName = html.EscapeString(fileName)
 	fileMetadata = FileMetadata{
 		FileName:       fileName,
@@ -890,6 +914,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
 		PublicKeyOwner: hexutil.Encode(request.PublicKeyOwner),
+		FeesPerByte:    feesPerByte,
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
