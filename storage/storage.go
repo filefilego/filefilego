@@ -59,6 +59,11 @@ type Interface interface {
 	ImportFiles(string) (int, error)
 }
 
+// CreateStorageAccessTokenRequest represents the request for creating a new storage token.
+type CreateStorageAccessTokenRequest struct {
+	UserAccessType string `json:"user_access_type"`
+}
+
 // FileMetadata holds the metadata for a file.
 type FileMetadata struct {
 	FileName       string `json:"file_name"`
@@ -553,7 +558,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
-	if r.Method == "OPTIONS" {
+	if r.Method == http.MethodOptions {
 		return
 	}
 
@@ -562,7 +567,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
 		return
 	}
@@ -912,14 +917,14 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 	}
 }
 
-// Authenticate authenticates storage access.
-func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
+// CreateStorageAccessToken creates a storage access token.
+func (s *Storage) CreateStorageAccessToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
-	if r.Method == "OPTIONS" {
+	if r.Method == http.MethodOptions {
 		return
 	}
 
@@ -928,7 +933,7 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
 		return
 	}
@@ -950,9 +955,28 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	AccessType := UserAccess
+
+	userType := CreateStorageAccessTokenRequest{}
+	maxBytes := int64(5 * common.KB)
+	limitReader := io.LimitReader(r.Body, maxBytes)
+	buffer, err := io.ReadAll(limitReader)
+	if err != nil {
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+	r.Body.Close()
+
+	// ignore error
+	_ = json.Unmarshal(buffer, &userType)
+
+	if userType.UserAccessType == "admin" {
+		AccessType = AdminAccess
+	}
+
 	// create a user token
 	token := AccessToken{
-		AccessType: UserAccess,
+		AccessType: AccessType,
 		Token:      hexutil.Encode(randomBytes),
 		ExpiresAt:  time.Now().Add(time.Hour * tokenAccessHours).Unix(),
 	}
@@ -964,6 +988,42 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHeaderPayload(w, http.StatusOK, `{"token": "`+token.Token+`"}`)
+}
+
+// IntrospectAccessToken returns the payload of an access token.
+func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+	if r.Method == http.MethodOptions {
+		return
+	}
+
+	if !s.enabled {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "storage is not enabled"}`)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
+		return
+	}
+
+	can, accessToken, err := s.CanAccess(r.Header.Get("Authorization"))
+	if !can {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+
+	data, err := json.Marshal(accessToken)
+	if err != nil {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+
+	writeHeaderPayload(w, http.StatusOK, string(data))
 }
 
 func validateFileName(fileName string) bool {

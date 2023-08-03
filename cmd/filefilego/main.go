@@ -560,7 +560,8 @@ func run(ctx *cli.Context) error {
 	// storage is allowed only in full node mode
 	if conf.Global.Storage && !conf.Global.SuperLightNode {
 		r.Handle("/uploads", storageEngine)
-		r.HandleFunc("/auth", storageEngine.Authenticate)
+		r.HandleFunc("/storage/access_tokens", storageEngine.CreateStorageAccessToken)
+		r.HandleFunc("/storage/introspect", storageEngine.IntrospectAccessToken)
 	}
 
 	// unix socket

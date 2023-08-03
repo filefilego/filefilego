@@ -235,7 +235,7 @@ func TestStorageMethods(t *testing.T) {
 	assert.Len(t, exportedFiles, 1)
 }
 
-func TestAuthenticateHandler(t *testing.T) {
+func TestCreateStorageAccessTokenHandler(t *testing.T) {
 	db, err := leveldb.OpenFile("storagetestauth.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -248,9 +248,9 @@ func TestAuthenticateHandler(t *testing.T) {
 	})
 	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
 	assert.NoError(t, err)
-	handler := http.HandlerFunc(storage.Authenticate)
+	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
-	req, err := http.NewRequest("POST", "/auth", nil)
+	req, err := http.NewRequest("POST", "/storage/access_tokens", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestAuthenticateHandler(t *testing.T) {
 	}
 
 	// add authorition header
-	req, err = http.NewRequest("POST", "/auth", nil)
+	req, err = http.NewRequest("POST", "/storage/access_tokens", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,6 +288,25 @@ func TestAuthenticateHandler(t *testing.T) {
 	assert.Equal(t, true, can)
 	assert.NoError(t, err)
 	assert.Equal(t, accTok.Token, data.Token)
+
+	// do the introspection
+	handler2 := http.HandlerFunc(storage.IntrospectAccessToken)
+	req2, err := http.NewRequest("POST", "/storage/introspect", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req2.Header.Set("Authorization", accTok.Token)
+	rr2 := httptest.NewRecorder()
+	handler2.ServeHTTP(rr2, req2)
+	assert.Equal(t, http.StatusOK, rr2.Code)
+	introspected := AccessToken{}
+	err = json.Unmarshal(rr2.Body.Bytes(), &introspected)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, introspected.Token)
+	assert.NotEmpty(t, introspected.ExpiresAt)
+	assert.NotEmpty(t, introspected.AccessType)
+	assert.Equal(t, accTok.Token, introspected.Token)
 }
 
 func TestUploadHandler(t *testing.T) {
@@ -303,9 +322,9 @@ func TestUploadHandler(t *testing.T) {
 	})
 	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
 	assert.NoError(t, err)
-	handler := http.HandlerFunc(storage.Authenticate)
+	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
-	req, err := http.NewRequest("POST", "/auth", nil)
+	req, err := http.NewRequest("POST", "/storage/access_tokens", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
