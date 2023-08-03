@@ -532,7 +532,7 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockchainDB, err := database.New(db)
 	assert.NoError(t, err)
 
-	storageEngine, err := storage.New(blockchainDB, filepath.Join("", "data_storage"), true, "123", 8, host.ID().String())
+	storageEngine, err := storage.New(blockchainDB, filepath.Join("", "data_storage"), true, "123", 8, host.ID().String(), false)
 	assert.NoError(t, err)
 
 	bchain, err := blockchain.New(blockchainDB, searchEngine, genesisHash)

@@ -42,6 +42,7 @@ type global struct {
 	Debug                                   bool
 	VerifyBlocks                            bool
 	GeoLiteDBPath                           string
+	AllowFeesOverride                       bool
 }
 
 type p2p struct {
@@ -224,6 +225,10 @@ func (conf *Config) applyFlags(ctx *cli.Context) {
 
 	if ctx.IsSet(GeoLiteDBPath.Name) {
 		conf.Global.GeoLiteDBPath = ctx.String(GeoLiteDBPath.Name)
+	}
+
+	if ctx.IsSet(AllowFeesOverride.Name) {
+		conf.Global.AllowFeesOverride = ctx.Bool(AllowFeesOverride.Name)
 	}
 
 	if ctx.IsSet(RPCServicesFlag.Name) {

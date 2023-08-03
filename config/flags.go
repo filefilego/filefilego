@@ -146,6 +146,11 @@ var (
 		Usage: "GeoLite DB path",
 	}
 
+	AllowFeesOverride = cli.BoolFlag{
+		Name:  "allow_fees_override",
+		Usage: "Allow user to override the global storage fees per byte",
+	}
+
 	RPCWhitelistFlag = cli.StringFlag{
 		Name:  "rpc_whitelist",
 		Usage: "Allow IP addresses to access the RPC servers",
@@ -284,6 +289,7 @@ var AppFlags = []cli.Flag{
 	&DebugMode,
 	&VerifyBlocks,
 	&GeoLiteDBPath,
+	&AllowFeesOverride,
 
 	&RPCServicesFlag,
 	&RPCDisabledMethodsFlag,

@@ -43,10 +43,10 @@ type StorageAPI struct {
 }
 
 type job struct {
-	ID                  string
-	PeerID              peer.ID
-	FilePath            string
-	ChannelNodeItemHash string
+	ID             string
+	PeerID         peer.ID
+	FilePath       string
+	OwnerPublicKey string
 }
 
 type jobQueue struct {
@@ -119,6 +119,11 @@ func (api *StorageAPI) startWorker() {
 			return
 		}
 
+		owner, err := hexutil.Decode(job.OwnerPublicKey)
+		if err != nil {
+			continue
+		}
+
 		cancelled, _ := api.storageProtocol.GetCancelFileUploadStatus(job.PeerID, job.FilePath)
 		if cancelled {
 			continue
@@ -131,7 +136,8 @@ func (api *StorageAPI) startWorker() {
 
 		ctxWithCancel, cancel := context.WithCancel(context.Background())
 		api.storageProtocol.SetCancelFileUpload(job.PeerID, job.FilePath, false, cancel)
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, owner)
 		fileMetadata.Timestamp = time.Now().Unix()
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
@@ -417,9 +423,9 @@ func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, 
 
 // UploadFileToProviderRequest
 type UploadFileToProviderRequest struct {
-	PeerID              string `json:"peer_id"`
-	FilePath            string `json:"file_path"`
-	ChannelNodeItemHash string `json:"channel_node_item_hash"`
+	PeerID         string `json:"peer_id"`
+	FilePath       string `json:"file_path"`
+	OwnerPublicKey string `json:"owner_public_key"`
 }
 
 // UploadFileToProviderArgs args for uploading to a provider.
@@ -445,10 +451,10 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 		}
 
 		api.addJob(job{
-			ID:                  v.PeerID + v.FilePath,
-			PeerID:              peerID,
-			FilePath:            v.FilePath,
-			ChannelNodeItemHash: v.ChannelNodeItemHash,
+			ID:             v.PeerID + v.FilePath,
+			PeerID:         peerID,
+			FilePath:       v.FilePath,
+			OwnerPublicKey: v.OwnerPublicKey,
 		})
 	}
 

@@ -41,7 +41,7 @@ func TestStorageProtocol(t *testing.T) {
 		os.RemoveAll(storagePath)
 	})
 
-	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String())
+	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String(), false)
 	assert.NoError(t, err)
 
 	protocol1, err := New(nil, storage, nil, true)
@@ -133,13 +133,16 @@ func TestStorageProtocol(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.TODO())
 	cancel()
 
-	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
+	pubKeyFileOwner, err := pubKey.Raw()
+	assert.NoError(t, err)
+
+	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", pubKeyFileOwner)
 	assert.Error(t, err)
 
 	// reset the upload progress so we can reupload
 	protocol1.uploadProgress = make(map[string]int)
 
-	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
+	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", pubKeyFileOwner)
 	assert.NoError(t, err)
 	assert.Equal(t, fhash, fhashremote.Hash)
 	time.Sleep(1 * time.Second)

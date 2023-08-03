@@ -49,7 +49,7 @@ type Interface interface {
 	SendStorageQueryResponse(ctx context.Context, peerID peer.ID, payload *messages.StorageQueryResponseProto) error
 	GetDiscoveredStorageProviders() []ProviderWithCountry
 	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
-	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (storage.FileMetadata, error)
+	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath string, publicKeyOwner []byte) (storage.FileMetadata, error)
 	GetUploadProgress(peerID peer.ID, filePath string) (int, string, error)
 	SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error)
 	SetCancelFileUpload(peerID peer.ID, filePath string, cancelled bool, cancel context.CancelFunc)
@@ -200,10 +200,10 @@ func (p *Protocol) GetUploadProgress(peerID peer.ID, filePath string) (int, stri
 }
 
 // UploadFileWithMetadata uploads a file content, its name and if its associated with a channel node item.
-func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath, chanNodeItemHash string) (storage.FileMetadata, error) {
+func (p *Protocol) UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath string, publicKeyOwner []byte) (storage.FileMetadata, error) {
 	request := &messages.StorageFileUploadMetadataProto{
-		FileName:        filepath.Base(filePath),
-		ChannelNodeHash: chanNodeItemHash,
+		FileName:       filepath.Base(filePath),
+		PublicKeyOwner: publicKeyOwner,
 	}
 
 	input, err := os.Open(filePath)

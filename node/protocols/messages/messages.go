@@ -31,6 +31,7 @@ type DataQueryResponse struct {
 	Timestamp             int64
 	FileMerkleRootHashes  [][]byte
 	FileNames             []string
+	FileFeesPerByte       []string
 }
 
 // ToDataQueryRequest returns a domain DataQueryRequest object.
@@ -111,6 +112,7 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 		Timestamp:             dqr.Timestamp,
 		FileMerkleRootHashes:  make([][]byte, len(dqr.FileMerkleRootHashes)),
 		FileNames:             make([]string, len(dqr.FileNames)),
+		FileFeesPerByte:       make([]string, len(dqr.FileFeesPerByte)),
 	}
 
 	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
@@ -121,6 +123,7 @@ func ToDataQueryResponse(dqr *DataQueryResponseProto) DataQueryResponse {
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 	copy(r.FileMerkleRootHashes, dqr.FileMerkleRootHashes)
 	copy(r.FileNames, dqr.FileNames)
+	copy(r.FileFeesPerByte, dqr.FileFeesPerByte)
 
 	return r
 }
@@ -139,6 +142,7 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 		Timestamp:             dqr.Timestamp,
 		FileMerkleRootHashes:  make([][]byte, len(dqr.FileMerkleRootHashes)),
 		FileNames:             make([]string, len(dqr.FileNames)),
+		FileFeesPerByte:       make([]string, len(dqr.FileFeesPerByte)),
 	}
 
 	copy(r.HashDataQueryRequest, dqr.HashDataQueryRequest)
@@ -149,6 +153,7 @@ func ToDataQueryResponseProto(dqr DataQueryResponse) *DataQueryResponseProto {
 	copy(r.UnavailableFileHashes, dqr.UnavailableFileHashes)
 	copy(r.FileMerkleRootHashes, dqr.FileMerkleRootHashes)
 	copy(r.FileNames, dqr.FileNames)
+	copy(r.FileFeesPerByte, dqr.FileFeesPerByte)
 
 	return &r
 }
@@ -298,6 +303,11 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 		fileNameBytes = append(fileNameBytes, []byte(v)...)
 	}
 
+	fileFees := []byte{}
+	for _, v := range response.FileFeesPerByte {
+		fileFees = append(fileFees, []byte(v)...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
@@ -310,6 +320,7 @@ func SignDataQueryResponse(privateKey crypto.PrivKey, response DataQueryResponse
 			timestampBytes,
 			fileMerkleRootHahes,
 			fileNameBytes,
+			fileFees,
 		},
 		[]byte{},
 	)
@@ -350,6 +361,11 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 		fileNameBytes = append(fileNameBytes, []byte(v)...)
 	}
 
+	fileFees := []byte{}
+	for _, v := range response.FileFeesPerByte {
+		fileFees = append(fileFees, []byte(v)...)
+	}
+
 	data := bytes.Join(
 		[][]byte{
 			[]byte(response.FromPeerAddr),
@@ -362,6 +378,7 @@ func VerifyDataQueryResponse(publicKey crypto.PubKey, response DataQueryResponse
 			timestampBytes,
 			fileMerkleRootHahes,
 			fileNameBytes,
+			fileFees,
 		},
 		[]byte{},
 	)

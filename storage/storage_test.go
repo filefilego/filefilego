@@ -36,6 +36,7 @@ func TestNew(t *testing.T) {
 		adminToken          string
 		totalMerkleSegments int
 		peerID              string
+		allowFeesOverride   bool
 		expErr              string
 	}{
 		"no database": {
@@ -69,6 +70,7 @@ func TestNew(t *testing.T) {
 			adminToken:          "12345",
 			totalMerkleSegments: 1024,
 			peerID:              "DKldkldk",
+			allowFeesOverride:   false,
 		},
 	}
 
@@ -76,7 +78,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID)
+			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID, tt.allowFeesOverride)
 			if tt.expErr != "" {
 				assert.Nil(t, storage)
 				assert.EqualError(t, err, tt.expErr)
@@ -102,7 +104,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
+	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", false)
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -244,7 +246,7 @@ func TestAuthenticateHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 
@@ -299,7 +301,7 @@ func TestUploadHandler(t *testing.T) {
 		os.RemoveAll("storagetestuploading.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.Authenticate)
 

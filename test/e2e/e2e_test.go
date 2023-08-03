@@ -764,7 +764,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	} else {
 		// full node dependencies setup
 		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String())
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride)
 			assert.NoError(t, err)
 		}
 

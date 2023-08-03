@@ -68,6 +68,8 @@ type FileMetadata struct {
 	Size           int64  `json:"size"`
 	RemotePeer     string `json:"remote_peer"`
 	Timestamp      int64  `json:"timestamp"`
+	FeesPerByte    string `json:"fees_per_byte"`
+	PublicKeyOwner string `json:"public_key_owner"`
 }
 
 // FileMetadataWithDBKey holds the file metatada and the key.
@@ -91,10 +93,11 @@ type Storage struct {
 	enabled                 bool
 	merkleTreeTotalSegments int
 	peerID                  string
+	allowFeesOverride       bool
 }
 
 // New creates a new storage instance.
-func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string, allowFeesOverride bool) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
@@ -127,6 +130,7 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		enabled:                 enabled,
 		merkleTreeTotalSegments: merkleTreeTotalSegments,
 		peerID:                  peerID,
+		allowFeesOverride:       allowFeesOverride,
 	}
 
 	token := AccessToken{
@@ -583,6 +587,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tmpFileHex := ""
 	fileName := ""
+	publicKeyOwner := ""
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -591,6 +596,16 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		formName := part.FormName()
+
+		if formName == "public_key_owner" {
+			pubKey, err := io.ReadAll(part)
+			if err != nil {
+				log.Warnf("failed to read owner's public key from multipart: %v", err)
+			}
+			publicKeyOwner = hexutil.Encode(pubKey)
+			continue
+		}
+
 		if formName == "file" {
 			fileName = part.FileName()
 			tmpFileName, err := crypto.RandomEntropy(40)
@@ -687,6 +702,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		FilePath:       newPath,
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
+		PublicKeyOwner: publicKeyOwner,
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
@@ -868,6 +884,7 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		FilePath:       newPath,
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
+		PublicKeyOwner: hexutil.Encode(request.PublicKeyOwner),
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)

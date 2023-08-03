@@ -44,7 +44,9 @@ message StorageQueryResponseProto {
 // StorageFileUploadMetadataProto represents a file's name and associated channel node item hash.
 message StorageFileUploadMetadataProto {
     string file_name = 1;
-    string channel_node_hash = 2;
+    string fees_per_byte = 2;
+    // public_key_owner is the owner's public key
+    bytes public_key_owner = 3;
 }
 
 // DataQueryRequestProto represents a data query message.
@@ -70,6 +72,8 @@ message DataQueryResponseProto {
     int64 timestamp = 9;
     repeated string file_names = 10;
     repeated bytes file_merkle_root_hashes = 11;
+    // file_fees_per_byte with the introduction of dynamic pricing this field is used to indicate fees for each file.
+    repeated string file_fees_per_byte = 12;
 }
 
 // DataQueryResponseTransferProto is used to request a data query response from a verifier.
