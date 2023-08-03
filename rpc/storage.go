@@ -43,10 +43,11 @@ type StorageAPI struct {
 }
 
 type job struct {
-	ID             string
-	PeerID         peer.ID
-	FilePath       string
-	OwnerPublicKey string
+	ID              string
+	PeerID          peer.ID
+	FilePath        string
+	OwnerPublicKey  string
+	FileFeesPerByte string
 }
 
 type jobQueue struct {
@@ -137,7 +138,7 @@ func (api *StorageAPI) startWorker() {
 		ctxWithCancel, cancel := context.WithCancel(context.Background())
 		api.storageProtocol.SetCancelFileUpload(job.PeerID, job.FilePath, false, cancel)
 
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, owner)
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, owner, job.FileFeesPerByte)
 		fileMetadata.Timestamp = time.Now().Unix()
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
@@ -423,9 +424,10 @@ func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, 
 
 // UploadFileToProviderRequest
 type UploadFileToProviderRequest struct {
-	PeerID         string `json:"peer_id"`
-	FilePath       string `json:"file_path"`
-	OwnerPublicKey string `json:"owner_public_key"`
+	PeerID          string `json:"peer_id"`
+	FilePath        string `json:"file_path"`
+	OwnerPublicKey  string `json:"owner_public_key"`
+	FileFeesPerByte string `json:"file_fees_per_byte"`
 }
 
 // UploadFileToProviderArgs args for uploading to a provider.
@@ -451,10 +453,11 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 		}
 
 		api.addJob(job{
-			ID:             v.PeerID + v.FilePath,
-			PeerID:         peerID,
-			FilePath:       v.FilePath,
-			OwnerPublicKey: v.OwnerPublicKey,
+			ID:              v.PeerID + v.FilePath,
+			PeerID:          peerID,
+			FilePath:        v.FilePath,
+			OwnerPublicKey:  v.OwnerPublicKey,
+			FileFeesPerByte: v.FileFeesPerByte,
 		})
 	}
 

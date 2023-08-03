@@ -136,13 +136,13 @@ func TestStorageProtocol(t *testing.T) {
 	pubKeyFileOwner, err := pubKey.Raw()
 	assert.NoError(t, err)
 
-	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", pubKeyFileOwner)
+	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", pubKeyFileOwner, "")
 	assert.Error(t, err)
 
 	// reset the upload progress so we can reupload
 	protocol1.uploadProgress = make(map[string]int)
 
-	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", pubKeyFileOwner)
+	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", pubKeyFileOwner, "")
 	assert.NoError(t, err)
 	assert.Equal(t, fhash, fhashremote.Hash)
 	time.Sleep(1 * time.Second)
