@@ -539,7 +539,14 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			Timestamp:             time.Now().Unix(),
 			FileMerkleRootHashes:  make([][]byte, 0),
 			FileNames:             make([]string, 0),
+			FileFeesPerByte:       make([]string, 0),
 		}
+
+		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)
+		if !ok {
+			return errors.New("failed to parse storage fees per gb from config")
+		}
+		response.FeesPerByte = hexutil.EncodeBig(storageFeesPerByte)
 
 		for _, v := range dataQueryRequest.FileHashes {
 			fileMetaData, err := n.storage.GetFileMetadata(hexutil.EncodeNoPrefix(v), n.GetID())
@@ -553,6 +560,16 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 				continue
 			}
 
+			fileFees := ""
+			// if the fees is set for the file, use it
+			// otherwise fall back to the global
+			if fileMetaData.FeesPerByte != "" {
+				fileFees = fileMetaData.FeesPerByte
+			} else {
+				fileFees = response.FeesPerByte
+			}
+
+			response.FileFeesPerByte = append(response.FileFeesPerByte, fileFees)
 			response.FileHashes = append(response.FileHashes, v)
 			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
 			merkleRootHash, err := hexutil.Decode(fileMetaData.MerkleRootHash)
@@ -566,15 +583,6 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return nil
 		}
 
-		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)
-		if !ok {
-			return errors.New("failed to parse storage fees per gb from config")
-		}
-
-		if err != nil {
-			return fmt.Errorf("failed to calculate files fees: %w", err)
-		}
-		response.FeesPerByte = hexutil.EncodeBig(storageFeesPerByte)
 		copy(response.HashDataQueryRequest, dataQueryRequest.Hash)
 		copy(response.PublicKey, pubKeyBytes)
 		signature, err := messages.SignDataQueryResponse(n.host.Peerstore().PrivKey(n.GetPeerID()), response)
