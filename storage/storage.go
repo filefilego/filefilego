@@ -1015,6 +1015,12 @@ func (s *Storage) CreateStorageAccessToken(w http.ResponseWriter, r *http.Reques
 	writeHeaderPayload(w, http.StatusOK, `{"token": "`+token.Token+`"}`)
 }
 
+// IntrospectAccessTokenResponse contains the token info and some info about the storage node.
+type IntrospectAccessTokenResponse struct {
+	AccessToken       AccessToken `json:"access_token"`
+	AllowFeesOverride bool        `json:"allow_fees_override"`
+}
+
 // IntrospectAccessToken returns the payload of an access token.
 func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1042,7 +1048,12 @@ func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	data, err := json.Marshal(accessToken)
+	payload := IntrospectAccessTokenResponse{
+		AccessToken:       accessToken,
+		AllowFeesOverride: s.allowFeesOverride,
+	}
+
+	data, err := json.Marshal(payload)
 	if err != nil {
 		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
 		return

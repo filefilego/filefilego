@@ -247,7 +247,7 @@ func TestCreateStorageAccessTokenHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", true)
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
@@ -300,14 +300,15 @@ func TestCreateStorageAccessTokenHandler(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	handler2.ServeHTTP(rr2, req2)
 	assert.Equal(t, http.StatusOK, rr2.Code)
-	introspected := AccessToken{}
+	introspected := IntrospectAccessTokenResponse{}
 	err = json.Unmarshal(rr2.Body.Bytes(), &introspected)
 	assert.NoError(t, err)
 
-	assert.NotEmpty(t, introspected.Token)
-	assert.NotEmpty(t, introspected.ExpiresAt)
-	assert.NotEmpty(t, introspected.AccessType)
-	assert.Equal(t, accTok.Token, introspected.Token)
+	assert.NotEmpty(t, introspected.AccessToken.Token)
+	assert.NotEmpty(t, introspected.AccessToken.ExpiresAt)
+	assert.NotEmpty(t, introspected.AccessToken.AccessType)
+	assert.Equal(t, accTok.Token, introspected.AccessToken.Token)
+	assert.Equal(t, true, introspected.AllowFeesOverride)
 }
 
 func TestUploadHandler(t *testing.T) {
