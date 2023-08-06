@@ -711,9 +711,9 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// if access token is of non-admin type then remove any
+	// if access token is of UserAccess type AND this node accepts dynamic fethen remove any
 	// fees associated with this upload
-	if userAccessToken.AccessType != AdminAccess {
+	if userAccessToken.AccessType == UserAccess && !s.allowFeesOverride {
 		fileFeesPerByte = ""
 	}
 
