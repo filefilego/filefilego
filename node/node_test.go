@@ -61,6 +61,7 @@ func TestNew(t *testing.T) {
 		blockDownloaderProtocol blockdownloader.Interface
 		storageProtocol         storageprotocol.Interface
 		config                  *ffgconfig.Config
+		uptime                  int64
 		expErr                  string
 	}{
 		"no config": {
@@ -170,7 +171,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.storage, tt.blockchain, tt.dataQueryProtocol, tt.blockDownloaderProtocol, tt.storageProtocol)
+			node, err := New(tt.config, tt.host, tt.dht, tt.discovery, tt.pubSub, tt.searchEngine, tt.storage, tt.blockchain, tt.dataQueryProtocol, tt.blockDownloaderProtocol, tt.storageProtocol, tt.uptime)
 			if tt.expErr != "" {
 				assert.Nil(t, node)
 				assert.EqualError(t, err, tt.expErr)
@@ -547,10 +548,11 @@ func createNode(t *testing.T, port string, searchDB string, blockchainDBPath str
 	blockDownloader, err := blockdownloader.New(bchain, host)
 	assert.NoError(t, err)
 
-	storageProtocol, err := storageprotocol.New(host, storageEngine, nil, false)
+	uptime := time.Now().Unix()
+	storageProtocol, err := storageprotocol.New(host, storageEngine, nil, false, uptime, false, "0", false)
 	assert.NoError(t, err)
 
-	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader, storageProtocol)
+	node, err := New(&ffgconfig.Config{}, host, kademliaDHT, routingDiscovery, gossip, searchEngine, &storage.Storage{}, bchain, dataQueryProtocol, blockDownloader, storageProtocol, uptime)
 	assert.NoError(t, err)
 	return node
 }

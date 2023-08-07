@@ -204,6 +204,8 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
 
+	uptime := time.Now().Unix()
+
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
@@ -211,17 +213,17 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup super light blockchain: %w", err)
 		}
 
-		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic, uptime, conf.Global.AllowFeesOverride, conf.Global.StorageFeesPerByte, conf.Global.ShowStorageCapacity)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol, uptime)
 		if err != nil {
 			return fmt.Errorf("failed to setup super light node node: %w", err)
 		}
 	} else {
-		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic)
+		storageProtocol, err = storageprotocol.New(host, storageEngine, geoip2db, conf.Global.StoragePublic, uptime, conf.Global.AllowFeesOverride, conf.Global.StorageFeesPerByte, conf.Global.ShowStorageCapacity)
 		if err != nil {
 			return fmt.Errorf("failed to set up storage protocol: %w", err)
 		}
@@ -255,7 +257,7 @@ func run(ctx *cli.Context) error {
 			return fmt.Errorf("failed to setup block downloader protocol: %w", err)
 		}
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol, uptime)
 		if err != nil {
 			return fmt.Errorf("failed to setup full node: %w", err)
 		}

@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -40,6 +41,8 @@ const (
 	SpeedTestProtocolID = "/ffg/storage_speed/1.0.0"
 	// FileUploadProtocolID is a file upload protocol id and version.
 	FileUploadProtocolID = "/ffg/storage_upload/1.0.0"
+	// StorageCapabilitiesProtocolID is a protocol to indicate the capabilities of a storage node.
+	StorageCapabilitiesProtocolID = "/ffg/storage_cap/1.0.0"
 
 	bufferSize = 8192
 )
@@ -56,6 +59,7 @@ type Interface interface {
 	GetCancelFileUploadStatus(peerID peer.ID, filePath string) (bool, context.CancelFunc)
 	ResetProgressAndCancelStatus(peerID peer.ID, filePath string)
 	SendDiscoveredStorageTransferRequest(ctx context.Context, peerID peer.ID) (int, error)
+	GetStorageCapabilities(ctx context.Context, peerID peer.ID) (*messages.StorageCapabilitiesProto, error)
 }
 
 // GeoIPLocator given an ip address it returns the country info.
@@ -81,19 +85,23 @@ type cancelUploadItem struct {
 
 // Protocol wraps the storage protocols and handlers.
 type Protocol struct {
-	host             host.Host
-	storageProviders map[string]ProviderWithCountry
-	storagePublic    bool
-	storage          storage.Interface
-	ipLocator        GeoIPLocator
-	uploadProgress   map[string]int
-	uploadStatus     map[string]uploadStatus
-	cancelUploads    map[string]cancelUploadItem
-	mu               sync.RWMutex
+	host                host.Host
+	storageProviders    map[string]ProviderWithCountry
+	storagePublic       bool
+	storage             storage.Interface
+	ipLocator           GeoIPLocator
+	uploadProgress      map[string]int
+	uploadStatus        map[string]uploadStatus
+	cancelUploads       map[string]cancelUploadItem
+	uptime              int64
+	allowFeesOverride   bool
+	feesPerByte         string
+	showStorageCapacity bool
+	mu                  sync.RWMutex
 }
 
 // New creates a storage protocol.
-func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storagePublic bool) (*Protocol, error) {
+func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storagePublic bool, uptime int64, allowFeesOverride bool, feesPerByte string, showStorageCapacity bool) (*Protocol, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -101,20 +109,25 @@ func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storage
 	if storage == nil {
 		return nil, errors.New("storage is nil")
 	}
+	storage.StoragePath()
 
 	if ipLocator == nil {
 		ipLocator = &defaultIPLocator{}
 	}
 
 	p := &Protocol{
-		host:             h,
-		storage:          storage,
-		ipLocator:        ipLocator,
-		storagePublic:    storagePublic,
-		storageProviders: make(map[string]ProviderWithCountry),
-		uploadProgress:   make(map[string]int),
-		uploadStatus:     make(map[string]uploadStatus),
-		cancelUploads:    make(map[string]cancelUploadItem),
+		host:                h,
+		storage:             storage,
+		ipLocator:           ipLocator,
+		storagePublic:       storagePublic,
+		storageProviders:    make(map[string]ProviderWithCountry),
+		uploadProgress:      make(map[string]int),
+		uploadStatus:        make(map[string]uploadStatus),
+		cancelUploads:       make(map[string]cancelUploadItem),
+		uptime:              uptime,
+		allowFeesOverride:   allowFeesOverride,
+		feesPerByte:         feesPerByte,
+		showStorageCapacity: showStorageCapacity,
 	}
 
 	// all types of nodes listen for this protocol
@@ -126,9 +139,70 @@ func New(h host.Host, storage storage.Interface, ipLocator GeoIPLocator, storage
 	if p.storagePublic {
 		p.host.SetStreamHandler(FileUploadProtocolID, p.HandleIncomingFileUploads)
 		p.host.SetStreamHandler(SpeedTestProtocolID, p.handleIncomingSpeedTest)
+		p.host.SetStreamHandler(StorageCapabilitiesProtocolID, p.handleIncomingStorageCapabilityRequest)
 	}
 
 	return p, nil
+}
+
+// handleIncomingStorageCapabilityRequest is responsible
+func (p *Protocol) handleIncomingStorageCapabilityRequest(s network.Stream) {
+	defer s.Close()
+	var err error
+	storageDirCapacity := uint64(0)
+	if p.showStorageCapacity {
+		storageDirCapacity, err = common.GetDirectoryFreeSpace(p.storage.StoragePath())
+		if err != nil {
+			log.Warnf("failed to get storage capacity: %v", err)
+		}
+	}
+
+	capabilities := messages.StorageCapabilitiesProto{
+		AllowFeesOverride: p.allowFeesOverride,
+		FeesPerByte:       p.feesPerByte,
+		StorageCapacity:   storageDirCapacity,
+
+		Platform: runtime.GOOS,
+		Uptime:   time.Now().Unix() - p.uptime,
+	}
+
+	data, err := proto.Marshal(&capabilities)
+	if err != nil {
+		log.Warnf("failed to marshal storage capability payload: %v", err)
+		return
+	}
+	_, err = s.Write(data)
+	if err != nil {
+		log.Warnf("failed to write storage capability payload to stream: %v", err)
+	}
+}
+
+// GetStorageCapabilities sends a request to remote peer to get its storage capabilities.
+func (p *Protocol) GetStorageCapabilities(ctx context.Context, peerID peer.ID) (*messages.StorageCapabilitiesProto, error) {
+	s, err := p.host.NewStream(ctx, peerID, StorageCapabilitiesProtocolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to peer for sending storage capability request: %w", err)
+	}
+	defer s.Close()
+
+	maxBytes := int64(10 * common.KB)
+	limitReader := io.LimitReader(s, maxBytes)
+	buffer, err := io.ReadAll(limitReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read storage capability data from stream: %w", err)
+	}
+
+	if len(buffer) == 0 {
+		return nil, errors.New("failed to read data from stream")
+	}
+
+	capabilities := messages.StorageCapabilitiesProto{}
+	err = proto.Unmarshal(buffer, &capabilities)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal storage capability message: %w", err)
+	}
+
+	return &capabilities, nil
 }
 
 // HandleIncomingFileUploads handles incoming file uploads.

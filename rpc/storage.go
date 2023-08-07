@@ -151,6 +151,40 @@ func (api *StorageAPI) startWorker() {
 	}
 }
 
+// GetRemoteNodeCapabilitiesArgs args for remote storage node.
+type GetRemoteNodeCapabilitiesArgs struct {
+	PeerID string `json:"peer_id"`
+}
+
+// ExportUploadedFileResponse the response of a remote sotrage node capabilities.
+type GetRemoteNodeCapabilitiesResponse struct {
+	Capabilities *messages.StorageCapabilitiesProto `json:"capabilities"`
+}
+
+// GetRemoteNodeCapabilities returns the remote storage node's capabilities to the caller.
+func (api *StorageAPI) GetRemoteNodeCapabilities(r *http.Request, args *GetRemoteNodeCapabilitiesArgs, response *GetRemoteNodeCapabilitiesResponse) error {
+	peerID, err := peer.Decode(args.PeerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode peer id: %w", err)
+	}
+
+	addrStorageProvider := api.host.Peerstore().Addrs(peerID)
+	childCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	if len(addrStorageProvider) == 0 {
+		_ = api.publisher.FindPeers(childCtx, []peer.ID{peerID})
+	}
+
+	capabilities, err := api.storageProtocol.GetStorageCapabilities(r.Context(), peerID)
+	if err != nil {
+		return fmt.Errorf("failed to get storage capabilities: %w", err)
+	}
+
+	response.Capabilities = capabilities
+
+	return nil
+}
+
 // ExportUploadedFilesArgs args for exporting file uploads.
 type ExportUploadedFilesArgs struct {
 	AccessToken    string `json:"access_token"`

@@ -39,6 +39,7 @@ message StorageQueryResponseProto {
     int64 system_uptime = 8;
     uint64 storage_capacity = 9;
     string platform = 10;
+    bool allow_fees_override = 11;
 }
 
 // StorageFileUploadMetadataProto represents a file's name and associated channel node item hash.
@@ -187,4 +188,14 @@ message FileTransferInfoProto {
     int64 from = 4;
     // to indicates the end of the file byte range to be requested
     int64 to = 5;
+}
+
+// StorageCapabilitiesProto is a response of a storage node containing
+// the configuration of the storage node.
+message StorageCapabilitiesProto {
+    bool allow_fees_override = 1;
+    string fees_per_byte = 2;
+    int64 uptime = 3;
+    string platform = 4;
+    uint64 storage_capacity = 5;
 }

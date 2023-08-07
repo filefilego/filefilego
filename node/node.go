@@ -70,6 +70,7 @@ type Interface interface {
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 	JoinPubSubNetwork(ctx context.Context, topicName string) error
 	HeighestBlockNumberDiscovered() uint64
+	Uptime() int64
 }
 
 // Node represents all the node functionalities
@@ -98,7 +99,7 @@ type Node struct {
 }
 
 // New creates a new node.
-func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface, storageProtocol storageprotocol.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface, storageProtocol storageprotocol.Interface, uptime int64) (*Node, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -156,7 +157,7 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		storageProtocol:         storageProtocol,
 		config:                  cfg,
 		gossipTopic:             make(map[string]*pubsub.Topic),
-		uptime:                  time.Now().Unix(),
+		uptime:                  uptime,
 	}, nil
 }
 
@@ -300,6 +301,11 @@ func (n *Node) ConnectToPeerWithMultiaddr(ctx context.Context, addr multiaddr.Mu
 // Advertise randevouz point.
 func (n *Node) Advertise(ctx context.Context, ns string) {
 	dutil.Advertise(ctx, n.discovery, ns)
+}
+
+// Uptime returns the uptime of the node.
+func (n *Node) Uptime() int64 {
+	return time.Now().Unix() - n.uptime
 }
 
 // DiscoverPeers discovers peers from randevouz point.
@@ -459,6 +465,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			StorageCapacity:         storageDirCapacity,
 			Uptime:                  time.Now().Unix() - n.uptime,
 			Platform:                runtime.GOOS,
+			AllowFeesOverride:       n.config.Global.AllowFeesOverride,
 		}
 
 		copy(response.PublicKey, pubKeyBytes)

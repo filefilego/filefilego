@@ -751,15 +751,17 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	genesisblockValid, err := block.GetGenesisBlock()
 	assert.NoError(t, err)
 
+	uptime := time.Now().Unix()
+
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
 		assert.NoError(t, err)
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic)
+		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic, uptime, conf.Global.AllowFeesOverride, conf.Global.StorageFeesPerByte, conf.Global.ShowStorageCapacity)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, &search.Search{}, &storage.Storage{}, bchain, &dataquery.Protocol{}, &blockdownloader.Protocol{}, storageProtocol, uptime)
 		assert.NoError(t, err)
 	} else {
 		// full node dependencies setup
@@ -768,7 +770,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 			assert.NoError(t, err)
 		}
 
-		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic)
+		storageProtocol, err := storageprotocol.New(host, storageEngine, nil, conf.Global.StoragePublic, uptime, conf.Global.AllowFeesOverride, conf.Global.StorageFeesPerByte, conf.Global.ShowStorageCapacity)
 		assert.NoError(t, err)
 
 		blv, err := search.NewBleveSearch(filepath.Join(conf.Global.DataDir, "search.db"))
@@ -789,7 +791,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 		blockDownloaderProtocol, err := blockdownloader.New(bchain, host)
 		assert.NoError(t, err)
 
-		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol)
+		ffgNode, err = node.New(conf, host, kademliaDHT, routingDiscovery, gossip, searchEngine, storageEngine, bchain, dataQueryProtocol, blockDownloaderProtocol, storageProtocol, uptime)
 		assert.NoError(t, err)
 
 		// validator node
