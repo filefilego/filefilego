@@ -210,13 +210,13 @@ func TestDataVerificationMethods(t *testing.T) {
 	contractStoreVerifier1, err := contract.New(driver3)
 	assert.NoError(t, err)
 
-	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments, h1.ID().String())
+	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments, h1.ID().String(), false)
 	assert.NoError(t, err)
 
-	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments, h2.ID().String())
+	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments, h2.ID().String(), false)
 	assert.NoError(t, err)
 
-	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments, verifier1.ID().String())
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments, verifier1.ID().String(), false)
 	assert.NoError(t, err)
 
 	genesisblockValid, err := block.GetGenesisBlock()

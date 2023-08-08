@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/database"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,7 @@ func TestNew(t *testing.T) {
 		adminToken          string
 		totalMerkleSegments int
 		peerID              string
+		allowFeesOverride   bool
 		expErr              string
 	}{
 		"no database": {
@@ -69,6 +71,7 @@ func TestNew(t *testing.T) {
 			adminToken:          "12345",
 			totalMerkleSegments: 1024,
 			peerID:              "DKldkldk",
+			allowFeesOverride:   false,
 		},
 	}
 
@@ -76,7 +79,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID)
+			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID, tt.allowFeesOverride)
 			if tt.expErr != "" {
 				assert.Nil(t, storage)
 				assert.EqualError(t, err, tt.expErr)
@@ -102,7 +105,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k")
+	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", false)
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -233,7 +236,7 @@ func TestStorageMethods(t *testing.T) {
 	assert.Len(t, exportedFiles, 1)
 }
 
-func TestAuthenticateHandler(t *testing.T) {
+func TestCreateStorageAccessTokenHandler(t *testing.T) {
 	db, err := leveldb.OpenFile("storagetestauth.db", nil)
 	assert.NoError(t, err)
 	driver, err := database.New(db)
@@ -244,11 +247,11 @@ func TestAuthenticateHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", true)
 	assert.NoError(t, err)
-	handler := http.HandlerFunc(storage.Authenticate)
+	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
-	req, err := http.NewRequest("POST", "/auth", nil)
+	req, err := http.NewRequest("POST", "/storage/access_tokens", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +267,7 @@ func TestAuthenticateHandler(t *testing.T) {
 	}
 
 	// add authorition header
-	req, err = http.NewRequest("POST", "/auth", nil)
+	req, err = http.NewRequest("POST", "/storage/access_tokens", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,6 +289,26 @@ func TestAuthenticateHandler(t *testing.T) {
 	assert.Equal(t, true, can)
 	assert.NoError(t, err)
 	assert.Equal(t, accTok.Token, data.Token)
+
+	// do the introspection
+	handler2 := http.HandlerFunc(storage.IntrospectAccessToken)
+	req2, err := http.NewRequest("POST", "/storage/introspect", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req2.Header.Set("Authorization", accTok.Token)
+	rr2 := httptest.NewRecorder()
+	handler2.ServeHTTP(rr2, req2)
+	assert.Equal(t, http.StatusOK, rr2.Code)
+	introspected := IntrospectAccessTokenResponse{}
+	err = json.Unmarshal(rr2.Body.Bytes(), &introspected)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, introspected.AccessToken.Token)
+	assert.NotEmpty(t, introspected.AccessToken.ExpiresAt)
+	assert.NotEmpty(t, introspected.AccessToken.AccessType)
+	assert.Equal(t, accTok.Token, introspected.AccessToken.Token)
+	assert.Equal(t, true, introspected.AllowFeesOverride)
 }
 
 func TestUploadHandler(t *testing.T) {
@@ -299,11 +322,11 @@ func TestUploadHandler(t *testing.T) {
 		os.RemoveAll("storagetestuploading.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID")
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
 	assert.NoError(t, err)
-	handler := http.HandlerFunc(storage.Authenticate)
+	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
-	req, err := http.NewRequest("POST", "/auth", nil)
+	req, err := http.NewRequest("POST", "/storage/access_tokens", http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,11 +348,11 @@ func TestUploadHandler(t *testing.T) {
 	writer := multipart.NewWriter(pw)
 	go func() {
 		defer writer.Close()
-		nodeWriter, err := writer.CreateFormField("node_hash")
+		ownerPubKey, err := writer.CreateFormField("public_key_owner")
 		if err != nil {
 			t.Error(err)
 		}
-		_, err = nodeWriter.Write([]byte("nodehash123"))
+		_, err = ownerPubKey.Write([]byte{2})
 		if err != nil {
 			t.Error(err)
 		}
@@ -367,7 +390,8 @@ func TestUploadHandler(t *testing.T) {
 
 	fileMetadata, err := storage.GetFileMetadata(fileUploaded.FileHash, "peerID")
 	assert.NoError(t, err)
-
+	// check if owner is equal to the byte supplied above
+	assert.Equal(t, hexutil.Encode([]byte{2}), fileMetadata.PublicKeyOwner)
 	if _, err := os.Stat(fileMetadata.FilePath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to exist", fileMetadata.FilePath)
 	}

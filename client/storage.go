@@ -27,7 +27,7 @@ type FileUploadResponse struct {
 
 // GetStorageAccessToken gets a user access token based on the admin access token to be used for uploading data.
 func (cli *Client) GetStorageAccessToken(ctx context.Context, storageAdminToken string) (string, error) {
-	req, err := cli.buildRequest(ctx, http.MethodPost, fmt.Sprintf("%s/auth", cli.storageEndpoint), nil, map[string]string{"Authorization": storageAdminToken})
+	req, err := cli.buildRequest(ctx, http.MethodPost, fmt.Sprintf("%s/storage/access_tokens", cli.storageEndpoint), nil, map[string]string{"Authorization": storageAdminToken})
 	if err != nil {
 		return "", fmt.Errorf("failed to build request: %w", err)
 	}

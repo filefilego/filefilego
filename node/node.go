@@ -70,6 +70,7 @@ type Interface interface {
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
 	JoinPubSubNetwork(ctx context.Context, topicName string) error
 	HeighestBlockNumberDiscovered() uint64
+	Uptime() int64
 }
 
 // Node represents all the node functionalities
@@ -98,7 +99,7 @@ type Node struct {
 }
 
 // New creates a new node.
-func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface, storageProtocol storageprotocol.Interface) (*Node, error) {
+func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, discovery libp2pdiscovery.Discovery, pubSub PublishSubscriber, search search.IndexSearcher, storage storage.Interface, blockchain blockchain.Interface, dataQuery dataquery.Interface, blockDownloaderProtocol blockdownloader.Interface, storageProtocol storageprotocol.Interface, uptime int64) (*Node, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -156,7 +157,7 @@ func New(cfg *ffgconfig.Config, host host.Host, dht PeerFinderBootstrapper, disc
 		storageProtocol:         storageProtocol,
 		config:                  cfg,
 		gossipTopic:             make(map[string]*pubsub.Topic),
-		uptime:                  time.Now().Unix(),
+		uptime:                  uptime,
 	}, nil
 }
 
@@ -300,6 +301,11 @@ func (n *Node) ConnectToPeerWithMultiaddr(ctx context.Context, addr multiaddr.Mu
 // Advertise randevouz point.
 func (n *Node) Advertise(ctx context.Context, ns string) {
 	dutil.Advertise(ctx, n.discovery, ns)
+}
+
+// Uptime returns the uptime of the node.
+func (n *Node) Uptime() int64 {
+	return time.Now().Unix() - n.uptime
 }
 
 // DiscoverPeers discovers peers from randevouz point.
@@ -459,6 +465,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			StorageCapacity:         storageDirCapacity,
 			Uptime:                  time.Now().Unix() - n.uptime,
 			Platform:                runtime.GOOS,
+			AllowFeesOverride:       n.config.Global.AllowFeesOverride,
 		}
 
 		copy(response.PublicKey, pubKeyBytes)
@@ -539,7 +546,14 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			Timestamp:             time.Now().Unix(),
 			FileMerkleRootHashes:  make([][]byte, 0),
 			FileNames:             make([]string, 0),
+			FileFeesPerByte:       make([]string, 0),
 		}
+
+		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)
+		if !ok {
+			return errors.New("failed to parse storage fees per gb from config")
+		}
+		response.FeesPerByte = hexutil.EncodeBig(storageFeesPerByte)
 
 		for _, v := range dataQueryRequest.FileHashes {
 			fileMetaData, err := n.storage.GetFileMetadata(hexutil.EncodeNoPrefix(v), n.GetID())
@@ -553,6 +567,16 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 				continue
 			}
 
+			fileFees := ""
+			// if the fees is set for the file, use it
+			// otherwise fall back to the global
+			if fileMetaData.FeesPerByte != "" {
+				fileFees = fileMetaData.FeesPerByte
+			} else {
+				fileFees = response.FeesPerByte
+			}
+
+			response.FileFeesPerByte = append(response.FileFeesPerByte, fileFees)
 			response.FileHashes = append(response.FileHashes, v)
 			response.FileHashesSizes = append(response.FileHashesSizes, uint64(fileMetaData.Size))
 			merkleRootHash, err := hexutil.Decode(fileMetaData.MerkleRootHash)
@@ -566,15 +590,6 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return nil
 		}
 
-		storageFeesPerByte, ok := big.NewInt(0).SetString(n.config.Global.StorageFeesPerByte, 10)
-		if !ok {
-			return errors.New("failed to parse storage fees per gb from config")
-		}
-
-		if err != nil {
-			return fmt.Errorf("failed to calculate files fees: %w", err)
-		}
-		response.FeesPerByte = hexutil.EncodeBig(storageFeesPerByte)
 		copy(response.HashDataQueryRequest, dataQueryRequest.Hash)
 		copy(response.PublicKey, pubKeyBytes)
 		signature, err := messages.SignDataQueryResponse(n.host.Peerstore().PrivKey(n.GetPeerID()), response)

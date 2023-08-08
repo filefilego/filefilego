@@ -39,12 +39,15 @@ message StorageQueryResponseProto {
     int64 system_uptime = 8;
     uint64 storage_capacity = 9;
     string platform = 10;
+    bool allow_fees_override = 11;
 }
 
 // StorageFileUploadMetadataProto represents a file's name and associated channel node item hash.
 message StorageFileUploadMetadataProto {
     string file_name = 1;
-    string channel_node_hash = 2;
+    string fees_per_byte = 2;
+    // public_key_owner is the owner's public key
+    bytes public_key_owner = 3;
 }
 
 // DataQueryRequestProto represents a data query message.
@@ -70,6 +73,8 @@ message DataQueryResponseProto {
     int64 timestamp = 9;
     repeated string file_names = 10;
     repeated bytes file_merkle_root_hashes = 11;
+    // file_fees_per_byte with the introduction of dynamic pricing this field is used to indicate fees for each file.
+    repeated string file_fees_per_byte = 12;
 }
 
 // DataQueryResponseTransferProto is used to request a data query response from a verifier.
@@ -183,4 +188,14 @@ message FileTransferInfoProto {
     int64 from = 4;
     // to indicates the end of the file byte range to be requested
     int64 to = 5;
+}
+
+// StorageCapabilitiesProto is a response of a storage node containing
+// the configuration of the storage node.
+message StorageCapabilitiesProto {
+    bool allow_fees_override = 1;
+    string fees_per_byte = 2;
+    int64 uptime = 3;
+    string platform = 4;
+    uint64 storage_capacity = 5;
 }

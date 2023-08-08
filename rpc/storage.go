@@ -43,10 +43,11 @@ type StorageAPI struct {
 }
 
 type job struct {
-	ID                  string
-	PeerID              peer.ID
-	FilePath            string
-	ChannelNodeItemHash string
+	ID              string
+	PeerID          peer.ID
+	FilePath        string
+	OwnerPublicKey  string
+	FileFeesPerByte string
 }
 
 type jobQueue struct {
@@ -119,6 +120,11 @@ func (api *StorageAPI) startWorker() {
 			return
 		}
 
+		owner, err := hexutil.Decode(job.OwnerPublicKey)
+		if err != nil {
+			continue
+		}
+
 		cancelled, _ := api.storageProtocol.GetCancelFileUploadStatus(job.PeerID, job.FilePath)
 		if cancelled {
 			continue
@@ -131,7 +137,8 @@ func (api *StorageAPI) startWorker() {
 
 		ctxWithCancel, cancel := context.WithCancel(context.Background())
 		api.storageProtocol.SetCancelFileUpload(job.PeerID, job.FilePath, false, cancel)
-		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, job.ChannelNodeItemHash)
+
+		fileMetadata, err := api.storageProtocol.UploadFileWithMetadata(ctxWithCancel, job.PeerID, job.FilePath, owner, job.FileFeesPerByte)
 		fileMetadata.Timestamp = time.Now().Unix()
 		cancel()
 		api.storageProtocol.SetUploadingStatus(job.PeerID, job.FilePath, fileMetadata.Hash, err)
@@ -142,6 +149,40 @@ func (api *StorageAPI) startWorker() {
 			}
 		}
 	}
+}
+
+// GetRemoteNodeCapabilitiesArgs args for remote storage node.
+type GetRemoteNodeCapabilitiesArgs struct {
+	PeerID string `json:"peer_id"`
+}
+
+// ExportUploadedFileResponse the response of a remote sotrage node capabilities.
+type GetRemoteNodeCapabilitiesResponse struct {
+	Capabilities *messages.StorageCapabilitiesProto `json:"capabilities"`
+}
+
+// GetRemoteNodeCapabilities returns the remote storage node's capabilities to the caller.
+func (api *StorageAPI) GetRemoteNodeCapabilities(r *http.Request, args *GetRemoteNodeCapabilitiesArgs, response *GetRemoteNodeCapabilitiesResponse) error {
+	peerID, err := peer.Decode(args.PeerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode peer id: %w", err)
+	}
+
+	addrStorageProvider := api.host.Peerstore().Addrs(peerID)
+	childCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	if len(addrStorageProvider) == 0 {
+		_ = api.publisher.FindPeers(childCtx, []peer.ID{peerID})
+	}
+
+	capabilities, err := api.storageProtocol.GetStorageCapabilities(r.Context(), peerID)
+	if err != nil {
+		return fmt.Errorf("failed to get storage capabilities: %w", err)
+	}
+
+	response.Capabilities = capabilities
+
+	return nil
 }
 
 // ExportUploadedFilesArgs args for exporting file uploads.
@@ -417,9 +458,10 @@ func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, 
 
 // UploadFileToProviderRequest
 type UploadFileToProviderRequest struct {
-	PeerID              string `json:"peer_id"`
-	FilePath            string `json:"file_path"`
-	ChannelNodeItemHash string `json:"channel_node_item_hash"`
+	PeerID          string `json:"peer_id"`
+	FilePath        string `json:"file_path"`
+	OwnerPublicKey  string `json:"owner_public_key"`
+	FileFeesPerByte string `json:"file_fees_per_byte"`
 }
 
 // UploadFileToProviderArgs args for uploading to a provider.
@@ -445,10 +487,11 @@ func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToP
 		}
 
 		api.addJob(job{
-			ID:                  v.PeerID + v.FilePath,
-			PeerID:              peerID,
-			FilePath:            v.FilePath,
-			ChannelNodeItemHash: v.ChannelNodeItemHash,
+			ID:              v.PeerID + v.FilePath,
+			PeerID:          peerID,
+			FilePath:        v.FilePath,
+			OwnerPublicKey:  v.OwnerPublicKey,
+			FileFeesPerByte: v.FileFeesPerByte,
 		})
 	}
 

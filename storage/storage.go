@@ -59,6 +59,11 @@ type Interface interface {
 	ImportFiles(string) (int, error)
 }
 
+// CreateStorageAccessTokenRequest represents the request for creating a new storage token.
+type CreateStorageAccessTokenRequest struct {
+	UserAccessType string `json:"user_access_type"`
+}
+
 // FileMetadata holds the metadata for a file.
 type FileMetadata struct {
 	FileName       string `json:"file_name"`
@@ -68,6 +73,8 @@ type FileMetadata struct {
 	Size           int64  `json:"size"`
 	RemotePeer     string `json:"remote_peer"`
 	Timestamp      int64  `json:"timestamp"`
+	FeesPerByte    string `json:"fees_per_byte"`
+	PublicKeyOwner string `json:"public_key_owner"`
 }
 
 // FileMetadataWithDBKey holds the file metatada and the key.
@@ -91,10 +98,11 @@ type Storage struct {
 	enabled                 bool
 	merkleTreeTotalSegments int
 	peerID                  string
+	allowFeesOverride       bool
 }
 
 // New creates a new storage instance.
-func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string, allowFeesOverride bool) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
@@ -127,6 +135,7 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		enabled:                 enabled,
 		merkleTreeTotalSegments: merkleTreeTotalSegments,
 		peerID:                  peerID,
+		allowFeesOverride:       allowFeesOverride,
 	}
 
 	token := AccessToken{
@@ -549,7 +558,7 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
-	if r.Method == "OPTIONS" {
+	if r.Method == http.MethodOptions {
 		return
 	}
 
@@ -558,12 +567,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
 		return
 	}
 
-	can, _, err := s.CanAccess(r.Header.Get("Authorization"))
+	can, userAccessToken, err := s.CanAccess(r.Header.Get("Authorization"))
 	if !can {
 		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
 		return
@@ -583,6 +592,8 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tmpFileHex := ""
 	fileName := ""
+	publicKeyOwner := ""
+	fileFeesPerByte := ""
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -591,6 +602,27 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		formName := part.FormName()
+
+		if formName == "public_key_owner" {
+			pubKey, err := io.ReadAll(part)
+			if err != nil {
+				log.Warnf("failed to read owner's public key from multipart: %v", err)
+			}
+			publicKeyOwner = hexutil.Encode(pubKey)
+			continue
+		}
+
+		if formName == "fees_per_byte" {
+			feesPerByte, err := io.ReadAll(part)
+			if err != nil {
+				log.Warnf("failed to read fees per byte for multipart: %v", err)
+			}
+
+			fileFeesPerByte = string(feesPerByte)
+
+			continue
+		}
+
 		if formName == "file" {
 			fileName = part.FileName()
 			tmpFileName, err := crypto.RandomEntropy(40)
@@ -679,6 +711,12 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// if access token is of UserAccess type AND this node accepts dynamic fethen remove any
+	// fees associated with this upload
+	if userAccessToken.AccessType == UserAccess && !s.allowFeesOverride {
+		fileFeesPerByte = ""
+	}
+
 	fileName = html.EscapeString(fileName)
 	fileMetadata = FileMetadata{
 		FileName:       fileName,
@@ -687,6 +725,8 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		FilePath:       newPath,
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
+		PublicKeyOwner: publicKeyOwner,
+		FeesPerByte:    fileFeesPerByte,
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
@@ -860,6 +900,11 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		return
 	}
 
+	feesPerByte := ""
+	if request.FeesPerByte != "" && s.allowFeesOverride {
+		feesPerByte = request.FeesPerByte
+	}
+
 	fileName = html.EscapeString(fileName)
 	fileMetadata = FileMetadata{
 		FileName:       fileName,
@@ -868,6 +913,8 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 		FilePath:       newPath,
 		Size:           fileSize,
 		Timestamp:      time.Now().Unix(),
+		PublicKeyOwner: hexutil.Encode(request.PublicKeyOwner),
+		FeesPerByte:    feesPerByte,
 	}
 
 	err = s.SaveFileMetadata(fHash, s.peerID, fileMetadata)
@@ -895,14 +942,14 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 	}
 }
 
-// Authenticate authenticates storage access.
-func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
+// CreateStorageAccessToken creates a storage access token.
+func (s *Storage) CreateStorageAccessToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
-	if r.Method == "OPTIONS" {
+	if r.Method == http.MethodOptions {
 		return
 	}
 
@@ -911,7 +958,7 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
 		return
 	}
@@ -933,9 +980,28 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	AccessType := UserAccess
+
+	userType := CreateStorageAccessTokenRequest{}
+	maxBytes := int64(5 * common.KB)
+	limitReader := io.LimitReader(r.Body, maxBytes)
+	buffer, err := io.ReadAll(limitReader)
+	if err != nil {
+		writeHeaderPayload(w, http.StatusInternalServerError, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+	r.Body.Close()
+
+	// ignore error
+	_ = json.Unmarshal(buffer, &userType)
+
+	if userType.UserAccessType == "admin" {
+		AccessType = AdminAccess
+	}
+
 	// create a user token
 	token := AccessToken{
-		AccessType: UserAccess,
+		AccessType: AccessType,
 		Token:      hexutil.Encode(randomBytes),
 		ExpiresAt:  time.Now().Add(time.Hour * tokenAccessHours).Unix(),
 	}
@@ -947,6 +1013,53 @@ func (s *Storage) Authenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHeaderPayload(w, http.StatusOK, `{"token": "`+token.Token+`"}`)
+}
+
+// IntrospectAccessTokenResponse contains the token info and some info about the storage node.
+type IntrospectAccessTokenResponse struct {
+	AccessToken       AccessToken `json:"access_token"`
+	AllowFeesOverride bool        `json:"allow_fees_override"`
+}
+
+// IntrospectAccessToken returns the payload of an access token.
+func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+	if r.Method == http.MethodOptions {
+		return
+	}
+
+	if !s.enabled {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "storage is not enabled"}`)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeHeaderPayload(w, http.StatusMethodNotAllowed, `{"error": "method not available"}`)
+		return
+	}
+
+	can, accessToken, err := s.CanAccess(r.Header.Get("Authorization"))
+	if !can {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+
+	payload := IntrospectAccessTokenResponse{
+		AccessToken:       accessToken,
+		AllowFeesOverride: s.allowFeesOverride,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		writeHeaderPayload(w, http.StatusForbidden, `{"error": "`+err.Error()+`"}`)
+		return
+	}
+
+	writeHeaderPayload(w, http.StatusOK, string(data))
 }
 
 func validateFileName(fileName string) bool {

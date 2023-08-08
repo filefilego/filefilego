@@ -41,17 +41,18 @@ func TestStorageProtocol(t *testing.T) {
 		os.RemoveAll(storagePath)
 	})
 
-	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String())
+	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String(), false)
 	assert.NoError(t, err)
+	uptime := time.Now().Unix()
 
-	protocol1, err := New(nil, storage, nil, true)
+	protocol1, err := New(nil, storage, nil, true, uptime, false, "0", false)
 	assert.EqualError(t, err, "host is nil")
 	assert.Nil(t, protocol1)
 
-	protocol1, err = New(h1, storage, nil, true)
+	protocol1, err = New(h1, storage, nil, true, uptime, false, "0", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol1)
-	protocol2, err := New(h2, storage, nil, true)
+	protocol2, err := New(h2, storage, nil, true, uptime, false, "0", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, protocol2)
 
@@ -133,13 +134,16 @@ func TestStorageProtocol(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.TODO())
 	cancel()
 
-	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", "")
+	pubKeyFileOwner, err := pubKey.Raw()
+	assert.NoError(t, err)
+
+	_, err = protocol1.UploadFileWithMetadata(cancelCtx, h2.ID(), "storage.go", pubKeyFileOwner, "")
 	assert.Error(t, err)
 
 	// reset the upload progress so we can reupload
 	protocol1.uploadProgress = make(map[string]int)
 
-	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", "")
+	fhashremote, err := protocol1.UploadFileWithMetadata(context.TODO(), h2.ID(), "storage.go", pubKeyFileOwner, "")
 	assert.NoError(t, err)
 	assert.Equal(t, fhash, fhashremote.Hash)
 	time.Sleep(1 * time.Second)
@@ -155,6 +159,11 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, uploadedData)
 	assert.NotEmpty(t, fhash)
+
+	capabilities, err := protocol1.GetStorageCapabilities(context.TODO(), h2.ID())
+	assert.NoError(t, err)
+	assert.NotNil(t, capabilities)
+	assert.Equal(t, "0", capabilities.FeesPerByte)
 }
 
 func newHost(t *testing.T, port string) (host.Host, crypto.PrivKey, crypto.PubKey) {
