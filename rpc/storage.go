@@ -197,7 +197,7 @@ type ExportUploadedFilesResponse struct {
 }
 
 // ExportUploadedFiles exports the uploaded file to the given destination folder.
-func (api *StorageAPI) ExportUploadedFiles(r *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {
+func (api *StorageAPI) ExportUploadedFiles(_ *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
 	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
 		return errors.New("not authorized")
@@ -245,7 +245,7 @@ type ImportUploadedFilesResponse struct {
 }
 
 // ImportUploadedFiles restores the uploaded files.
-func (api *StorageAPI) ImportUploadedFiles(r *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
+func (api *StorageAPI) ImportUploadedFiles(_ *http.Request, args *ImportUploadedFilesArgs, response *ImportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
 	if ok, _, _ := api.keystore.Authorized(accessToken); !ok {
 		return errors.New("not authorized")
@@ -284,7 +284,7 @@ type ListUploadedFilesResponse struct {
 }
 
 // ListUploadedFiles lists the uploaded files on this node.
-func (api *StorageAPI) ListUploadedFiles(r *http.Request, args *ListUploadedFilesArgs, response *ListUploadedFilesResponse) error {
+func (api *StorageAPI) ListUploadedFiles(_ *http.Request, args *ListUploadedFilesArgs, response *ListUploadedFilesResponse) error {
 	if args.Order != "asc" && args.Order != "desc" {
 		args.Order = "asc"
 	}
@@ -313,7 +313,7 @@ type DeleteUploadedFilesResponse struct {
 }
 
 // ListUploadedFiles lists the uploaded files on this node.
-func (api *StorageAPI) DeleteUploadedFile(r *http.Request, args *DeleteUploadedFilesArgs, response *DeleteUploadedFilesResponse) error {
+func (api *StorageAPI) DeleteUploadedFile(_ *http.Request, args *DeleteUploadedFilesArgs, response *DeleteUploadedFilesResponse) error {
 	ok, _, _ := api.keystore.Authorized(args.AccessToken)
 	if !ok {
 		return errors.New("not authorized to delete file")
@@ -345,7 +345,7 @@ type TestSpeedWithRemotePeerResponse struct {
 }
 
 // TestSpeedWithRemotePeer tests the remote peer speed.
-func (api *StorageAPI) TestSpeedWithRemotePeer(r *http.Request, args *TestSpeedWithRemotePeerArgs, response *TestSpeedWithRemotePeerResponse) error {
+func (api *StorageAPI) TestSpeedWithRemotePeer(_ *http.Request, args *TestSpeedWithRemotePeerArgs, response *TestSpeedWithRemotePeerResponse) error {
 	peerID, err := peer.Decode(args.PeerID)
 	if err != nil {
 		return fmt.Errorf("failed to decode remote peer id: %w", err)
@@ -388,7 +388,7 @@ type FindProvidersResponse struct {
 }
 
 // FindProviders reports the stats of the node.
-func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, response *FindProvidersResponse) error {
+func (api *StorageAPI) FindProviders(_ *http.Request, args *FindProvidersArgs, response *FindProvidersResponse) error {
 	m := &messages.StorageQueryRequestProto{
 		FromPeerAddr:      api.host.ID().String(),
 		PreferredLocation: args.PreferredLocation,
@@ -416,6 +416,7 @@ func (api *StorageAPI) FindProviders(r *http.Request, args *FindProvidersArgs, r
 }
 
 // FindProvidersFromPeers connects to other peers (mostly validators) and gets their discovered peers.
+// nolint:revive
 func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, response *FindProvidersResponse) error {
 	// find all verifiers
 	verfiers := block.GetBlockVerifiers()
@@ -475,7 +476,7 @@ type UploadFileToProviderResponse struct {
 }
 
 // UploadFileToProvider uploads a file to provider.
-func (api *StorageAPI) UploadFileToProvider(r *http.Request, args *UploadFileToProviderArgs, response *UploadFileToProviderResponse) error {
+func (api *StorageAPI) UploadFileToProvider(_ *http.Request, args *UploadFileToProviderArgs, response *UploadFileToProviderResponse) error {
 	for _, v := range args.Files {
 		peerID, err := peer.Decode(v.PeerID)
 		if err != nil {
@@ -515,7 +516,7 @@ type CancelUploadResponse struct {
 }
 
 // CancelUpload cancels a file upload.
-func (api *StorageAPI) CancelUpload(r *http.Request, args *CancelUploadArgs, response *CancelUploadResponse) error {
+func (api *StorageAPI) CancelUpload(_ *http.Request, args *CancelUploadArgs, response *CancelUploadResponse) error {
 	for _, v := range args.Files {
 		peerID, err := peer.Decode(v.PeerID)
 		if err != nil {
@@ -550,7 +551,7 @@ type SaveUploadedFileMetadataLocallyResponse struct {
 // SaveUploadedFileMetadataLocally saves a file metadata locally.
 // This is useful when a file is uploaded to other nodes, and the uploading node wants to keep track of where and what has been
 // uploaded to remote nodes.
-func (api *StorageAPI) SaveUploadedFileMetadataLocally(r *http.Request, args *SaveUploadedFileMetadataLocallyArgs, response *SaveUploadedFileMetadataLocallyResponse) error {
+func (api *StorageAPI) SaveUploadedFileMetadataLocally(_ *http.Request, args *SaveUploadedFileMetadataLocallyArgs, response *SaveUploadedFileMetadataLocallyResponse) error {
 	for _, v := range args.Files {
 		err := api.storageEngine.SaveFileMetadata(v.Hash, v.RemotePeer, v)
 		if err != nil {
@@ -587,7 +588,7 @@ type FileUploadProgressResponse struct {
 }
 
 // FileUploadsProgress show the file upload progress and errors.
-func (api *StorageAPI) FileUploadsProgress(r *http.Request, args *FileUploadProgressArgs, response *FileUploadProgressResponse) error {
+func (api *StorageAPI) FileUploadsProgress(_ *http.Request, args *FileUploadProgressArgs, response *FileUploadProgressResponse) error {
 	response.Files = make([]FileUploadProgresResult, 0)
 	for _, v := range args.Files {
 		peerID, err := peer.Decode(v.PeerID)
@@ -647,7 +648,7 @@ type JSONStorageProvider struct {
 }
 
 // GetDiscoveredProviders returns a list of discovered storage providers.
-func (api *StorageAPI) GetDiscoveredProviders(r *http.Request, args *EmptyArgs, response *GetDiscoveredProvidersResponse) error {
+func (api *StorageAPI) GetDiscoveredProviders(_ *http.Request, _ *EmptyArgs, response *GetDiscoveredProvidersResponse) error {
 	providers := api.storageProtocol.GetDiscoveredStorageProviders()
 	response.StorageProviders = make([]JSONStorageProvider, len(providers))
 	for i, v := range providers {

@@ -381,7 +381,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubBlocksTXQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	if err != nil {
 		return fmt.Errorf("failed to listen for handling incoming pub sub messages: %w", err)
 	}
@@ -395,7 +395,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	// join the storage pub sub
-	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubStorageQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubStorageQuery)
 	if err != nil {
 		return fmt.Errorf("failed to listen for handling incoming pub sub storage messages: %w", err)
 	}

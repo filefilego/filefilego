@@ -807,7 +807,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	err = ffgNode.DiscoverPeers(ctx, "ffgnet")
 	assert.NoError(t, err)
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
 	// if full node, then hanlde incoming block, transactions, and data queries
@@ -817,7 +817,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	}
 
 	// join the storage pub sub
-	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubStorageQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubStorageQuery)
 	assert.NoError(t, err)
 
 	err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubStorageQuery)

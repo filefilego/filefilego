@@ -365,17 +365,17 @@ func TestNodeMethods(t *testing.T) {
 	assert.EqualError(t, err, "pubsub topic is not available")
 
 	// HandleIncomingMessages
-	err = n1.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	err = n1.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 	err = n1.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
-	err = n2.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	err = n2.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 	err = n2.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
-	err = n3.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	err = n3.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 	err = n3.HandleIncomingMessages(ctx, common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)

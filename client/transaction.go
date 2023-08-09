@@ -149,7 +149,7 @@ func (cli *Client) SendTransaction(ctx context.Context, token string, tx SendTra
 }
 
 // TransactionPool returns the transaction in the tx pool
-func (cli *Client) TransactionPool(ctx context.Context, token string, tx SendTransaction) (rpc.MemPoolResponse, error) {
+func (cli *Client) TransactionPool(ctx context.Context) (rpc.MemPoolResponse, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "transaction.Pool",

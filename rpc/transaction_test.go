@@ -184,7 +184,7 @@ type keyAuthorizerStub struct {
 	err error
 }
 
-func (k *keyAuthorizerStub) Authorized(jwtToken string) (bool, keystore.UnlockedKey, error) {
+func (k *keyAuthorizerStub) Authorized(_ string) (bool, keystore.UnlockedKey, error) {
 	return k.ok, k.key, k.err
 }
 
@@ -192,7 +192,7 @@ type networkMessagePublisherStub struct {
 	err error
 }
 
-func (n *networkMessagePublisherStub) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
+func (n *networkMessagePublisherStub) PublishMessageToNetwork(_ context.Context, _ string, _ []byte) error {
 	return n.err
 }
 
@@ -210,7 +210,7 @@ type blockchainStub struct {
 	addressTransactionsErr          error
 }
 
-func (b *blockchainStub) PutMemPool(tx transaction.Transaction) error {
+func (b *blockchainStub) PutMemPool(_ transaction.Transaction) error {
 	return b.memPoolPutErr
 }
 
@@ -218,10 +218,10 @@ func (b *blockchainStub) GetTransactionsFromPool() []transaction.Transaction {
 	return b.mempool
 }
 
-func (b *blockchainStub) GetAddressTransactions(address []byte, currentPage, limit int) ([]transaction.Transaction, []uint64, []int64, error) {
+func (b *blockchainStub) GetAddressTransactions(_ []byte, _, _ int) ([]transaction.Transaction, []uint64, []int64, error) {
 	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsTimestamps, b.addressTransactionsErr
 }
 
-func (b *blockchainStub) GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error) {
+func (b *blockchainStub) GetTransactionByHash(_ []byte) ([]transaction.Transaction, []uint64, error) {
 	return b.addressTransactions, b.addressTransactionsBlockNumbers, b.addressTransactionsErr
 }

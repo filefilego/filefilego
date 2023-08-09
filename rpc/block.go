@@ -42,7 +42,7 @@ type JSONBlock struct {
 }
 
 // GetByNumber gets a block by number.
-func (api *BlockAPI) GetByNumber(r *http.Request, args *GetByNumberArgs, response *JSONBlock) error {
+func (api *BlockAPI) GetByNumber(_ *http.Request, args *GetByNumberArgs, response *JSONBlock) error {
 	validBlock, err := api.blockchain.GetBlockByNumber(args.Number)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ type GetByHashArgs struct {
 }
 
 // GetByHash gets a block by hash.
-func (api *BlockAPI) GetByHash(r *http.Request, args *GetByHashArgs, response *JSONBlock) error {
+func (api *BlockAPI) GetByHash(_ *http.Request, args *GetByHashArgs, response *JSONBlock) error {
 	blockHash, err := hexutil.Decode(args.Hash)
 	if err != nil {
 		return err
@@ -125,6 +125,7 @@ type PoolResponse struct {
 }
 
 // Pool gets the block pool hashes.
+// nolint:revive
 func (api *BlockAPI) Pool(r *http.Request, args *EmptyArgs, response *PoolResponse) error {
 	blockPool := api.blockchain.GetBlocksFromPool()
 	response.BlockHashes = make([]string, len(blockPool))

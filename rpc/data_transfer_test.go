@@ -393,10 +393,10 @@ type networkMessagePublisherNodesFinderStub struct {
 	addrInfos []peer.AddrInfo
 }
 
-func (n *networkMessagePublisherNodesFinderStub) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
+func (n *networkMessagePublisherNodesFinderStub) PublishMessageToNetwork(_ context.Context, _ string, _ []byte) error {
 	return n.err
 }
 
-func (n *networkMessagePublisherNodesFinderStub) FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo {
+func (n *networkMessagePublisherNodesFinderStub) FindPeers(_ context.Context, _ []peer.ID) []peer.AddrInfo {
 	return n.addrInfos
 }

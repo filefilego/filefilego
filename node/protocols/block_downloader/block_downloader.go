@@ -203,9 +203,8 @@ func (bd *Protocol) onBlockDownloadRequest(s network.Stream) {
 				downloadResponse.Error = true
 				downloadResponse.Blocks = []*block.ProtoBlock{}
 				break
-			} else {
-				downloadResponse.Blocks = append(downloadResponse.Blocks, block.ToProtoBlock(*blck))
 			}
+			downloadResponse.Blocks = append(downloadResponse.Blocks, block.ToProtoBlock(*blck))
 		}
 	}
 

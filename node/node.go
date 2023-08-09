@@ -68,7 +68,7 @@ type Interface interface {
 	GetPeerID() peer.ID
 	Bootstrap(ctx context.Context, bootstrapPeers []string) error
 	FindPeers(ctx context.Context, peerIDs []peer.ID) []peer.AddrInfo
-	JoinPubSubNetwork(ctx context.Context, topicName string) error
+	JoinPubSubNetwork(topicName string) error
 	HeighestBlockNumberDiscovered() uint64
 	Uptime() int64
 }
@@ -341,7 +341,7 @@ func (n *Node) PublishMessageToNetwork(ctx context.Context, topicName string, da
 }
 
 // JoinPubSubNetwork joins the gossip network.
-func (n *Node) JoinPubSubNetwork(ctx context.Context, topicName string) error {
+func (n *Node) JoinPubSubNetwork(topicName string) error {
 	_, ok := n.gossipTopic[topicName]
 	if ok {
 		return errors.New("already subscribed to topic")

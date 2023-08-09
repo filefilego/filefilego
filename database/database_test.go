@@ -80,11 +80,11 @@ type dbEngineStub struct {
 	data []byte
 }
 
-func (e dbEngineStub) Put(key, value []byte, wo *opt.WriteOptions) error {
+func (e dbEngineStub) Put(_, _ []byte, _ *opt.WriteOptions) error {
 	return e.err
 }
 
-func (e dbEngineStub) Get(key []byte, ro *opt.ReadOptions) (value []byte, err error) {
+func (e dbEngineStub) Get(_ []byte, _ *opt.ReadOptions) (value []byte, err error) {
 	return e.data, e.err
 }
 
@@ -92,14 +92,14 @@ func (e dbEngineStub) Close() error {
 	return e.err
 }
 
-func (e dbEngineStub) Write(batch *leveldb.Batch, wo *opt.WriteOptions) error {
+func (e dbEngineStub) Write(_ *leveldb.Batch, _ *opt.WriteOptions) error {
 	return e.err
 }
 
-func (e dbEngineStub) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
+func (e dbEngineStub) NewIterator(_ *util.Range, _ *opt.ReadOptions) iterator.Iterator {
 	return nil
 }
 
-func (e dbEngineStub) Delete(key []byte, wo *opt.WriteOptions) error {
+func (e dbEngineStub) Delete(_ []byte, _ *opt.WriteOptions) error {
 	return nil
 }

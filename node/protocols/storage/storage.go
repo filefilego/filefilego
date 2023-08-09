@@ -638,6 +638,7 @@ func getRemotePeerIP(stream network.Stream) (string, error) {
 
 type defaultIPLocator struct{}
 
-func (d *defaultIPLocator) Country(ipAddress net.IP) (*geoip2.Country, error) {
+// nolint:unparam
+func (d *defaultIPLocator) Country(_ net.IP) (*geoip2.Country, error) {
 	return nil, errors.New("failed to load the database")
 }
