@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/filefilego/filefilego/common"
@@ -91,6 +93,18 @@ type AccessToken struct {
 	ExpiresAt  int64  `json:"expires_at"`
 }
 
+// IntrospectAccessTokenResponse contains the token info and some info about the storage node.
+type IntrospectAccessTokenResponse struct {
+	AccessToken       AccessToken `json:"access_token"`
+	AllowFeesOverride bool        `json:"allow_fees_override"`
+	Platform          string      `json:"platform"`
+	FeesPerByte       string      `json:"fees_per_byte"`
+	PublicKey         string      `json:"public_key"`
+	StorageCapacity   uint64      `json:"storage_capacity"`
+	PeerID            string      `json:"storage_provider_peer_addr"`
+	UptimeSeconds     int64       `json:"uptime_seconds"`
+}
+
 // Storage represents the storage engine and the metadata.
 type Storage struct {
 	db                      database.Database
@@ -99,10 +113,13 @@ type Storage struct {
 	merkleTreeTotalSegments int
 	peerID                  string
 	allowFeesOverride       bool
+	publicKey               string
+	feesPerByte             string
+	uptime                  int64
 }
 
 // New creates a new storage instance.
-func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string, allowFeesOverride bool) (*Storage, error) {
+func New(db database.Database, storagePath string, enabled bool, adminToken string, merkleTreeTotalSegments int, peerID string, allowFeesOverride bool, publicKey, feesPerByte string, uptime int64) (*Storage, error) {
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
@@ -136,6 +153,9 @@ func New(db database.Database, storagePath string, enabled bool, adminToken stri
 		merkleTreeTotalSegments: merkleTreeTotalSegments,
 		peerID:                  peerID,
 		allowFeesOverride:       allowFeesOverride,
+		publicKey:               publicKey,
+		feesPerByte:             feesPerByte,
+		uptime:                  uptime,
 	}
 
 	token := AccessToken{
@@ -620,6 +640,11 @@ func (s *Storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			fileFeesPerByte = string(feesPerByte)
 
+			_, ok := big.NewInt(0).SetString(fileFeesPerByte, 10)
+			if !ok {
+				fileFeesPerByte = ""
+			}
+
 			continue
 		}
 
@@ -773,6 +798,12 @@ func (s *Storage) HandleIncomingFileUploads(stream network.Stream) {
 	if err := proto.Unmarshal(buf, &request); err != nil {
 		log.Errorf("failed to unmarshall data from HandleIncomingFileUploads stream: %v", err)
 		return
+	}
+
+	// if invalid fees set it to empty
+	_, ok := big.NewInt(0).SetString(request.FeesPerByte, 10)
+	if !ok {
+		request.FeesPerByte = ""
 	}
 
 	fileName := request.FileName
@@ -1015,12 +1046,6 @@ func (s *Storage) CreateStorageAccessToken(w http.ResponseWriter, r *http.Reques
 	writeHeaderPayload(w, http.StatusOK, `{"token": "`+token.Token+`"}`)
 }
 
-// IntrospectAccessTokenResponse contains the token info and some info about the storage node.
-type IntrospectAccessTokenResponse struct {
-	AccessToken       AccessToken `json:"access_token"`
-	AllowFeesOverride bool        `json:"allow_fees_override"`
-}
-
 // IntrospectAccessToken returns the payload of an access token.
 func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1051,6 +1076,16 @@ func (s *Storage) IntrospectAccessToken(w http.ResponseWriter, r *http.Request) 
 	payload := IntrospectAccessTokenResponse{
 		AccessToken:       accessToken,
 		AllowFeesOverride: s.allowFeesOverride,
+		Platform:          runtime.GOOS,
+		UptimeSeconds:     time.Now().Unix() - s.uptime,
+		FeesPerByte:       s.feesPerByte,
+		PublicKey:         s.publicKey,
+		PeerID:            s.peerID,
+	}
+
+	storageDirCapacity, err := common.GetDirectoryFreeSpace(s.storagePath)
+	if err == nil {
+		payload.StorageCapacity = storageDirCapacity
 	}
 
 	data, err := json.Marshal(payload)

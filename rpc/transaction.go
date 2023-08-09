@@ -255,7 +255,7 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 // CreateTransaction creates a transaction and returns the json encoded payload.
 // it uses the same arguments as SendTransactionArgs.
 // this method is used for a client to create and sign and a transaction without broadcasting it to the network.
-func (api *TransactionAPI) CreateTransaction(r *http.Request, args *SendTransactionArgs, response *TransactionResponse) error {
+func (api *TransactionAPI) CreateTransaction(_ *http.Request, args *SendTransactionArgs, response *TransactionResponse) error {
 	if args.AccessToken == "" {
 		return errors.New("access token is empty")
 	}
@@ -318,7 +318,7 @@ type MemPoolResponse struct {
 }
 
 // Pool gets the list of transactions in mempool.
-func (api *TransactionAPI) Pool(r *http.Request, args *EmptyArgs, response *MemPoolResponse) error {
+func (api *TransactionAPI) Pool(_ *http.Request, _ *EmptyArgs, response *MemPoolResponse) error {
 	memPool := api.blockchain.GetTransactionsFromPool()
 	response.TransactionHashes = make([]string, len(memPool))
 	for i, v := range memPool {
@@ -333,7 +333,7 @@ type ReceiptArgs struct {
 }
 
 // Receipt gets the transaction receipt.
-func (api *TransactionAPI) Receipt(r *http.Request, args *ReceiptArgs, response *TransactionsResponse) error {
+func (api *TransactionAPI) Receipt(_ *http.Request, args *ReceiptArgs, response *TransactionsResponse) error {
 	transactionBytes, err := hexutil.Decode(args.Hash)
 	if err != nil {
 		return err
@@ -366,7 +366,7 @@ type ByAddressArgs struct {
 }
 
 // ByAddress gets the list of transactions by address.
-func (api *TransactionAPI) ByAddress(r *http.Request, args *ByAddressArgs, response *TransactionsResponse) error {
+func (api *TransactionAPI) ByAddress(_ *http.Request, args *ByAddressArgs, response *TransactionsResponse) error {
 	addressBytes, err := hexutil.Decode(args.Address)
 	if err != nil {
 		return err

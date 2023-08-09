@@ -48,7 +48,7 @@ func ChunkString(s string, chunkSize int) []string {
 func FormatBigWithSeperator(s string, sep string, index int) string {
 	s = Reverse(s)
 	prts := ChunkString(s, index)
-	return Reverse(prts[0] + "." + prts[1])
+	return Reverse(prts[0] + sep + prts[1])
 }
 
 // LeftPad2Len add padding deparator.

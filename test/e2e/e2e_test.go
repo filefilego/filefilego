@@ -752,7 +752,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	assert.NoError(t, err)
 
 	uptime := time.Now().Unix()
-
+	nodePublicKey, err := kp.PublicKey.Raw()
+	assert.NoError(t, err)
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
@@ -766,7 +767,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	} else {
 		// full node dependencies setup
 		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride)
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride, hexutil.Encode(nodePublicKey), conf.Global.StorageFeesPerByte, uptime)
 			assert.NoError(t, err)
 		}
 
@@ -806,7 +807,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	err = ffgNode.DiscoverPeers(ctx, "ffgnet")
 	assert.NoError(t, err)
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubBlocksTXQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	assert.NoError(t, err)
 
 	// if full node, then hanlde incoming block, transactions, and data queries
@@ -816,7 +817,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	}
 
 	// join the storage pub sub
-	err = ffgNode.JoinPubSubNetwork(ctx, common.FFGNetPubSubStorageQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubStorageQuery)
 	assert.NoError(t, err)
 
 	err = ffgNode.HandleIncomingMessages(ctx, common.FFGNetPubSubStorageQuery)

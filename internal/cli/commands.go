@@ -191,6 +191,8 @@ func CreateNodeIDKey(ctx *cli.Context) error {
 }
 
 // ShowDefaultDataDir prints the default data dir.
+//
+//nolint:all
 func ShowDefaultDataDir(ctx *cli.Context) error {
 	fmt.Printf("Default Data Directory::%s", common.DefaultDataDir())
 	return nil

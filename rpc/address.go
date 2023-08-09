@@ -87,7 +87,7 @@ func NewAddressAPI(keystore keystore.KeyLockUnlockLister, bchain blockchain.Inte
 }
 
 // List the addresses of the node.
-func (api *AddressAPI) List(r *http.Request, args *EmptyArgs, response *ListAddressesResponse) error {
+func (api *AddressAPI) List(_ *http.Request, _ *EmptyArgs, response *ListAddressesResponse) error {
 	addresses, err := api.keystore.ListKeys()
 	if err != nil {
 		return err
@@ -98,7 +98,7 @@ func (api *AddressAPI) List(r *http.Request, args *EmptyArgs, response *ListAddr
 }
 
 // Unlock a key given an address and a passphrase.
-func (api *AddressAPI) Unlock(r *http.Request, args *UnlockAddressArgs, response *UnlockAddressResponse) error {
+func (api *AddressAPI) Unlock(_ *http.Request, args *UnlockAddressArgs, response *UnlockAddressResponse) error {
 	jwtToken, err := api.keystore.UnlockKey(args.Address, args.Passphrase)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func (api *AddressAPI) Unlock(r *http.Request, args *UnlockAddressArgs, response
 }
 
 // Lock a key given an access token and the address.
-func (api *AddressAPI) Lock(r *http.Request, args *LockAddressArgs, response *LockAddressResponse) error {
+func (api *AddressAPI) Lock(_ *http.Request, args *LockAddressArgs, response *LockAddressResponse) error {
 	locked, err := api.keystore.LockKey(args.Address, args.Token)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (api *AddressAPI) Lock(r *http.Request, args *LockAddressArgs, response *Lo
 }
 
 // Authorized checks if an access token is currently available.
-func (api *AddressAPI) Authorized(r *http.Request, args *AuthorizedArgs, response *AuthorizedResponse) error {
+func (api *AddressAPI) Authorized(_ *http.Request, args *AuthorizedArgs, response *AuthorizedResponse) error {
 	ok, _, err := api.keystore.Authorized(args.Token)
 	if err != nil {
 		response.Authorized = false
@@ -129,7 +129,7 @@ func (api *AddressAPI) Authorized(r *http.Request, args *AuthorizedArgs, respons
 }
 
 // Balance of an address.
-func (api *AddressAPI) Balance(r *http.Request, args *BalanceOfAddressArgs, response *BalanceOfAddressResponse) error {
+func (api *AddressAPI) Balance(_ *http.Request, args *BalanceOfAddressArgs, response *BalanceOfAddressResponse) error {
 	addressBytes, err := hexutil.Decode(args.Address)
 	if err != nil {
 		return err

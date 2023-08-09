@@ -70,7 +70,7 @@ type verifier struct {
 }
 
 // Stats reports the stats of the node.
-func (api *FilefilegoAPI) Stats(r *http.Request, args *EmptyArgs, response *StatsResponse) error {
+func (api *FilefilegoAPI) Stats(_ *http.Request, _ *EmptyArgs, response *StatsResponse) error {
 	response.Syncing = api.node.GetSyncing()
 	response.HeighestBlockNumberDiscovered = api.node.HeighestBlockNumberDiscovered()
 	response.BlockchainHeight = api.blockchain.GetHeight()
@@ -105,7 +105,7 @@ type HostInfoResponse struct {
 }
 
 // HostInfo returns the node's addresses.
-func (api *FilefilegoAPI) HostInfo(r *http.Request, args *EmptyArgs, response *HostInfoResponse) error {
+func (api *FilefilegoAPI) HostInfo(_ *http.Request, _ *EmptyArgs, response *HostInfoResponse) error {
 	response.PeerCount = api.node.Peers().Len()
 	publicKey := api.host.Peerstore().PubKey(api.host.ID())
 	publicKeyBytes, err := publicKey.Raw()

@@ -129,11 +129,11 @@ type engineStub struct {
 	err         error
 }
 
-func (e engineStub) Search(ctx context.Context, query string, limit, offset int, searchType Type) ([]string, error) {
+func (e engineStub) Search(_ context.Context, _ string, _, _ int, _ Type) ([]string, error) {
 	return e.hashes, e.err
 }
 
-func (e engineStub) Index(item IndexItem) error {
+func (e engineStub) Index(_ IndexItem) error {
 	return e.indexingErr
 }
 

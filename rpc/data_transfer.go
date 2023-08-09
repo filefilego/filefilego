@@ -391,7 +391,7 @@ type GetDownloadContractResponse struct {
 }
 
 // GetDownloadContract returns a contract from the memmory.
-func (api *DataTransferAPI) GetDownloadContract(r *http.Request, args *GetDownloadContractArgs, response *GetDownloadContractResponse) error {
+func (api *DataTransferAPI) GetDownloadContract(_ *http.Request, args *GetDownloadContractArgs, response *GetDownloadContractResponse) error {
 	if args.ContractHash == "" {
 		return errors.New("contract hash is empty")
 	}
@@ -476,7 +476,7 @@ type DataQueryResponseJSON struct {
 }
 
 // CheckDataQueryResponse returns a list of data query responses.
-func (api *DataTransferAPI) CheckDataQueryResponse(r *http.Request, args *CheckDataQueryResponseArgs, response *CheckDataQueryResponse) error {
+func (api *DataTransferAPI) CheckDataQueryResponse(_ *http.Request, args *CheckDataQueryResponseArgs, response *CheckDataQueryResponse) error {
 	if args.DataQueryRequestHash == "" {
 		return errors.New("data query hash is empty")
 	}
@@ -715,7 +715,7 @@ type CancelFileDownloadsByContractHashResponse struct {
 }
 
 // CancelFileDownloadsByContractHash cancels file download by contract.
-func (api *DataTransferAPI) CancelFileDownloadsByContractHash(r *http.Request, args *CancelFileDownloadsByContractHashArgs, response *CancelFileDownloadsByContractHashResponse) error {
+func (api *DataTransferAPI) CancelFileDownloadsByContractHash(_ *http.Request, args *CancelFileDownloadsByContractHashArgs, response *CancelFileDownloadsByContractHashResponse) error {
 	_, err := api.contractStore.GetContract(args.ContractHash)
 	if err != nil {
 		return fmt.Errorf("contract not found: %w", err)
@@ -751,7 +751,7 @@ type PauseFileDownloadArgs struct {
 type PauseFileDownloadResponse struct{}
 
 // PauseFileDownload pauses a file download.
-func (api *DataTransferAPI) PauseFileDownload(r *http.Request, args *PauseFileDownloadArgs, response *PauseFileDownloadResponse) error {
+func (api *DataTransferAPI) PauseFileDownload(_ *http.Request, args *PauseFileDownloadArgs, _ *PauseFileDownloadResponse) error {
 	_, err := api.contractStore.GetContract(args.ContractHash)
 	if err != nil {
 		return fmt.Errorf("contract not found: %w", err)
@@ -1045,7 +1045,7 @@ type DownloadFileProgressResponse struct {
 }
 
 // DownloadFileProgress returns the download progress of a file.
-func (api *DataTransferAPI) DownloadFileProgress(r *http.Request, args *DownloadFileProgressArgs, response *DownloadFileProgressResponse) error {
+func (api *DataTransferAPI) DownloadFileProgress(_ *http.Request, args *DownloadFileProgressArgs, response *DownloadFileProgressResponse) error {
 	fileHash, err := hexutil.DecodeNoPrefix(args.FileHash)
 	if err != nil {
 		return fmt.Errorf("failed to decode file hash: %w", err)
@@ -1186,7 +1186,7 @@ type MoveDirectDownloadsToDestinationResponse struct {
 // MoveDirectDownloadsToDestination moves the downloaded files to final destination.
 // These files were directly downloaded from a storage provider with zero fee, so no decryption needed.
 // The contracts were local and never went out to the network. This method was written specifically for direct downloads with zero fees.
-func (api *DataTransferAPI) MoveDirectDownloadsToDestination(r *http.Request, args *MoveDirectDownloadsToDestinationArgs, response *MoveDirectDownloadsToDestinationResponse) error {
+func (api *DataTransferAPI) MoveDirectDownloadsToDestination(_ *http.Request, args *MoveDirectDownloadsToDestinationArgs, response *MoveDirectDownloadsToDestinationResponse) error {
 	response.RestoredFilePaths = make([]string, 0)
 	if len(args.FileHashes) == 0 {
 		return errors.New("file hashes are empty")
@@ -1430,7 +1430,7 @@ type CreateTransactionDataPayloadFromContractHashesResponse struct {
 }
 
 // CreateTransactionsWithDataPayloadFromContractHashes given a list of contract hashes it creates the transactions and its data payloads.
-func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(r *http.Request, args *CreateTransactionDataPayloadFromContractHashesArgs, response *CreateTransactionDataPayloadFromContractHashesResponse) error {
+func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(_ *http.Request, args *CreateTransactionDataPayloadFromContractHashesArgs, response *CreateTransactionDataPayloadFromContractHashesResponse) error {
 	ok, key, err := api.keystore.Authorized(args.AccessToken)
 	if err != nil || !ok {
 		return fmt.Errorf("failed to authorize access token %v", err)
@@ -1721,8 +1721,10 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 	}
 
 	// shuffle the result to introduce extra pseudorandom
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(signedDownloadContracts), func(i, j int) {
+	// nolint:all
+	f := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// rand.Seed(time.Now().UnixNano())
+	f.Shuffle(len(signedDownloadContracts), func(i, j int) {
 		signedDownloadContracts[i], signedDownloadContracts[j] = signedDownloadContracts[j], signedDownloadContracts[i]
 	})
 

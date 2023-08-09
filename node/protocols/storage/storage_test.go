@@ -41,7 +41,7 @@ func TestStorageProtocol(t *testing.T) {
 		os.RemoveAll(storagePath)
 	})
 
-	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String(), false)
+	storage, err := internalstorage.New(driver, storagePath, true, "admintoken", 1024, h1.ID().String(), false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 	uptime := time.Now().Unix()
 

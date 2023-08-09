@@ -56,7 +56,7 @@ type ListResponse struct {
 }
 
 // List returns a list of channels.
-func (api *ChannelAPI) List(r *http.Request, args *ListArgs, response *ListResponse) error {
+func (api *ChannelAPI) List(_ *http.Request, args *ListArgs, response *ListResponse) error {
 	if args.Order != orderAsc && args.Order != orderDesc {
 		return fmt.Errorf("invalid order: %s", args.Order)
 	}
@@ -88,7 +88,7 @@ type CreateNodeItemsTxDataPayloadResponse struct {
 }
 
 // CreateNodeItemsTxDataPayload a channel node items that returns the transaction data payload, which in turn can be used in a transaction data payload.
-func (api *ChannelAPI) CreateNodeItemsTxDataPayload(r *http.Request, args *CreateNodeItemsTxDataPayloadArgs, response *CreateNodeItemsTxDataPayloadResponse) error {
+func (api *ChannelAPI) CreateNodeItemsTxDataPayload(_ *http.Request, args *CreateNodeItemsTxDataPayloadArgs, response *CreateNodeItemsTxDataPayloadResponse) error {
 	if len(args.Nodes) == 0 {
 		return errors.New("empty node items")
 	}
@@ -290,7 +290,7 @@ type GetNodeItemResponse struct {
 }
 
 // GetNodeItem gets a node item.
-func (api *ChannelAPI) GetNodeItem(r *http.Request, args *GetNodeItemArgs, response *GetNodeItemResponse) error {
+func (api *ChannelAPI) GetNodeItem(_ *http.Request, args *GetNodeItemArgs, response *GetNodeItemResponse) error {
 	nodeHashBytes, err := hexutil.Decode(args.NodeHash)
 	if err != nil {
 		return fmt.Errorf("failed to decode node hash: %w", err)
@@ -341,7 +341,7 @@ type FilesFromEntryOrFolderResponse struct {
 }
 
 // FilesFromEntryOrFolder all the files of a node which is a dir or an entry recursvely.
-func (api *ChannelAPI) FilesFromEntryOrFolder(r *http.Request, args *FilesFromEntryOrFolderArgs, response *FilesFromEntryOrFolderResponse) error {
+func (api *ChannelAPI) FilesFromEntryOrFolder(_ *http.Request, args *FilesFromEntryOrFolderArgs, response *FilesFromEntryOrFolderResponse) error {
 	nodeHashBytes, err := hexutil.Decode(args.NodeHash)
 	if err != nil {
 		return fmt.Errorf("failed to decode node hash: %w", err)

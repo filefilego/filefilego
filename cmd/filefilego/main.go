@@ -28,6 +28,7 @@ import (
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/common"
+	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/config"
 	"github.com/filefilego/filefilego/contract"
 	"github.com/filefilego/filefilego/database"
@@ -181,7 +182,14 @@ func run(ctx *cli.Context) error {
 		storageAccessToken = "localtoken"
 	}
 
-	storageEngine, err := storage.New(globalDB, storageDir, storageEnabled, storageAccessToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride)
+	uptime := time.Now().Unix()
+
+	nodePublicKey, err := key.PublicKey.Raw()
+	if err != nil {
+		return fmt.Errorf("failed to get node's public key: %w", err)
+	}
+
+	storageEngine, err := storage.New(globalDB, storageDir, storageEnabled, storageAccessToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride, hexutil.Encode(nodePublicKey), conf.Global.StorageFeesPerByte, uptime)
 	if err != nil {
 		return fmt.Errorf("failed to setup storage engine: %w", err)
 	}
@@ -203,8 +211,6 @@ func run(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get genesis block: %w", err)
 	}
-
-	uptime := time.Now().Unix()
 
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
@@ -375,7 +381,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	// listen for pubsub messages
-	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubBlocksTXQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubBlocksTXQuery)
 	if err != nil {
 		return fmt.Errorf("failed to listen for handling incoming pub sub messages: %w", err)
 	}
@@ -389,7 +395,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	// join the storage pub sub
-	err = ffgNode.JoinPubSubNetwork(ctx.Context, common.FFGNetPubSubStorageQuery)
+	err = ffgNode.JoinPubSubNetwork(common.FFGNetPubSubStorageQuery)
 	if err != nil {
 		return fmt.Errorf("failed to listen for handling incoming pub sub storage messages: %w", err)
 	}

@@ -62,6 +62,6 @@ type httpClientStub struct {
 	err      error
 }
 
-func (c *httpClientStub) Do(req *http.Request) (*http.Response, error) {
+func (c *httpClientStub) Do(_ *http.Request) (*http.Response, error) {
 	return c.response, c.err
 }

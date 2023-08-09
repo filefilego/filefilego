@@ -210,13 +210,13 @@ func TestDataVerificationMethods(t *testing.T) {
 	contractStoreVerifier1, err := contract.New(driver3)
 	assert.NoError(t, err)
 
-	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments, h1.ID().String(), false)
+	strg, err := storage.New(driver, filepath.Join(currentDir, "datastorage"), true, "admintoken", totalDesiredFileSegments, h1.ID().String(), false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 
-	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments, h2.ID().String(), false)
+	strg2, err := storage.New(driver2, filepath.Join(currentDir, "datastorage2"), true, "admintoken2", totalDesiredFileSegments, h2.ID().String(), false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 
-	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments, verifier1.ID().String(), false)
+	strg3, err := storage.New(driver3, filepath.Join(currentDir, "datastorage3"), true, "admintoken3", totalDesiredFileSegments, verifier1.ID().String(), false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 
 	genesisblockValid, err := block.GetGenesisBlock()
@@ -751,6 +751,6 @@ type networkMessagePublisherStub struct {
 	err error
 }
 
-func (n *networkMessagePublisherStub) PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error {
+func (n *networkMessagePublisherStub) PublishMessageToNetwork(_ context.Context, _ string, _ []byte) error {
 	return n.err
 }
