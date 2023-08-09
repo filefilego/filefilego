@@ -17,7 +17,7 @@ func TestChunkString(t *testing.T) {
 }
 
 func TestFormatBigWithSeperator(t *testing.T) {
-	assert.Equal(t, "10.00", FormatBigWithSeperator("1000", ",", 2))
+	assert.Equal(t, "10.00", FormatBigWithSeperator("1000", ".", 2))
 }
 
 func TestLeftPad2Len(t *testing.T) {
