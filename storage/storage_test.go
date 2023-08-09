@@ -38,6 +38,9 @@ func TestNew(t *testing.T) {
 		totalMerkleSegments int
 		peerID              string
 		allowFeesOverride   bool
+		publicKey           string
+		feesPerByte         string
+		uptime              int64
 		expErr              string
 	}{
 		"no database": {
@@ -79,7 +82,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID, tt.allowFeesOverride)
+			storage, err := New(tt.db, tt.storagePath, tt.enabled, tt.adminToken, tt.totalMerkleSegments, tt.peerID, tt.allowFeesOverride, tt.publicKey, tt.feesPerByte, tt.uptime)
 			if tt.expErr != "" {
 				assert.Nil(t, storage)
 				assert.EqualError(t, err, tt.expErr)
@@ -105,7 +108,7 @@ func TestStorageMethods(t *testing.T) {
 		os.RemoveAll("storagetest2.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", false)
+	storage, err := New(driver, storagePath, false, "admintoken", 1024, "16Uiu2HAmTFHgmWhmcned8QTH3t38WkMBTeFU5xLRgsuwMTjTUe6k", false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 	assert.Equal(t, false, storage.Enabled())
 	assert.Equal(t, storagePath, storage.StoragePath())
@@ -247,7 +250,7 @@ func TestCreateStorageAccessTokenHandler(t *testing.T) {
 		os.RemoveAll("storagetestauth.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", true)
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", true, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 
@@ -322,7 +325,7 @@ func TestUploadHandler(t *testing.T) {
 		os.RemoveAll("storagetestuploading.db")
 		os.RemoveAll(storagePath)
 	})
-	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false)
+	storage, err := New(driver, storagePath, true, "admintoken", 1024, "peerID", false, "pubkey", "10", time.Now().Unix())
 	assert.NoError(t, err)
 	handler := http.HandlerFunc(storage.CreateStorageAccessToken)
 

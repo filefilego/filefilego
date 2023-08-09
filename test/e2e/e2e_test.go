@@ -752,7 +752,8 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	assert.NoError(t, err)
 
 	uptime := time.Now().Unix()
-
+	nodePublicKey, err := kp.PublicKey.Raw()
+	assert.NoError(t, err)
 	// super light node dependencies setup
 	if conf.Global.SuperLightNode {
 		bchain, err = blockchain.New(globalDB, &search.Search{}, genesisblockValid.Hash)
@@ -766,7 +767,7 @@ func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier boo
 	} else {
 		// full node dependencies setup
 		if conf.Global.Storage {
-			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride)
+			storageEngine, err = storage.New(globalDB, conf.Global.StorageDir, true, conf.Global.StorageToken, conf.Global.StorageFileMerkleTreeTotalSegments, host.ID().String(), conf.Global.AllowFeesOverride, hexutil.Encode(nodePublicKey), conf.Global.StorageFeesPerByte, uptime)
 			assert.NoError(t, err)
 		}
 
