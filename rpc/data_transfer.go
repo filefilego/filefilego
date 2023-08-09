@@ -1721,6 +1721,7 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 	}
 
 	// shuffle the result to introduce extra pseudorandom
+	// nolint:all
 	f := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// rand.Seed(time.Now().UnixNano())
 	f.Shuffle(len(signedDownloadContracts), func(i, j int) {
