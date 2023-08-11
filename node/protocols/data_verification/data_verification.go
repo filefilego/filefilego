@@ -622,7 +622,8 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		FileHosterNodePublicKey:    downloadContract.FileHosterResponse.PublicKey,
 		VerifierPublicKey:          downloadContract.VerifierPublicKey,
 		VerifierFees:               downloadContract.VerifierFees,
-		FileHosterFees:             downloadContract.FileHosterResponse.FeesPerByte,
+		// TODO we should take care of the following fee since we introduced per file fees
+		FileHosterFees: downloadContract.FileHosterResponse.FeesPerByte,
 	}
 
 	contractsEnvelope := &messages.DownloadContractsHashesProto{
@@ -1483,7 +1484,16 @@ func (d *Protocol) checkValidateContractCreationInTX(contractHash []byte, downlo
 		return nil, fmt.Errorf("download contract number of hashes %d and file sizes %d mismatch", len(downloadContract.FileHashesNeeded), len(downloadContract.FileHashesNeededSizes))
 	}
 
-	fileHosterFees := big.NewInt(0)
+	if len(downloadContract.FileHosterResponse.FileHashes) != len(downloadContract.FileHosterResponse.FileFeesPerByte) {
+		return nil, errors.New("download contract arrays of file hashes and the file fees per byte are not equal")
+	}
+
+	fileHosterFeesPerByte, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.FeesPerByte)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get the file hoster's fees of a download contract: %w", err)
+	}
+
+	totalFileHosterFees := big.NewInt(0)
 	for _, v := range contractDataFromTX {
 		tx, _, err := d.blockchain.GetTransactionByHash(v.TxHash)
 		if err != nil {
@@ -1522,25 +1532,19 @@ func (d *Protocol) checkValidateContractCreationInTX(contractHash []byte, downlo
 			return nil, fmt.Errorf("failed to get the verifier fees of a download contract: %w", err)
 		}
 
-		fileHosterFeesPerByte, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.FeesPerByte)
+		totalFileHosterFees, err = common.CalculateFileHosterTotalContractFees(downloadContract, fileHosterFeesPerByte)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get the file hoster's fees of a download contract: %w", err)
+			return nil, fmt.Errorf("failed to calculate file hoster total contract fees: %w", err)
 		}
 
-		totalFilesSizes := uint64(0)
-		for _, v := range downloadContract.FileHashesNeededSizes {
-			totalFilesSizes += v
-		}
-		fileHosterFees = fileHosterFees.Mul(fileHosterFeesPerByte, big.NewInt(0).SetUint64(totalFilesSizes))
-
-		total := big.NewInt(0)
-		total = total.Add(verifierFees, fileHosterFees)
-		if txValue.Cmp(total) < 0 {
-			return nil, fmt.Errorf("transaction value %s is less than the verifier + filehoster fees %s : %w", txValue.String(), total.String(), err)
+		totalWithVerificationFees := big.NewInt(0)
+		totalWithVerificationFees = totalWithVerificationFees.Add(verifierFees, totalFileHosterFees)
+		if txValue.Cmp(totalWithVerificationFees) < 0 {
+			return nil, fmt.Errorf("transaction value %s is less than the verifier + filehoster fees %s : %w", txValue.String(), totalWithVerificationFees.String(), err)
 		}
 	}
 
-	return fileHosterFees, nil
+	return totalFileHosterFees, nil
 }
 
 // handleIncomingFileTransfer handles an incoming file transfer initiated from file downloader towards file hoster node.

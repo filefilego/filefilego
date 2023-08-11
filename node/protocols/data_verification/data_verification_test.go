@@ -330,12 +330,14 @@ func TestDataVerificationMethods(t *testing.T) {
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
 			FromPeerAddr:         h1.ID().Pretty(),
-			FeesPerByte:          "0x2",
+			FeesPerByte:          "0x2",      // this is the nodes global fee which is 2 per byte
 			HashDataQueryRequest: []byte{12}, // this is just a placeholder
 			PublicKey:            h1PublicKeyBytes,
 			FileHashes:           [][]byte{fileHashBytes, fileHash2Bytes},
 			FileHashesSizes:      []uint64{uint64(fileSize), uint64(fileSize2)},
 			Signature:            []byte{17}, // this is just a placeholder
+			FileNames:            []string{"uploadedFile.txt", "uploadedFile2.txt"},
+			FileFeesPerByte:      []string{"0x1", "0x1"}, // we override the global and make each byte fee equal to 1
 			Timestamp:            time.Now().Unix(),
 		},
 		FileRequesterNodePublicKey: h2PublicKeyBytes,
@@ -617,7 +619,8 @@ func TestDataVerificationMethods(t *testing.T) {
 		totalSize += v
 	}
 
-	hosterFees := totalSize * 2
+	// we will use the overridden fee
+	hosterFees := totalSize * 1
 	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value)
 	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees)
 
