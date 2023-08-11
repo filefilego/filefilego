@@ -623,7 +623,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		VerifierPublicKey:          downloadContract.VerifierPublicKey,
 		VerifierFees:               downloadContract.VerifierFees,
 		// TODO we should take care of the following fee since we introduced per file fees
-		FileHosterFees: downloadContract.FileHosterResponse.FeesPerByte,
+		FileHosterTotalFees: hexutil.EncodeBig(fileHosterFees),
 	}
 
 	contractsEnvelope := &messages.DownloadContractsHashesProto{

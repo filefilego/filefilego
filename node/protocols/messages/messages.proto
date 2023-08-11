@@ -127,7 +127,7 @@ message DownloadContractInTransactionDataProto {
     bytes file_hoster_node_public_key = 3;
     bytes verifier_public_key = 4;
     string verifier_fees = 5;
-    string file_hoster_fees = 6;
+    string file_hoster_total_fees = 6;
 }
 
 // DownloadContractsHashesProto contains a list of contracts hashes which will be send as a transaction data payload.

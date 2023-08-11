@@ -879,7 +879,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Equal(t, []byte{3}, contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterNodePublicKey)
 	assert.Equal(t, []byte{4}, contractMetadata[0].DownloadContractInTransactionDataProto.VerifierPublicKey)
 	assert.Equal(t, "0x1", contractMetadata[0].DownloadContractInTransactionDataProto.VerifierFees)
-	assert.Equal(t, "0x5", contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterFees)
+	assert.Equal(t, "0x5", contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterTotalFees)
 }
 
 func TestPerformAddressStateUpdate(t *testing.T) {
@@ -1001,7 +1001,7 @@ func transactionWithContractPayload(t *testing.T) []byte {
 		FileHosterNodePublicKey:    []byte{3},
 		VerifierPublicKey:          []byte{4},
 		VerifierFees:               "0x1",
-		FileHosterFees:             "0x5",
+		FileHosterTotalFees:        "0x5",
 	}
 
 	contractsEnvelope := &messages.DownloadContractsHashesProto{
