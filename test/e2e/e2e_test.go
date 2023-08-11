@@ -428,7 +428,7 @@ func TestE2E(t *testing.T) {
 		FileHosterNodePublicKey:    FileHosterNodePublicKeyBytes,
 		VerifierPublicKey:          VerifierPublicKeyBytes,
 		VerifierFees:               downloadContract.Contract.VerifierFees,
-		FileHosterFees:             downloadContract.Contract.FileHosterResponse.FeesPerByte,
+		FileHosterTotalFees:        hexutil.EncodeBig(fileHosterFees),
 	}
 
 	contractsEnvelope := &messages.DownloadContractsHashesProto{

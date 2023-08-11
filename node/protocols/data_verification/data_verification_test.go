@@ -409,7 +409,7 @@ func TestDataVerificationMethods(t *testing.T) {
 		FileHosterNodePublicKey:    signedContract.FileHosterResponse.PublicKey,
 		VerifierPublicKey:          signedContract.VerifierPublicKey,
 		VerifierFees:               signedContract.VerifierFees,
-		FileHosterFees:             signedContract.FileHosterResponse.FeesPerByte,
+		FileHosterTotalFees:        signedContract.FileHosterResponse.FeesPerByte,
 	}
 
 	validBlock2 := validBlock(t, 1, dcinTX, h2.Peerstore().PrivKey(h2.ID()), h2.Peerstore().PubKey(h2.ID()), fromaddr, verifierAddr, "0x135")

@@ -1461,13 +1461,23 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 			return fmt.Errorf("failed to get contract: %w", err)
 		}
 
+		fileHosterFeesPerByte, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.FeesPerByte)
+		if err != nil {
+			return fmt.Errorf("failed to decode file hoster fees per byte: %w", err)
+		}
+
+		totalDataFees, err := common.CalculateFileHosterTotalContractFees(downloadContract, fileHosterFeesPerByte)
+		if err != nil {
+			return fmt.Errorf("failed to calculate total file fees in contract: %w", err)
+		}
+
 		dcinTX := &messages.DownloadContractInTransactionDataProto{
 			ContractHash:               downloadContract.ContractHash,
 			FileRequesterNodePublicKey: downloadContract.FileRequesterNodePublicKey,
 			FileHosterNodePublicKey:    downloadContract.FileHosterResponse.PublicKey,
 			VerifierPublicKey:          downloadContract.VerifierPublicKey,
 			VerifierFees:               downloadContract.VerifierFees,
-			FileHosterFees:             downloadContract.FileHosterResponse.FeesPerByte,
+			FileHosterTotalFees:        hexutil.EncodeBig(totalDataFees),
 		}
 
 		contractsEnvelope := &messages.DownloadContractsHashesProto{
