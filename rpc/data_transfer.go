@@ -413,6 +413,7 @@ func (api *DataTransferAPI) GetDownloadContract(_ *http.Request, args *GetDownlo
 		Timestamp:             downloadContract.FileHosterResponse.Timestamp,
 		FileMerkleRootHashes:  make([]string, len(downloadContract.FileHosterResponse.FileMerkleRootHashes)),
 		FileNames:             make([]string, len(downloadContract.FileHosterResponse.FileNames)),
+		FileFeesPerByte:       make([]string, len(downloadContract.FileHosterResponse.FileFeesPerByte)),
 	}
 
 	for i, j := range downloadContract.FileHosterResponse.FileHashes {
@@ -428,6 +429,7 @@ func (api *DataTransferAPI) GetDownloadContract(_ *http.Request, args *GetDownlo
 	}
 
 	copy(dqrJSON.FileNames, downloadContract.FileHosterResponse.FileNames)
+	copy(dqrJSON.FileFeesPerByte, downloadContract.FileHosterResponse.FileFeesPerByte)
 
 	jsonContract := DownloadContractJSON{
 		FileHosterResponse:         dqrJSON,
@@ -473,6 +475,7 @@ type DataQueryResponseJSON struct {
 	Timestamp             int64    `json:"timestamp"`
 	FileMerkleRootHashes  []string `json:"file_merkle_root_hashes"`
 	FileNames             []string `json:"file_names"`
+	FileFeesPerByte       []string `json:"file_fees_per_byte"`
 }
 
 // CheckDataQueryResponse returns a list of data query responses.
@@ -497,6 +500,7 @@ func (api *DataTransferAPI) CheckDataQueryResponse(_ *http.Request, args *CheckD
 			Timestamp:             v.Timestamp,
 			FileMerkleRootHashes:  make([]string, len(v.FileMerkleRootHashes)),
 			FileNames:             make([]string, len(v.FileNames)),
+			FileFeesPerByte:       make([]string, len(v.FileFeesPerByte)),
 		}
 
 		for i, j := range v.FileHashes {
@@ -512,6 +516,8 @@ func (api *DataTransferAPI) CheckDataQueryResponse(_ *http.Request, args *CheckD
 		}
 
 		copy(dqrJSON.FileNames, v.FileNames)
+
+		copy(dqrJSON.FileFeesPerByte, v.FileFeesPerByte)
 		response.Responses = append(response.Responses, dqrJSON)
 	}
 
@@ -574,6 +580,7 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 			Timestamp:             v.Timestamp,
 			FileMerkleRootHashes:  make([]string, len(v.FileMerkleRootHashes)),
 			FileNames:             make([]string, len(v.FileNames)),
+			FileFeesPerByte:       make([]string, len(v.FileFeesPerByte)),
 		}
 
 		for i, j := range v.FileHashes {
@@ -589,6 +596,7 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 		}
 
 		copy(dqrJSON.FileNames, v.FileNames)
+		copy(dqrJSON.FileFeesPerByte, v.FileFeesPerByte)
 		response.Responses = append(response.Responses, dqrJSON)
 	}
 
@@ -1493,12 +1501,17 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 		for _, v := range downloadContract.FileHashesNeededSizes {
 			totalFileSize += v
 		}
+
 		fileHosterFees, err := hexutil.DecodeBig(downloadContract.FileHosterResponse.FeesPerByte)
 		if err != nil {
 			return fmt.Errorf("failed to decode file hosters fees: %w", err)
 		}
 
-		fileHosterFees = fileHosterFees.Mul(fileHosterFees, big.NewInt(0).SetUint64(totalFileSize))
+		fileHosterFees, err = common.CalculateFileHosterTotalContractFees(downloadContract, fileHosterFees)
+		if err != nil {
+			return fmt.Errorf("failed to calculate total file hosters fees: %w", err)
+		}
+
 		verifierFees, err := hexutil.DecodeBig(downloadContract.VerifierFees)
 		if err != nil {
 			return fmt.Errorf("failed to decode verifier's fees: %w", err)
