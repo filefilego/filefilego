@@ -360,7 +360,7 @@ func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
 			Key:          hexutil.Encode(key),
 		}
 
-		if !common.FileExists(item.FilePath) {
+		if common.FileExists(item.FilePath) {
 			kitem.FileExistsOnNode = true
 		}
 
@@ -465,7 +465,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 				Key:          hexutil.Encode(key),
 			}
 
-			if !common.FileExists(item.FilePath) {
+			if common.FileExists(item.FilePath) {
 				kitem.FileExistsOnNode = true
 			}
 
@@ -485,7 +485,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 						Key:          hexutil.Encode(key),
 					}
 
-					if !common.FileExists(item.FilePath) {
+					if common.FileExists(item.FilePath) {
 						kitem.FileExistsOnNode = true
 					}
 
@@ -521,7 +521,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 				Key:          hexutil.Encode(key),
 			}
 
-			if !common.FileExists(item.FilePath) {
+			if common.FileExists(item.FilePath) {
 				kitem.FileExistsOnNode = true
 			}
 
