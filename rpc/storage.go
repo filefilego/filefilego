@@ -645,6 +645,7 @@ type JSONStorageProvider struct {
 	UptimeSeconds           int64           `json:"uptime_seconds"`
 	StorageCapacity         uint64          `json:"storage_capacity"`
 	Platform                string          `json:"platform"`
+	AllowFeesOverride       bool            `json:"allow_fees_override"`
 }
 
 // GetDiscoveredProviders returns a list of discovered storage providers.
@@ -663,6 +664,7 @@ func (api *StorageAPI) GetDiscoveredProviders(_ *http.Request, _ *EmptyArgs, res
 			UptimeSeconds:           v.Response.Uptime,
 			StorageCapacity:         v.Response.StorageCapacity,
 			Platform:                v.Response.Platform,
+			AllowFeesOverride:       v.Response.AllowFeesOverride,
 		}
 	}
 
