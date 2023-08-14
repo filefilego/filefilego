@@ -82,8 +82,8 @@ type FileMetadata struct {
 // FileMetadataWithDBKey holds the file metatada and the key.
 type FileMetadataWithDBKey struct {
 	FileMetadata
-	Key     string `json:"key"`
-	Deleted bool   `json:"deleted"`
+	Key              string `json:"key"`
+	FileExistsOnNode bool   `json:"file_exists_on_node"`
 }
 
 // AccessToken represents an access token.
@@ -361,7 +361,7 @@ func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
 		}
 
 		if !common.FileExists(item.FilePath) {
-			kitem.Deleted = true
+			kitem.FileExistsOnNode = true
 		}
 
 		items = append(items, kitem)
@@ -466,7 +466,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 			}
 
 			if !common.FileExists(item.FilePath) {
-				kitem.Deleted = true
+				kitem.FileExistsOnNode = true
 			}
 
 			items = append(items, kitem)
@@ -486,7 +486,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 					}
 
 					if !common.FileExists(item.FilePath) {
-						kitem.Deleted = true
+						kitem.FileExistsOnNode = true
 					}
 
 					items = append(items, kitem)
@@ -522,7 +522,7 @@ func (s *Storage) ListFiles(currentPage, pageSize int, order string) ([]FileMeta
 			}
 
 			if !common.FileExists(item.FilePath) {
-				kitem.Deleted = true
+				kitem.FileExistsOnNode = true
 			}
 
 			items = append(items, kitem)
