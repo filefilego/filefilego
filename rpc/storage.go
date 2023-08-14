@@ -459,10 +459,10 @@ func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, 
 
 // UploadFileToProviderRequest
 type UploadFileToProviderRequest struct {
-	PeerID          string `json:"peer_id"`
-	FilePath        string `json:"file_path"`
-	OwnerPublicKey  string `json:"owner_public_key"`
-	FileFeesPerByte string `json:"file_fees_per_byte"`
+	PeerID         string `json:"peer_id"`
+	FilePath       string `json:"file_path"`
+	PublicKeyOwner string `json:"public_key_owner"`
+	FeesPerByte    string `json:"fees_per_byte"`
 }
 
 // UploadFileToProviderArgs args for uploading to a provider.
@@ -491,8 +491,8 @@ func (api *StorageAPI) UploadFileToProvider(_ *http.Request, args *UploadFileToP
 			ID:              v.PeerID + v.FilePath,
 			PeerID:          peerID,
 			FilePath:        v.FilePath,
-			OwnerPublicKey:  v.OwnerPublicKey,
-			FileFeesPerByte: v.FileFeesPerByte,
+			OwnerPublicKey:  v.PublicKeyOwner,
+			FileFeesPerByte: v.FeesPerByte,
 		})
 	}
 
