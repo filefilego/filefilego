@@ -99,6 +99,7 @@ func (api *FilefilegoAPI) Stats(_ *http.Request, _ *EmptyArgs, response *StatsRe
 type HostInfoResponse struct {
 	PeerID                                  string `json:"peer_id"`
 	Address                                 string `json:"address"`
+	NodePublicKey                           string `json:"node_public_key"`
 	PeerCount                               int    `json:"peer_count"`
 	ChannelCreationFeesFFGHex               string `json:"channel_creation_fees_ffg_hex"`
 	RemainingChannelOperationFeesMiliFFGHex string `json:"remaining_channel_operation_fees_miliffg_hex"`
@@ -112,6 +113,7 @@ func (api *FilefilegoAPI) HostInfo(_ *http.Request, _ *EmptyArgs, response *Host
 	if err != nil {
 		return fmt.Errorf("failed to get public key bytes: %w", err)
 	}
+
 	nodeAddress, err := crypto.RawPublicToAddress(publicKeyBytes)
 	if err != nil {
 		return fmt.Errorf("failed to get address from public key bytes: %w", err)
@@ -120,6 +122,7 @@ func (api *FilefilegoAPI) HostInfo(_ *http.Request, _ *EmptyArgs, response *Host
 	totalFFG, totalMiliFFG := getChannelFees()
 
 	response.Address = nodeAddress
+	response.NodePublicKey = hexutil.Encode(publicKeyBytes)
 	response.PeerID = api.node.GetID()
 
 	response.ChannelCreationFeesFFGHex = hexutil.EncodeBig(totalFFG)
