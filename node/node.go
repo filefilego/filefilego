@@ -571,10 +571,10 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			// if the fees is set for the file, use it
 			// otherwise fall back to the global
 			if fileMetaData.FeesPerByte != "" {
-				fileStorageFeesPerByte, ok := big.NewInt(0).SetString(fileFees, 10)
+				fileStorageFeesPerByte, ok := big.NewInt(0).SetString(fileMetaData.FeesPerByte, 10)
 				if !ok {
 					response.UnavailableFileHashes = append(response.UnavailableFileHashes, v)
-					log.Warnf("failed to parse file fees: %s", fileFees)
+					log.Warnf("failed to parse file fees: %s", fileMetaData.FeesPerByte)
 					continue
 				}
 				fileFees = hexutil.EncodeBig(fileStorageFeesPerByte)
