@@ -1587,7 +1587,7 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	// check if the storage fees is zero or not set
 	// or if its less than 512KB. We allow any files in the network to be downloaded without fees if its 512KB or less.
 	// this consensus among the storage provider peers in the network allows a better UI experience to serve images and small media
-	if d.allowZeroFeesDataUnder512KB && (fileMetadata.Size <= common.KB*512 || d.storageFeesPerByte == "" || d.storageFeesPerByte == "0") {
+	if d.allowZeroFeesDataUnder512KB && (fileMetadata.Size <= common.KB*512 || d.storageFeesPerByte == "" || d.storageFeesPerByte == "0" || fileMetadata.FeesPerByte == "0") {
 		input, err := os.Open(fileMetadata.FilePath)
 		if err != nil {
 			log.Errorf("failed to open file in handleIncomingFileTransfer: %v", err)
