@@ -6,52 +6,52 @@ For more information please check: https://filefilego.com/documentation/docs/con
 
 ## Algorithm
 
-Let \( x \) be the input file containing content divided into \( N = 1024 \) segments.
+Let $ x $ be the input file containing content divided into $N = 1024$ segments.
 
-1. Divide the content of file \( x \) into \( N \) segments: 
-   \[ x = (x_1, x_2, \ldots, x_N) \]
+1. Divide the content of file $x$ into $N$ segments: 
+   $x = (x_1, x_2, \ldots, x_N)$
 
 2. Calculate the Merkle Tree hash of the segments:
-   Let \( h(x_i) \) represent the hash of segment \( x_i \).
+   Let $ h(x_i) $ represent the hash of segment $ x_i $.
    Construct the Merkle Tree by hashing adjacent segments in a binary tree structure:
-   \[ h(x_i) = \text{HashFunction}(x_i) \]
-   \[ h(x_{i,j}) = \text{HashFunction}(h(x_i) \| h(x_j)) \]
-   where \( \| \) denotes concatenation.
-   The root hash of the Merkle Tree is \( h_{\text{root}} = h(x_{1,2}) \), representing the overall content.
+   $ h(x_i) = \text{HashFunction}(x_i) $
+   $ h(x_{i,j}) = \text{HashFunction}(h(x_i) \| h(x_j)) $
+   where $ \| $ denotes concatenation.
+   The root hash of the Merkle Tree is $ h_{\text{root}} = h(x_{1,2}) $, representing the overall content.
 
 3. Shuffle the segments:
-   Let \( \pi \) be a permutation representing the shuffling of segments.
-   \[ \pi : \{1, 2, \ldots, N\} \rightarrow \{1, 2, \ldots, N\} \]
+   Let $ \pi $ be a permutation representing the shuffling of segments.
+   $ \pi : \{1, 2, \ldots, N\} \rightarrow \{1, 2, \ldots, N\}$
    The shuffled segments are:
-   \[ x_{\pi(1)}, x_{\pi(2)}, \ldots, x_{\pi(N)} \]
+   $x_{\pi(1)}, x_{\pi(2)}, \ldots, x_{\pi(N)}$
 
 4. Encrypt 1 percent of the shuffled segments:
-   Let \( M = \lfloor 0.01 \times N \rfloor \) be the number of segments to be encrypted.
-   Let \( E(x_i) \) represent the encryption of segment \( x_i \).
+   Let $ M = \lfloor 0.01 \times N \rfloor $ be the number of segments to be encrypted.
+   Let $ E(x_i) $ represent the encryption of segment $ x_i $.
    The encrypted segments are:
-   \[ E(x_{\pi(1)}), E(x_{\pi(2)}), \ldots, E(x_{\pi(M)}) \]
+   $E(x_{\pi(1)}), E(x_{\pi(2)}), \ldots, E(x_{\pi(M)})$
 
 
 #### The verification process
 
 
 1. Decryption of Encrypted Segments:
-   For each of the \( M \) encrypted segments, apply the decryption function \( D(E(x_{\pi(i)})) \) to obtain the decrypted version of the segment \( x_{\pi(i)} \):
+   For each of the $ M $ encrypted segments, apply the decryption function $ D(E(x_{\pi(i)})) $ to obtain the decrypted version of the segment $ x_{\pi(i)} $:
    
-   \[ x_{\pi(i)}' = D(E(x_{\pi(i)})) \]
+   $ x_{\pi(i)}' = D(E(x_{\pi(i)}))$
 
 2. Restoring the Shuffled Order:
-   Since the segments were shuffled during the encryption process, they need to be restored to their original order using the inverse permutation \( \pi^{-1} \):
+   Since the segments were shuffled during the encryption process, they need to be restored to their original order using the inverse permutation $ \pi^{-1} $:
    
-   \[ x' = (x_{\pi^{-1}(1)}', x_{\pi^{-1}(2)}', \ldots, x_{\pi^{-1}(M)}') \]
+   $ x' = (x_{\pi^{-1}(1)}', x_{\pi^{-1}(2)}', \ldots, x_{\pi^{-1}(M)}')$
 
 3. Merkle Tree Hash Calculation:
-   Recalculate the Merkle Tree hash of the decrypted segments in the restored order. Construct the hash tree similarly to the original construction, but use the decrypted segments \( x' \):
+   Recalculate the Merkle Tree hash of the decrypted segments in the restored order. Construct the hash tree similarly to the original construction, but use the decrypted segments $x'$:
    
-   \[ h'(x_i') = \text{HashFunction}(x_i') \]
-   \[ h'(x_{i,j}') = \text{HashFunction}(h'(x_i') \| h'(x_j')) \]
+   $h'(x_i') = \text{HashFunction}(x_i')$
+   $h'(x_{i,j}') = \text{HashFunction}(h'(x_i') \| h'(x_j'))$
    
-   Finally, the derived original Merkle root hash \( h'_{\text{root}} \) is obtained by hashing the two children of the root hash \( h'_{\text{root}} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}')) \).
+   Finally, the derived original Merkle root hash $ h'_{\text{root}} $ is obtained by hashing the two children of the root hash $ h'_{\text{root}} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}')) $.
 
 ## Calculating Merkle Root Hash
 
