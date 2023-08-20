@@ -36,14 +36,14 @@ Let $x$ be the input file containing content divided into $N = 1024$ segments.
 
 
 1. Decryption of Encrypted Segments:
-   For each of the $ M $ encrypted segments, apply the decryption function $ D(E(x_{\pi(i)})) $ to obtain the decrypted version of the segment $ x_{\pi(i)} $:
+   For each of the $M$ encrypted segments, apply the decryption function $D(E(x_{\pi(i)}))$ to obtain the decrypted version of the segment $x_{\pi(i)}$:
    
-   $ x_{\pi(i)}' = D(E(x_{\pi(i)}))$
+   $x_{\pi(i)}' = D(E(x_{\pi(i)}))$
 
 2. Restoring the Shuffled Order:
-   Since the segments were shuffled during the encryption process, they need to be restored to their original order using the inverse permutation $ \pi^{-1} $:
+   Since the segments were shuffled during the encryption process, they need to be restored to their original order using the inverse permutation $\pi^{-1}$:
    
-   $ x' = (x_{\pi^{-1}(1)}', x_{\pi^{-1}(2)}', \ldots, x_{\pi^{-1}(M)}')$
+   $x' = (x_{\pi^{-1}(1)}', x_{\pi^{-1}(2)}', \ldots, x_{\pi^{-1}(M)}')$
 
 3. Merkle Tree Hash Calculation:
    Recalculate the Merkle Tree hash of the decrypted segments in the restored order. Construct the hash tree similarly to the original construction, but use the decrypted segments $x'$:
@@ -51,7 +51,7 @@ Let $x$ be the input file containing content divided into $N = 1024$ segments.
    $h'(x_i') = \text{HashFunction}(x_i')$
    $h'(x_{i,j}') = \text{HashFunction}(h'(x_i') \| h'(x_j'))$
    
-   Finally, the derived original Merkle root hash $ h'_{\text{root}} $ is obtained by hashing the two children of the root hash $ h'_{\text{root}} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}')) $.
+   Finally, the derived original Merkle root hash $h'_{\text{root}}$ is obtained by hashing the two children of the root hash $h'_{\text{root}} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}'))$.
 
 ## Calculating Merkle Root Hash
 
