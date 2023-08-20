@@ -52,7 +52,7 @@ Let $x$ be the input file containing content divided into $N = 1024$ segments.
    $h'(x_i') = \text{HashFunction}(x_i')$
    $h'(x_{i,j}') = \text{HashFunction}(h'(x_i') \| h'(x_j'))$
    
-4. Finally, the derived original Merkle root hash $h'_{\text{root}}$ is obtained by hashing the two children of the root hash $h'_{\text{root}} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}'))$.
+4. Finally, the derived original Merkle root hash $h'_\text{root}$ is obtained by hashing the two children of the root hash $h'_\text{root} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}'))$.
 
 ## Calculating Merkle Root Hash
 
