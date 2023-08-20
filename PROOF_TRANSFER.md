@@ -6,13 +6,13 @@ For more information please check: https://filefilego.com/documentation/docs/con
 
 ## Algorithm
 
-Let $ x $ be the input file containing content divided into $N = 1024$ segments.
+Let $x$ be the input file containing content divided into $N = 1024$ segments.
 
 1. Divide the content of file $x$ into $N$ segments: 
    $x = (x_1, x_2, \ldots, x_N)$
 
 2. Calculate the Merkle Tree hash of the segments:
-   Let $ h(x_i) $ represent the hash of segment $ x_i $.
+   Let $h(x_i)$ represent the hash of segment $x_i$.
    Construct the Merkle Tree by hashing adjacent segments in a binary tree structure:
    $ h(x_i) = \text{HashFunction}(x_i) $
    $ h(x_{i,j}) = \text{HashFunction}(h(x_i) \| h(x_j)) $
