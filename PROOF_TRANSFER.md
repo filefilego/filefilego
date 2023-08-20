@@ -53,6 +53,7 @@ Let $x$ be the input file containing content divided into $N = 1024$ segments.
    $h'(x_{i,j}') = \text{HashFunction}(h'(x_i') \| h'(x_j'))$
    
 4. Finally, the derived original Merkle root hash $h'_ \text{root}$ is obtained by hashing the two children of the root hash $h'_ \text{root} = \text{HashFunction}(h'(x_{1,2}') \| h'(x_{3,4}'))$.
+5. Consensus is achieved if the derived merkle root hash matches the original merkle root hash.
 
 ## Calculating Merkle Root Hash
 
