@@ -11,17 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
-	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/filefilego/filefilego/keystore"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/storage"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oschwald/geoip2-golang"
 	"google.golang.org/protobuf/proto"
@@ -32,13 +31,46 @@ const (
 	queueChannelSize = 1000
 )
 
+//go:generate mockgen -source=storage.go -destination=storage_mocks_test.go -package=rpc
+
+type Host interface {
+	Peerstore() peerstore.Peerstore
+	ID() peer.ID
+}
+
+type KeyLockUnlockLister interface {
+	Authorized(jwtToken string) (bool, keystore.UnlockedKey, error)
+}
+
+type StorageProtocol interface {
+	ResetProgressAndCancelStatus(peerID peer.ID, filePath string)
+	GetCancelFileUploadStatus(peerID peer.ID, filePath string) (bool, context.CancelFunc)
+	SetCancelFileUpload(peerID peer.ID, filePath string, cancelled bool, cancel context.CancelFunc)
+	GetStorageCapabilities(ctx context.Context, peerID peer.ID) (*messages.StorageCapabilitiesProto, error)
+	TestSpeedWithRemotePeer(ctx context.Context, peerID peer.ID, fileSize uint64) (time.Duration, error)
+	UploadFileWithMetadata(ctx context.Context, peerID peer.ID, filePath string, publicKeyOwner []byte, feesPerByte string) (storage.FileMetadata, error)
+	GetDiscoveredStorageProviders() []storageprotocol.ProviderWithCountry
+	GetUploadProgress(peerID peer.ID, filePath string) (int, string, error)
+	SetUploadingStatus(peerID peer.ID, filePath, fileHash string, err error)
+	SendDiscoveredStorageTransferRequest(ctx context.Context, peerID peer.ID) (int, error)
+}
+
+type Storage interface {
+	SaveFileMetadata(fileHash, peerID string, metadata storage.FileMetadata) error
+	ExportFiles() ([]storage.FileMetadataWithDBKey, error)
+	ImportFiles(string) (int, error)
+	DeleteFileFromDB(key string) error
+	GetFileMetadata(fileHash string, peerID string) (storage.FileMetadata, error)
+	ListFiles(currentPage, pageSize int, order string) ([]storage.FileMetadataWithDBKey, uint64, error)
+}
+
 // StorageAPI represents the storage rpc service.
 type StorageAPI struct {
-	host            host.Host
-	keystore        keystore.KeyLockUnlockLister
+	host            Host
+	keystore        KeyLockUnlockLister
 	publisher       PublisherNodesFinder
-	storageProtocol storageprotocol.Interface
-	storageEngine   storage.Interface
+	storageProtocol StorageProtocol
+	storageEngine   Storage
 	jobQueue        *jobQueue
 }
 
@@ -56,7 +88,7 @@ type jobQueue struct {
 }
 
 // NewStorageAPI creates a new storage API to be served using JSONRPC.
-func NewStorageAPI(host host.Host, keystore keystore.KeyLockUnlockLister, publisher PublisherNodesFinder, storageProtocol storageprotocol.Interface, storageEngine storage.Interface) (*StorageAPI, error) {
+func NewStorageAPI(host Host, keystore KeyLockUnlockLister, publisher PublisherNodesFinder, storageProtocol StorageProtocol, storageEngine Storage) (*StorageAPI, error) {
 	if host == nil {
 		return nil, errors.New("host is nil")
 	}
@@ -312,7 +344,7 @@ type DeleteUploadedFilesResponse struct {
 	Success bool `json:"success"`
 }
 
-// ListUploadedFiles lists the uploaded files on this node.
+// DeleteUploadedFile deletes the uploaded file from the node.
 func (api *StorageAPI) DeleteUploadedFile(_ *http.Request, args *DeleteUploadedFilesArgs, response *DeleteUploadedFilesResponse) error {
 	ok, _, _ := api.keystore.Authorized(args.AccessToken)
 	if !ok {
@@ -417,23 +449,9 @@ func (api *StorageAPI) FindProviders(_ *http.Request, args *FindProvidersArgs, r
 
 // FindProvidersFromPeers connects to other peers (mostly validators) and gets their discovered peers.
 // nolint:revive
-func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, args *EmptyArgs, response *FindProvidersResponse) error {
-	// find all verifiers
-	verfiers := block.GetBlockVerifiers()
-	peerIDs := make([]peer.ID, 0)
-	for _, v := range verfiers {
-		publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
-		if err != nil {
-			continue
-		}
-
-		peerID, err := peer.IDFromPublicKey(publicKey)
-		if err != nil {
-			continue
-		}
-		peerIDs = append(peerIDs, peerID)
-	}
-
+func (api *StorageAPI) FindProvidersFromPeers(r *http.Request, _ *EmptyArgs, response *FindProvidersResponse) error {
+	// find all verifiers peer IDs
+	peerIDs := block.GetBlockVerifiersPeerIDs()
 	api.publisher.FindPeers(r.Context(), peerIDs)
 
 	var wg sync.WaitGroup
