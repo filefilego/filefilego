@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
@@ -1756,7 +1757,13 @@ func (d *Protocol) handleIncomingFileTransfer(s network.Stream) {
 	// send the data to verifier
 	// TODO: handle a way to prevent concurrent sent of data to verifier.
 	go func() {
-		err := d.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.Background(), verifierID, fileMetadata.FilePath, contractHash, fileTransferRequest.FileHash)
+		bo := backoff.NewExponentialBackOff()
+		bo.MaxInterval = time.Second * 1
+		bo.MaxElapsedTime = time.Second * 10
+		bo.Multiplier = 1.2
+		err := backoff.Retry(func() error {
+			return d.SendKeyIVRandomizedFileSegmentsAndDataToVerifier(context.Background(), verifierID, fileMetadata.FilePath, contractHash, fileTransferRequest.FileHash)
+		}, bo)
 		if err != nil {
 			log.Errorf("failed to send key iv and unencrypted data to verifier: %v", err)
 		}

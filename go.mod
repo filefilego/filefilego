@@ -6,6 +6,7 @@ require (
 	github.com/blevesearch/bleve/v2 v2.3.9
 	github.com/briandowns/spinner v1.23.0
 	github.com/cbergoon/merkletree v0.2.0
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/fatih/color v1.15.0
 	github.com/golang-jwt/jwt/v5 v5.0.0
