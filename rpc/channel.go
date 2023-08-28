@@ -286,6 +286,7 @@ type NodeItemJSON struct {
 // GetNodeItemResponse is a response.
 type GetNodeItemResponse struct {
 	Node            NodeItemJSON `json:"node"`
+	Root            NodeItemJSON `json:"root"`
 	TotalChildNodes uint64       `json:"total_child_nodes"`
 }
 
@@ -303,6 +304,15 @@ func (api *ChannelAPI) GetNodeItem(_ *http.Request, args *GetNodeItemArgs, respo
 	item, err := api.blockchain.GetNodeItem(nodeHashBytes)
 	if err != nil {
 		return fmt.Errorf("failed to find node: %w", err)
+	}
+
+	if item.NodeType != blockchain.NodeItemType_CHANNEL {
+		rootItem, err := api.blockchain.GetRootNodeItem(item.NodeHash)
+		if err != nil {
+			return fmt.Errorf("failed to get root node item: %w", err)
+		}
+
+		response.Root = transformNodeItemToJSON(rootItem)
 	}
 
 	response.Node = transformNodeItemToJSON(item)
