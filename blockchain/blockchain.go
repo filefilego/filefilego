@@ -79,6 +79,7 @@ type Interface interface {
 	GetReleasedFeesOfDownloadContractInTransactionData(contractHash []byte) ([]DownloadContractInTransactionDataTxHash, error)
 	GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, error)
 	GetFilesFromEntryOrFolderRecursively(entryOrFolderHash []byte, currentPage, pageSize int, order string) ([]FileMetadata, error)
+	GetRootNodeItem(nodeHash []byte) (*NodeItem, error)
 }
 
 // Blockchain represents a blockchain structure.
