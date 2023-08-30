@@ -63,6 +63,7 @@ const (
 	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
 	triggerSyncSinceLastUpdateSeconds    = 15
 	purgeDataQueryReqsIntervalSeconds    = 30
+	RPCBodySize                          = 1024 * 290 // 290 KB
 )
 
 func main() {
@@ -632,8 +633,7 @@ func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Ha
 			return
 		}
 
-		// 10 KB
-		r.Body = http.MaxBytesReader(w, r.Body, 1024*10)
+		r.Body = http.MaxBytesReader(w, r.Body, RPCBodySize)
 		requestBody, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
