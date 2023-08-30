@@ -3,7 +3,9 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/keystore"
 	"github.com/filefilego/filefilego/node"
+	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	"github.com/filefilego/filefilego/storage"
 	"github.com/filefilego/filefilego/test"
@@ -79,6 +82,220 @@ func TestNewStorageAPI(t *testing.T) {
 			} else {
 				assert.NotNil(t, api)
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func Test_Storage_GetRemoteNodeCapabilities(t *testing.T) {
+	t.Parallel()
+
+	var (
+		testPeerID = "QmfQzWnLu4UX1cW7upgyuFLyuBXqze7nrPB4qWYqQiTHwt"
+		testAddrs  = []multiaddr.Multiaddr{&multiaddr.Component{}}
+	)
+
+	cases := map[string]struct {
+		ctx       context.Context
+		req       *GetRemoteNodeCapabilitiesArgs
+		initMocks func(*storageTestFixture, context.Context)
+		expRes    *GetRemoteNodeCapabilitiesResponse
+		expErr    string
+	}{
+		"ok": {
+			req: &GetRemoteNodeCapabilitiesArgs{
+				PeerID: testPeerID,
+			},
+			expRes: &GetRemoteNodeCapabilitiesResponse{
+				Capabilities: &messages.StorageCapabilitiesProto{
+					AllowFeesOverride: true,
+				},
+			},
+			initMocks: func(tf *storageTestFixture, ctx context.Context) {
+				tf.host.EXPECT().Peerstore().Return(&peerstoreStub{addrs: testAddrs})
+				tf.storageProtocol.EXPECT().GetStorageCapabilities(ctx, test.NewPeerIDMatcher(testPeerID)).
+					Return(&messages.StorageCapabilitiesProto{
+						AllowFeesOverride: true,
+					}, nil)
+			},
+		},
+		"ok no addresses": {
+			req: &GetRemoteNodeCapabilitiesArgs{
+				PeerID: testPeerID,
+			},
+			expRes: &GetRemoteNodeCapabilitiesResponse{
+				Capabilities: &messages.StorageCapabilitiesProto{
+					AllowFeesOverride: true,
+				},
+			},
+			initMocks: func(tf *storageTestFixture, ctx context.Context) {
+				tf.host.EXPECT().Peerstore().Return(&peerstoreStub{addrs: nil})
+				tf.publisher.EXPECT().FindPeers(gomock.Any(), test.NewPeerIDSliceMatcher(testPeerID))
+				tf.storageProtocol.EXPECT().GetStorageCapabilities(ctx, test.NewPeerIDMatcher(testPeerID)).
+					Return(&messages.StorageCapabilitiesProto{
+						AllowFeesOverride: true,
+					}, nil)
+			},
+		},
+		"error invalid peer id": {
+			req: &GetRemoteNodeCapabilitiesArgs{
+				PeerID: "invalid",
+			},
+			expRes:    &GetRemoteNodeCapabilitiesResponse{},
+			initMocks: func(tf *storageTestFixture, ctx context.Context) {},
+			expErr:    "failed to decode peer id: failed to parse peer ID: invalid cid: selected encoding not supported",
+		},
+		"error getting capabilities": {
+			req: &GetRemoteNodeCapabilitiesArgs{
+				PeerID: testPeerID,
+			},
+			expRes: &GetRemoteNodeCapabilitiesResponse{},
+			initMocks: func(tf *storageTestFixture, ctx context.Context) {
+				tf.host.EXPECT().Peerstore().Return(&peerstoreStub{addrs: testAddrs})
+				tf.storageProtocol.EXPECT().GetStorageCapabilities(ctx, test.NewPeerIDMatcher(testPeerID)).
+					Return(nil, errors.New("err1"))
+			},
+			expErr: "failed to get storage capabilities: err1",
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.TODO()
+			httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "", http.NoBody)
+			require.NoError(t, err)
+
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf, ctx)
+			res := &GetRemoteNodeCapabilitiesResponse{}
+			err = tf.api.GetRemoteNodeCapabilities(httpReq, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantError(t, tt.expErr, err)
+		})
+	}
+}
+
+func Test_Storage_ExportUploadedFiles(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	nowFunc = func() int64 {
+		return now.Unix()
+	}
+
+	cases := map[string]struct {
+		req       *ExportUploadedFilesArgs
+		initMocks func(*storageTestFixture)
+		expRes    *ExportUploadedFilesResponse
+		expErr    string
+		cleanup   func(t *testing.T)
+	}{
+		"ok": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "/tmp/",
+			},
+			expRes: &ExportUploadedFilesResponse{
+				SavedFilePath: fmt.Sprintf("/tmp/exported_files_%d.json", now.Unix()),
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ExportFiles().Return([]storage.FileMetadataWithDBKey{
+					{Key: "file-1"},
+					{Key: "file-2"},
+				}, nil)
+			},
+			cleanup: func(t *testing.T) {
+				require.NoError(t, os.Remove(fmt.Sprintf("/tmp/exported_files_%d.json", now.Unix())))
+			},
+		},
+		"error auth": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "/tmp/",
+			},
+			expRes: &ExportUploadedFilesResponse{},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(false, keystore.UnlockedKey{}, nil)
+			},
+			expErr: "not authorized",
+		},
+		"error export files": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "/tmp/",
+			},
+			expRes: &ExportUploadedFilesResponse{},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ExportFiles().Return(nil, errors.New("err1"))
+			},
+			expErr: "failed to export files: err1",
+		},
+		"error invalid location": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "../dir",
+			},
+			expRes: &ExportUploadedFilesResponse{},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ExportFiles().Return([]storage.FileMetadataWithDBKey{
+					{Key: "file-1"},
+					{Key: "file-2"},
+				}, nil)
+			},
+			expErr: "output directory is invalid",
+		},
+		"error not existing location": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "./dir",
+			},
+			expRes: &ExportUploadedFilesResponse{},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ExportFiles().Return([]storage.FileMetadataWithDBKey{
+					{Key: "file-1"},
+					{Key: "file-2"},
+				}, nil)
+			},
+			expErr: "output directory doesn't exist",
+		},
+		"error location is not writable": {
+			req: &ExportUploadedFilesArgs{
+				AccessToken:    "token-1",
+				SaveToFilePath: "/etc",
+			},
+			expRes: &ExportUploadedFilesResponse{},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ExportFiles().Return([]storage.FileMetadataWithDBKey{
+					{Key: "file-1"},
+					{Key: "file-2"},
+				}, nil)
+			},
+			expErr: "permission denied",
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf)
+			res := &ExportUploadedFilesResponse{}
+			err := tf.api.ExportUploadedFiles(&http.Request{}, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantErrorContains(t, tt.expErr, err)
+			if tt.cleanup != nil {
+				t.Cleanup(func() {
+					tt.cleanup(t)
+				})
 			}
 		})
 	}
@@ -477,12 +694,111 @@ func Test_Storage_FindProvidersFromPeers(t *testing.T) {
 	}
 }
 
+func Test_Storage_ImportUploadedFiles(t *testing.T) {
+	t.Parallel()
+
+	testFile, err := os.CreateTemp("/tmp", t.Name())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(testFile.Name()))
+	})
+
+	cases := map[string]struct {
+		req       *ImportUploadedFilesArgs
+		initMocks func(*storageTestFixture)
+		expRes    *ImportUploadedFilesResponse
+		expErr    string
+	}{
+		"ok": {
+			req: &ImportUploadedFilesArgs{
+				AccessToken: "token-1",
+				FilePath:    testFile.Name(),
+			},
+			expRes: &ImportUploadedFilesResponse{
+				Success: true,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ImportFiles(testFile.Name()).Return(10, nil)
+			},
+		},
+		"auth error": {
+			req: &ImportUploadedFilesArgs{
+				AccessToken: "token-1",
+				FilePath:    testFile.Name(),
+			},
+			expRes: &ImportUploadedFilesResponse{
+				Success: false,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").
+					Return(false, keystore.UnlockedKey{}, errors.New("err"))
+			},
+			expErr: "not authorized",
+		},
+		"import error": {
+			req: &ImportUploadedFilesArgs{
+				AccessToken: "token-1",
+				FilePath:    testFile.Name(),
+			},
+			expRes: &ImportUploadedFilesResponse{
+				Success: false,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+				tf.storageEngine.EXPECT().ImportFiles(testFile.Name()).Return(0, errors.New("network err"))
+			},
+			expErr: "failed to restore files: network err",
+		},
+		"error invalid file": {
+			req: &ImportUploadedFilesArgs{
+				AccessToken: "token-1",
+				FilePath:    "../test.txt",
+			},
+			expRes: &ImportUploadedFilesResponse{
+				Success: false,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+			},
+			expErr: "invalid path",
+		},
+		"error not existing file": {
+			req: &ImportUploadedFilesArgs{
+				AccessToken: "token-1",
+				FilePath:    "./test.txt",
+			},
+			expRes: &ImportUploadedFilesResponse{
+				Success: false,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.keystore.EXPECT().Authorized("token-1").Return(true, keystore.UnlockedKey{}, nil)
+			},
+			expErr: "import file doesn't exist",
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf)
+			res := &ImportUploadedFilesResponse{}
+			err := tf.api.ImportUploadedFiles(&http.Request{}, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantError(t, tt.expErr, err)
+		})
+	}
+}
+
 type peerstoreStub struct {
 	peerstore.Peerstore
 	addrs []multiaddr.Multiaddr
 }
 
-func (p *peerstoreStub) Addrs(id peer.ID) []multiaddr.Multiaddr {
+func (p *peerstoreStub) Addrs(_ peer.ID) []multiaddr.Multiaddr {
 	return p.addrs
 }
 

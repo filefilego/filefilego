@@ -228,6 +228,12 @@ type ExportUploadedFilesResponse struct {
 	SavedFilePath string `json:"saved_filepath"`
 }
 
+var (
+	nowFunc = func() int64 {
+		return time.Now().Unix()
+	}
+)
+
 // ExportUploadedFiles exports the uploaded file to the given destination folder.
 func (api *StorageAPI) ExportUploadedFiles(_ *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {
 	accessToken := args.AccessToken
@@ -254,7 +260,7 @@ func (api *StorageAPI) ExportUploadedFiles(_ *http.Request, args *ExportUploaded
 		return errors.New("output directory doesn't exist")
 	}
 
-	finalPath := filepath.Join(outPutLocation, fmt.Sprintf("%s_%d.json", "exported_files", time.Now().Unix()))
+	finalPath := filepath.Join(outPutLocation, fmt.Sprintf("%s_%d.json", "exported_files", nowFunc()))
 	writtenTo, err := common.WriteToFile(encodedBytes, finalPath)
 	if err != nil {
 		return fmt.Errorf("failed to write exported files to file: %w", err)

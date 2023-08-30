@@ -14,3 +14,12 @@ func WantError(t *testing.T, want string, got error) {
 		assert.NoError(t, got)
 	}
 }
+
+// WantErrorContains assert an error to a given string, if string is empty, it assumes no error case.
+func WantErrorContains(t *testing.T, wantContains string, got error) {
+	if wantContains != "" {
+		assert.ErrorContains(t, got, wantContains)
+	} else {
+		assert.NoError(t, got)
+	}
+}
