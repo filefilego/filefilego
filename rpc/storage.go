@@ -228,11 +228,9 @@ type ExportUploadedFilesResponse struct {
 	SavedFilePath string `json:"saved_filepath"`
 }
 
-var (
-	nowFunc = func() int64 {
-		return time.Now().Unix()
-	}
-)
+var nowFunc = func() int64 {
+	return time.Now().Unix()
+}
 
 // ExportUploadedFiles exports the uploaded file to the given destination folder.
 func (api *StorageAPI) ExportUploadedFiles(_ *http.Request, args *ExportUploadedFilesArgs, response *ExportUploadedFilesResponse) error {

@@ -561,9 +561,7 @@ func Test_Storage_TestSpeedWithRemotePeer(t *testing.T) {
 func Test_Storage_FindProviders(t *testing.T) {
 	t.Parallel()
 
-	var (
-		testPeerID = "QmfQzWnLu4UX1cW7upgyuFLyuBXqze7nrPB4qWYqQiTHwt"
-	)
+	testPeerID := "QmfQzWnLu4UX1cW7upgyuFLyuBXqze7nrPB4qWYqQiTHwt"
 
 	testPeerIDObj, err := peer.Decode(testPeerID)
 	require.NoError(t, err)
@@ -635,10 +633,8 @@ func Test_Storage_FindProviders(t *testing.T) {
 func Test_Storage_FindProvidersFromPeers(t *testing.T) {
 	t.Parallel()
 
-	var (
-		// peerIDs are hardcoded, that is why they are asserted from bloc package directly.
-		peerIDs = block.GetBlockVerifiersPeerIDs()
-	)
+	// peerIDs are hardcoded, that is why they are asserted from bloc package directly.
+	peerIDs := block.GetBlockVerifiersPeerIDs()
 
 	cases := map[string]struct {
 		initMocks func(*storageTestFixture, *sync.WaitGroup)

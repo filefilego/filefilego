@@ -48,6 +48,6 @@ func (m *PeerIDSliceMatcher) String() string {
 
 // TypeOfPeerID matches that given argument has the peer.ID type.
 func TypeOfPeerID() gomock.Matcher {
-	var peerIDType = reflect.TypeOf((*peer.ID)(nil)).Elem()
+	peerIDType := reflect.TypeOf((*peer.ID)(nil)).Elem()
 	return gomock.AssignableToTypeOf(peerIDType)
 }
