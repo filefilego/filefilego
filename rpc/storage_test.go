@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -181,9 +182,7 @@ func Test_Storage_ExportUploadedFiles(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	nowFunc = func() int64 {
-		return now.Unix()
-	}
+	nowFunc = now.Unix
 
 	cases := map[string]struct {
 		req       *ExportUploadedFilesArgs
@@ -787,6 +786,466 @@ func Test_Storage_ImportUploadedFiles(t *testing.T) {
 			tt.initMocks(tf)
 			res := &ImportUploadedFilesResponse{}
 			err := tf.api.ImportUploadedFiles(&http.Request{}, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantError(t, tt.expErr, err)
+		})
+	}
+}
+
+func Test_Storage_CancelUpload(t *testing.T) {
+	t.Parallel()
+
+	var (
+		testPeerID  = "QmfQzWnLu4UX1cW7upgyuFLyuBXqze7nrPB4qWYqQiTHwt"
+		testPeerID2 = "16Uiu2HAmTFnnBpM74X7Gwm6dYgVWtRRSdfugziqvx1dLcPmv4g2b"
+		testCancel  = func(i *int32) context.CancelFunc {
+			return func() {
+				atomic.AddInt32(i, 1)
+			}
+		}
+	)
+
+	cases := map[string]struct {
+		req        *CancelUploadArgs
+		initMocks  func(*storageTestFixture, *int32)
+		expRes     *CancelUploadResponse
+		expCancels int32
+		expErr     string
+	}{
+		"ok": {
+			req: &CancelUploadArgs{
+				Files: []cancelPayload{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   testPeerID2,
+						FilePath: "file/path/2",
+					},
+				},
+			},
+			expRes: &CancelUploadResponse{
+				Success: true,
+			},
+			initMocks: func(tf *storageTestFixture, i *int32) {
+				cancelFunc1 := testCancel(i)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(test.NewPeerIDMatcher(testPeerID), "file/path/1").
+					Return(true, cancelFunc1)
+				tf.storageProtocol.EXPECT().SetCancelFileUpload(test.NewPeerIDMatcher(testPeerID), "file/path/1", true, gomock.Any())
+
+				cancelFunc2 := testCancel(i)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(test.NewPeerIDMatcher(testPeerID2), "file/path/2").
+					Return(true, cancelFunc2)
+				tf.storageProtocol.EXPECT().SetCancelFileUpload(test.NewPeerIDMatcher(testPeerID2), "file/path/2", true, gomock.Any())
+			},
+			expCancels: 2,
+		},
+		"ok empty cancel func": {
+			req: &CancelUploadArgs{
+				Files: []cancelPayload{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+				},
+			},
+			expRes: &CancelUploadResponse{
+				Success: true,
+			},
+			initMocks: func(tf *storageTestFixture, i *int32) {
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(test.NewPeerIDMatcher(testPeerID), "file/path/1").
+					Return(true, nil)
+				tf.storageProtocol.EXPECT().SetCancelFileUpload(test.NewPeerIDMatcher(testPeerID), "file/path/1", true, nil)
+			},
+			expCancels: 0,
+		},
+		"error empty file path": {
+			req: &CancelUploadArgs{
+				Files: []cancelPayload{
+					{
+						PeerID:   testPeerID,
+						FilePath: "",
+					},
+				},
+			},
+			expRes: &CancelUploadResponse{
+				Success: false,
+			},
+			initMocks:  func(tf *storageTestFixture, i *int32) {},
+			expCancels: 0,
+			expErr:     "filepath is empty",
+		},
+		"error invalid peer id": {
+			req: &CancelUploadArgs{
+				Files: []cancelPayload{
+					{
+						PeerID:   "invalid",
+						FilePath: "file/path/1",
+					},
+				},
+			},
+			expRes: &CancelUploadResponse{
+				Success: false,
+			},
+			initMocks:  func(tf *storageTestFixture, i *int32) {},
+			expCancels: 0,
+			expErr:     "failed to decode remote peer id: failed to parse peer ID: invalid cid: selected encoding not supported",
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var i int32
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf, &i)
+			res := &CancelUploadResponse{}
+			err := tf.api.CancelUpload(&http.Request{}, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantError(t, tt.expErr, err)
+			assert.Equal(t, tt.expCancels, i)
+		})
+	}
+}
+
+func Test_Storage_SaveUploadedFileMetadataLocally(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		req       *SaveUploadedFileMetadataLocallyArgs
+		initMocks func(*storageTestFixture)
+		expRes    *SaveUploadedFileMetadataLocallyResponse
+		expErr    string
+	}{
+		"ok": {
+			req: &SaveUploadedFileMetadataLocallyArgs{
+				Files: []storage.FileMetadata{
+					{
+						Hash:       "hash-1",
+						RemotePeer: "peer-1",
+					},
+					{
+						Hash:       "hash-2",
+						RemotePeer: "peer-2",
+					},
+				},
+			},
+			expRes: &SaveUploadedFileMetadataLocallyResponse{
+				Success: true,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.storageEngine.EXPECT().SaveFileMetadata("hash-1", "peer-1", storage.FileMetadata{
+					Hash:       "hash-1",
+					RemotePeer: "peer-1",
+				}).Return(nil)
+				tf.storageEngine.EXPECT().SaveFileMetadata("hash-2", "peer-2", storage.FileMetadata{
+					Hash:       "hash-2",
+					RemotePeer: "peer-2",
+				}).Return(nil)
+			},
+		},
+		"error will return success response": {
+			req: &SaveUploadedFileMetadataLocallyArgs{
+				Files: []storage.FileMetadata{
+					{
+						Hash:       "hash-1",
+						RemotePeer: "peer-1",
+					},
+				},
+			},
+			expRes: &SaveUploadedFileMetadataLocallyResponse{
+				Success: true,
+			},
+			initMocks: func(tf *storageTestFixture) {
+				tf.storageEngine.EXPECT().SaveFileMetadata("hash-1", "peer-1", storage.FileMetadata{
+					Hash:       "hash-1",
+					RemotePeer: "peer-1",
+				}).Return(errors.New("err1"))
+			},
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf)
+			res := &SaveUploadedFileMetadataLocallyResponse{}
+			err := tf.api.SaveUploadedFileMetadataLocally(&http.Request{}, tt.req, res)
+			assert.Equal(t, tt.expRes, res)
+			test.WantError(t, tt.expErr, err)
+		})
+	}
+}
+
+func Test_Storage_FileUploadsProgress(t *testing.T) {
+	t.Parallel()
+
+	var (
+		testPeerID  = "QmfQzWnLu4UX1cW7upgyuFLyuBXqze7nrPB4qWYqQiTHwt"
+		testPeerID2 = "16Uiu2HAmTFnnBpM74X7Gwm6dYgVWtRRSdfugziqvx1dLcPmv4g2b"
+	)
+
+	cases := map[string]struct {
+		req       *FileUploadProgressArgs
+		initMocks func(*storageTestFixture)
+		expRes    *FileUploadProgressResponse
+		expErr    string
+	}{
+		"ok": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   testPeerID2,
+						FilePath: "file/path/2",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 11,
+						FileHash: "hash-1",
+						FilePath: "file/path/1",
+						Error:    "",
+						Metadata: storage.FileMetadata{Hash: "hash-1"},
+					},
+					{
+						Progress: 72,
+						FileHash: "hash-2",
+						FilePath: "file/path/2",
+						Error:    "",
+						Metadata: storage.FileMetadata{Hash: "hash-2"},
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(11, "hash-1", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-1", testPeerID).
+					Return(storage.FileMetadata{Hash: "hash-1"}, nil)
+
+				peerID2 := test.NewPeerIDMatcher(testPeerID2)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID2, "file/path/2").
+					Return(72, "hash-2", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID2, "file/path/2").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-2", testPeerID2).
+					Return(storage.FileMetadata{Hash: "hash-2"}, nil)
+			},
+		},
+		"ok without file hash": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 12,
+						FileHash: "",
+						FilePath: "file/path/1",
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(12, "", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(false, nil)
+			},
+		},
+		"ok, first cancelled": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   testPeerID2,
+						FilePath: "file/path/2",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 11,
+						FileHash: "hash-1",
+						FilePath: "file/path/1",
+						Error:    "cancelled",
+						Metadata: storage.FileMetadata{Hash: "hash-1"},
+					},
+					{
+						Progress: 72,
+						FileHash: "hash-2",
+						FilePath: "file/path/2",
+						Error:    "",
+						Metadata: storage.FileMetadata{Hash: "hash-2"},
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(11, "hash-1", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(true, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-1", testPeerID).
+					Return(storage.FileMetadata{Hash: "hash-1"}, nil)
+
+				peerID2 := test.NewPeerIDMatcher(testPeerID2)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID2, "file/path/2").
+					Return(72, "hash-2", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID2, "file/path/2").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-2", testPeerID2).
+					Return(storage.FileMetadata{Hash: "hash-2"}, nil)
+			},
+		},
+		"ok, first error": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   testPeerID2,
+						FilePath: "file/path/2",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 0,
+						FileHash: "",
+						FilePath: "file/path/1",
+						Error:    "err1",
+					},
+					{
+						Progress: 72,
+						FileHash: "hash-2",
+						FilePath: "file/path/2",
+						Error:    "",
+						Metadata: storage.FileMetadata{Hash: "hash-2"},
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(0, "", errors.New("err1"))
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(false, nil)
+
+				peerID2 := test.NewPeerIDMatcher(testPeerID2)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID2, "file/path/2").
+					Return(72, "hash-2", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID2, "file/path/2").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-2", testPeerID2).
+					Return(storage.FileMetadata{Hash: "hash-2"}, nil)
+			},
+		},
+		"error file path empty": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   testPeerID2,
+						FilePath: "",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 5,
+						FileHash: "hash-1",
+						FilePath: "file/path/1",
+						Metadata: storage.FileMetadata{Hash: "hash-1"},
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(5, "hash-1", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-1", testPeerID).
+					Return(storage.FileMetadata{Hash: "hash-1"}, nil)
+			},
+			expErr: "filepath is empty",
+		},
+		"error invalid peer id": {
+			req: &FileUploadProgressArgs{
+				Files: []FileUploadProgressRequest{
+					{
+						PeerID:   testPeerID,
+						FilePath: "file/path/1",
+					},
+					{
+						PeerID:   "invalid",
+						FilePath: "file/path/1",
+					},
+				},
+			},
+			expRes: &FileUploadProgressResponse{
+				Files: []FileUploadProgresResult{
+					{
+						Progress: 5,
+						FileHash: "hash-1",
+						FilePath: "file/path/1",
+						Metadata: storage.FileMetadata{Hash: "hash-1"},
+					},
+				},
+			},
+			initMocks: func(tf *storageTestFixture) {
+				peerID := test.NewPeerIDMatcher(testPeerID)
+				tf.storageProtocol.EXPECT().GetUploadProgress(peerID, "file/path/1").
+					Return(5, "hash-1", nil)
+				tf.storageProtocol.EXPECT().GetCancelFileUploadStatus(peerID, "file/path/1").
+					Return(false, nil)
+				tf.storageEngine.EXPECT().GetFileMetadata("hash-1", testPeerID).
+					Return(storage.FileMetadata{Hash: "hash-1"}, nil)
+			},
+			expErr: "failed to decode remote peer id: failed to parse peer ID: invalid cid: selected encoding not supported",
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tf := newStorageTestFixture(t)
+			tt.initMocks(tf)
+			res := &FileUploadProgressResponse{}
+			err := tf.api.FileUploadsProgress(&http.Request{}, tt.req, res)
 			assert.Equal(t, tt.expRes, res)
 			test.WantError(t, tt.expErr, err)
 		})

@@ -188,7 +188,7 @@ type GetRemoteNodeCapabilitiesArgs struct {
 	PeerID string `json:"peer_id"`
 }
 
-// ExportUploadedFileResponse the response of a remote sotrage node capabilities.
+// GetRemoteNodeCapabilitiesResponse the response of a remote storage node capabilities.
 type GetRemoteNodeCapabilitiesResponse struct {
 	Capabilities *messages.StorageCapabilitiesProto `json:"capabilities"`
 }
@@ -277,7 +277,7 @@ type ImportUploadedFilesArgs struct {
 	FilePath    string `json:"filepath"`
 }
 
-// ExportUploadedFileResponse the response of restoring.
+// ImportUploadedFilesResponse the response of restoring.
 type ImportUploadedFilesResponse struct {
 	Success bool `json:"success"`
 }
