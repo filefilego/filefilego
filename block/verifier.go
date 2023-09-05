@@ -1,9 +1,11 @@
 package block
 
 import (
-	sync "sync"
+	"sync"
 
+	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 var mu sync.RWMutex
@@ -99,6 +101,21 @@ func GetBlockVerifiers() []Verifier {
 	return blockVerifiers
 }
 
+func GetBlockVerifiersPeerIDs() []peer.ID {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	peerIDs := make([]peer.ID, 0)
+	for _, v := range blockVerifiers {
+		peerID, err := v.PeerID()
+		if err != nil {
+			continue
+		}
+		peerIDs = append(peerIDs, peerID)
+	}
+	return peerIDs
+}
+
 // SetBlockVerifiers adds a verifier to the block verifiers.
 func SetBlockVerifiers(v Verifier) {
 	mu.Lock()
@@ -113,6 +130,15 @@ type Verifier struct {
 	PublicKey       string `json:"public_key"`
 	DataVerifier    bool   `json:"data_verifier"`
 	PublicKeyCrypto crypto.PubKey
+}
+
+// PeerID get peer id from block verifier.
+func (v *Verifier) PeerID() (peer.ID, error) {
+	publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
+	if err != nil {
+		return "", err
+	}
+	return peer.IDFromPublicKey(publicKey)
 }
 
 // IsValidVerifier verifies if an address is a validator
