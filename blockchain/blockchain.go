@@ -805,7 +805,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			// if its disabled remove from search index
 			if !node.Enabled {
 				_ = b.search.Delete(hexutil.Encode(node.NodeHash))
-				return nil
+				continue
 			}
 			// delete the old index
 			_ = b.search.Delete(hexutil.Encode(node.NodeHash))
