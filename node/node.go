@@ -18,7 +18,6 @@ import (
 	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgconfig "github.com/filefilego/filefilego/config"
-	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	blockdownloader "github.com/filefilego/filefilego/node/protocols/block_downloader"
 	dataquery "github.com/filefilego/filefilego/node/protocols/data_query"
 	"github.com/filefilego/filefilego/node/protocols/messages"
@@ -617,12 +616,7 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 		peerIDs = append(peerIDs, fileRequesterID)
 
 		for _, v := range verfiers {
-			publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
-			if err != nil {
-				continue
-			}
-
-			peerID, err := peer.IDFromPublicKey(publicKey)
+			peerID, err := v.PeerID()
 			if err != nil {
 				continue
 			}

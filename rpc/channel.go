@@ -77,7 +77,8 @@ func (api *ChannelAPI) List(_ *http.Request, args *ListArgs, response *ListRespo
 
 // CreateNodeItemsTxDataPayloadArgs is a create channel node item request payload.
 type CreateNodeItemsTxDataPayloadArgs struct {
-	Nodes []NodeItemJSON `json:"nodes"`
+	Nodes    []NodeItemJSON `json:"nodes"`
+	IsUpdate bool           `json:"is_update"`
 }
 
 // CreateNodeItemsTxDataPayloadResponse is a response which contains the transaction data payload for creating the channel node items.
@@ -88,6 +89,7 @@ type CreateNodeItemsTxDataPayloadResponse struct {
 }
 
 // CreateNodeItemsTxDataPayload a channel node items that returns the transaction data payload, which in turn can be used in a transaction data payload.
+// if IsUpdate is true, we calculate the fees and create an update envelope payload.
 func (api *ChannelAPI) CreateNodeItemsTxDataPayload(_ *http.Request, args *CreateNodeItemsTxDataPayloadArgs, response *CreateNodeItemsTxDataPayloadResponse) error {
 	if len(args.Nodes) == 0 {
 		return errors.New("empty node items")
@@ -191,15 +193,23 @@ func (api *ChannelAPI) CreateNodeItemsTxDataPayload(_ *http.Request, args *Creat
 		nodesEnvelope.Nodes = append(nodesEnvelope.Nodes, &item)
 	}
 
-	totalFeesRequired := blockchain.CalculateChannelActionsFees(nodesEnvelope.Nodes)
 	nodeEnvelopeBytes, err := proto.Marshal(&nodesEnvelope)
 	if err != nil {
 		return fmt.Errorf("failed to marshal nodes envelope: %w", err)
 	}
 
 	dataPayload := transaction.DataPayload{
-		Type:    transaction.DataType_CREATE_NODE,
 		Payload: make([]byte, len(nodeEnvelopeBytes)),
+	}
+
+	if args.IsUpdate {
+		dataPayload.Type = transaction.DataType_UPDATE_NODE
+		totalFeesRequired := blockchain.CalculateChannelActionsFeesForUpdate(nodesEnvelope.Nodes)
+		response.TotalFeesRequired = hexutil.EncodeBig(totalFeesRequired)
+	} else {
+		dataPayload.Type = transaction.DataType_CREATE_NODE
+		totalFeesRequired := blockchain.CalculateChannelActionsFeesForCreate(nodesEnvelope.Nodes)
+		response.TotalFeesRequired = hexutil.EncodeBig(totalFeesRequired)
 	}
 
 	copy(dataPayload.Payload, nodeEnvelopeBytes)
@@ -210,7 +220,6 @@ func (api *ChannelAPI) CreateNodeItemsTxDataPayload(_ *http.Request, args *Creat
 	}
 
 	response.TransactionDataPayloadHex = hexutil.Encode(dataPayloadBytes)
-	response.TotalFeesRequired = hexutil.EncodeBig(totalFeesRequired)
 
 	return nil
 }

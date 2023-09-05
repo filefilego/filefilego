@@ -137,6 +137,10 @@ func (e engineStub) Index(_ IndexItem) error {
 	return e.indexingErr
 }
 
+func (e engineStub) Delete(_ string) error {
+	return e.indexingErr
+}
+
 func (e engineStub) Close() error {
 	return e.closingErr
 }

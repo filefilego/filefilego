@@ -37,6 +37,8 @@ import (
 // MediaCacheDirectory is the name of the cache directory
 const MediaCacheDirectory = "cache"
 
+//go:generate mockgen -source=data_transfer.go -aux_files=github.com/filefilego/filefilego/rpc=transaction.go -destination=data_transfer_mocks_test.go -package=rpc
+
 // PublisherNodesFinder is an interface that specifies finding nodes and publishing a message to the network functionalities.
 type PublisherNodesFinder interface {
 	NetworkMessagePublisher
@@ -535,20 +537,7 @@ func (api *DataTransferAPI) RequestDataQueryResponseFromVerifiers(r *http.Reques
 		return fmt.Errorf("failed to decode data query request hash: %w", err)
 	}
 
-	verfiers := block.GetBlockVerifiers()
-	peerIDs := make([]peer.ID, 0)
-	for _, v := range verfiers {
-		publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
-		if err != nil {
-			continue
-		}
-
-		peerID, err := peer.IDFromPublicKey(publicKey)
-		if err != nil {
-			continue
-		}
-		peerIDs = append(peerIDs, peerID)
-	}
+	peerIDs := block.GetBlockVerifiersPeerIDs()
 
 	_ = api.publisherNodesFinder.FindPeers(r.Context(), peerIDs)
 	dqrTransferRequest := &messages.DataQueryResponseTransferProto{Hash: dataQueryRequestHashBytes}
@@ -1688,21 +1677,8 @@ func (api *DataTransferAPI) CreateContractsFromDataQueryResponses(r *http.Reques
 		return nil
 	}
 
-	// find all verifiers
-	verfiers := block.GetBlockVerifiers()
-	peerIDs := make([]peer.ID, 0)
-	for _, v := range verfiers {
-		publicKey, err := ffgcrypto.PublicKeyFromHex(v.PublicKey)
-		if err != nil {
-			continue
-		}
-
-		peerID, err := peer.IDFromPublicKey(publicKey)
-		if err != nil {
-			continue
-		}
-		peerIDs = append(peerIDs, peerID)
-	}
+	// find all verifiers peer IDs
+	peerIDs := block.GetBlockVerifiersPeerIDs()
 
 	addrsInfos := api.publisherNodesFinder.FindPeers(r.Context(), peerIDs)
 	signedDownloadContracts := make([]*messages.DownloadContractProto, 0)
