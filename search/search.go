@@ -29,6 +29,7 @@ type IndexItem struct {
 type IndexSearcher interface {
 	Index(item IndexItem) error
 	Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error)
+	Delete(key string) error
 	Close() error
 }
 
@@ -61,6 +62,11 @@ func (s *Search) Search(ctx context.Context, query string, size, currentPage int
 // Index implements a indexing.
 func (s *Search) Index(item IndexItem) error {
 	return s.engine.Index(item)
+}
+
+// Delete implements a delete from the search index.
+func (s *Search) Delete(key string) error {
+	return s.engine.Delete(key)
 }
 
 // Close implements closing the db.

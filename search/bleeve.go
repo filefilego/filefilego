@@ -99,6 +99,11 @@ func (b *BleveSearch) Index(item IndexItem) error {
 	return b.index.Index(item.Hash, item)
 }
 
+// Delete an item from the index.
+func (b *BleveSearch) Delete(key string) error {
+	return b.index.Delete(key)
+}
+
 // prepareIndexingText takes care of inputs with dates and versions and makes them indexable
 func prepareIndexingText(name string) string {
 	versionsAndDates := []string{}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	sync "sync"
 	"time"
 
@@ -689,6 +690,8 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				return fmt.Errorf("failed to save contract in db: %w", err)
 			}
 		}
+
+		return nil
 	}
 
 	// release fees to file hoster given the contract
@@ -705,6 +708,121 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				return fmt.Errorf("failed to save release fees contract in db: %w", err)
 			}
 		}
+		return nil
+	}
+
+	// update nodes
+	if dataPayload.Type == transaction.DataType_UPDATE_NODE {
+		nodesEnvelope := NodeItems{}
+		err := proto.Unmarshal(dataPayload.Payload, &nodesEnvelope)
+		if err != nil {
+			return nil
+		}
+
+		txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+		if err != nil {
+			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
+		}
+
+		totalActionsFees := CalculateChannelActionsFeesForUpdate(nodesEnvelope.Nodes)
+		if txFees.Cmp(totalActionsFees) == -1 {
+			return fmt.Errorf("total cost of channel update actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
+		}
+
+		fromBytes, _ := hexutil.Decode(tx.From)
+		for _, node := range nodesEnvelope.Nodes {
+			itemFound, err := b.GetNodeItem(node.NodeHash)
+			if err != nil {
+				continue
+			}
+
+			// dont allow the original values of these fileds to be overwritten
+			// this applies to everyone including admin and owner
+			node.NodeType = itemFound.NodeType
+			node.ParentHash = itemFound.ParentHash
+			node.Name = itemFound.Name
+
+			var rootNodeItem *NodeItem
+			// if channel then get the permissions from it
+			if itemFound.NodeType == NodeItemType_CHANNEL {
+				rootNodeItem = itemFound
+			} else {
+				// otherwise go back to the channel and find the root node to get the permissions.
+				rootItem, err := b.GetRootNodeItem(itemFound.NodeHash)
+				if err != nil {
+					continue
+				}
+				rootNodeItem = rootItem
+			}
+
+			owner, admin, poster := b.GetPermissionFromRootNode(rootNodeItem, fromBytes)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve root node to get permissions: %w", err)
+			}
+
+			if !owner && !admin && !poster {
+				continue
+			}
+
+			// if poster and the item doesn't belong to them just go to next
+			if poster && !bytes.Equal(node.Owner, fromBytes) {
+				continue
+			}
+
+			// if its admin
+			// then owner of channel can not be changed
+			// admins cant add or remove other admins
+			if admin && itemFound.NodeType == NodeItemType_CHANNEL {
+				node.Enabled = itemFound.Enabled
+				node.Owner = itemFound.Owner
+				node.Admins = itemFound.Admins
+				node.Attributes = itemFound.Attributes
+			}
+
+			nodeDescription := ""
+			if node.Description != nil {
+				nodeDescription = *node.Description
+			}
+
+			finalName := itemFound.Name
+
+			// find last updated name and incude it in the search
+			for _, v := range node.Attributes {
+				nameStr := string(v)
+				if strings.Contains(nameStr, "alt_name:") {
+					splitted := strings.Split(nameStr, "alt_name:")
+					if len(splitted) == 2 {
+						finalName = splitted[1]
+					}
+				}
+			}
+
+			err = b.updateNode(node)
+			if err != nil {
+				continue
+			}
+
+			// if its disabled remove from search index
+			if !node.Enabled {
+				_ = b.search.Delete(hexutil.Encode(node.NodeHash))
+				continue
+			}
+			// delete the old index
+			_ = b.search.Delete(hexutil.Encode(node.NodeHash))
+
+			indexItem := search.IndexItem{
+				Hash:        hexutil.Encode(node.NodeHash),
+				Type:        int32(node.NodeType),
+				Name:        finalName,
+				Description: nodeDescription,
+			}
+
+			err = b.search.Index(indexItem)
+			if err != nil {
+				continue
+			}
+		}
+		return nil
 	}
 
 	// support creating multiple nodes
@@ -720,14 +838,14 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
 		}
 
-		totalActionsFees := CalculateChannelActionsFees(nodesEnvelope.Nodes)
+		totalActionsFees := CalculateChannelActionsFeesForCreate(nodesEnvelope.Nodes)
 		if txFees.Cmp(totalActionsFees) == -1 {
 			return fmt.Errorf("total cost of channel actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
 		}
 
+		fromBytes, _ := hexutil.Decode(tx.From)
 		for _, node := range nodesEnvelope.Nodes {
 			node.Enabled = true
-			fromBytes, _ := hexutil.Decode(tx.From)
 			node.Owner = fromBytes
 
 			if node.Timestamp <= 0 {
@@ -1304,6 +1422,20 @@ func (b *Blockchain) GetNodeFileItemFromFileHash(fileHash []byte) ([]*NodeItem, 
 	return items, nil
 }
 
+func (b *Blockchain) updateNode(node *NodeItem) error {
+	nodeData, err := proto.Marshal(node)
+	if err != nil {
+		return fmt.Errorf("failed to marshal node item: %w", err)
+	}
+
+	err = b.db.Put(append([]byte(nodePrefix), node.NodeHash...), nodeData)
+	if err != nil {
+		return fmt.Errorf("failed to insert node item into db: %w", err)
+	}
+
+	return nil
+}
+
 func (b *Blockchain) saveNode(node *NodeItem) error {
 	nodeData, err := proto.Marshal(node)
 	if err != nil {
@@ -1670,8 +1802,8 @@ func applyChannelStructureConstraints(parentNode, node *NodeItem) (bool, error) 
 	return true, nil
 }
 
-// CalculateChannelActionsFees given a list of node items it calculates the amount of fees required.
-func CalculateChannelActionsFees(nodes []*NodeItem) *big.Int {
+// CalculateChannelActionsFeesForCreate given a list of node items it calculates the amount of fees required for the items to be created.
+func CalculateChannelActionsFeesForCreate(nodes []*NodeItem) *big.Int {
 	totalFees := big.NewInt(0)
 	for _, n := range nodes {
 		switch n.NodeType {
@@ -1686,6 +1818,17 @@ func CalculateChannelActionsFees(nodes []*NodeItem) *big.Int {
 				totalFees = totalFees.Add(totalFees, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(RemainingChannelOperationFeesMiliFFG)))
 			}
 		}
+	}
+
+	return totalFees
+}
+
+// CalculateChannelActionsFeesForUpdate given a list of node items it calculates the amount of fees required for the items to be updated.
+func CalculateChannelActionsFeesForUpdate(nodes []*NodeItem) *big.Int {
+	totalFees := big.NewInt(0)
+	for range nodes {
+		oneMiliFFG := currency.MiliFFG()
+		totalFees = totalFees.Add(totalFees, oneMiliFFG.Mul(oneMiliFFG, big.NewInt(RemainingChannelOperationFeesMiliFFG)))
 	}
 
 	return totalFees
