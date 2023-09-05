@@ -655,6 +655,14 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	blockchain, err := New(driver, searchEngine, genesisblockValid.Hash)
 	assert.NoError(t, err)
 
+	fromAddrPosterString := "0x019a374e8dce9d656073ec153580301b7d2c3850"
+	fromPosterAddr, err := hexutil.Decode(fromAddrPosterString)
+	assert.NoError(t, err)
+
+	fromAddrAdminString := "0x019a374e8dce9d656073ec153580301b7d2c3830"
+	fromAdminAddr, err := hexutil.Decode(fromAddrAdminString)
+	assert.NoError(t, err)
+
 	fromAddrString := "0xdd9a374e8dce9d656073ec153580301b7d2c3850"
 	fromAddr, err := hexutil.Decode(fromAddrString)
 	assert.NoError(t, err)
@@ -662,6 +670,8 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	nodes := []*NodeItem{
 		{
+			Admins:    [][]byte{fromAdminAddr},
+			Posters:   [][]byte{fromPosterAddr},
 			Name:      "channel one",
 			Owner:     fromAddr,
 			Enabled:   true,
@@ -693,6 +703,65 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	// creating the same channel again should be an error
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
 	assert.EqualError(t, err, "failed to create channel node: node with this hash already exists in db 0x20148fb96726ef3ff2e0c6ee73458dda99f6c9b7914ee1aec918f8ac35e949d0")
+
+	// update the channel by poster
+	channelsToBeUpdated, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	channelsToBeUpdated[0].Enabled = false
+	txUpdatePayload := transactionWithChannelUpdatePayload(t, channelsToBeUpdated)
+	txWithChannelUpdatePayload := &transaction.Transaction{
+		Nounce:          []byte{2},
+		From:            fromAddrPosterString,
+		To:              fromAddrPosterString,
+		Data:            txUpdatePayload,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	txWithChannelUpdatePayload.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload)
+	assert.NoError(t, err)
+	updatedChannels, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	// the result should be still true since poster cant change
+	assert.True(t, updatedChannels[0].Enabled)
+
+	// update the channel by admin
+	txWithChannelUpdatePayload2 := &transaction.Transaction{
+		Nounce:          []byte{2},
+		From:            fromAddrAdminString,
+		To:              fromAddrAdminString,
+		Data:            txUpdatePayload,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	txWithChannelUpdatePayload2.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload2)
+	assert.NoError(t, err)
+	updatedChannels2, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	// the result should be still true since admin cant change the enabled status
+	assert.True(t, updatedChannels2[0].Enabled)
+
+	// change by owner
+	txWithChannelUpdatePayload3 := &transaction.Transaction{
+		Nounce:          []byte{2},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            txUpdatePayload,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	txWithChannelUpdatePayload3.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload3)
+	assert.NoError(t, err)
+	updatedChannels3, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	// the result should be false which means the owner made the enabled false
+	// it had enough permission to perform this
+	assert.False(t, updatedChannels3[0].Enabled)
 
 	// create another node with subchannel and assert the error with the required fees
 	nodes2 := []*NodeItem{
@@ -986,6 +1055,22 @@ func transactionWithChannelPayload(t *testing.T, nodes []*NodeItem) []byte {
 	assert.NoError(t, err)
 	txPayload := transaction.DataPayload{
 		Type:    transaction.DataType_CREATE_NODE,
+		Payload: itemsBytes,
+	}
+
+	txPayloadBytes, err := proto.Marshal(&txPayload)
+	assert.NoError(t, err)
+	return txPayloadBytes
+}
+
+func transactionWithChannelUpdatePayload(t *testing.T, nodes []*NodeItem) []byte {
+	items := NodeItems{
+		Nodes: nodes,
+	}
+	itemsBytes, err := proto.Marshal(&items)
+	assert.NoError(t, err)
+	txPayload := transaction.DataPayload{
+		Type:    transaction.DataType_UPDATE_NODE,
 		Payload: itemsBytes,
 	}
 
