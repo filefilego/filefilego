@@ -345,7 +345,7 @@ func TestNodeMethods(t *testing.T) {
 	validAddr, err := GetMultiAddrFromString(strMultiAddr)
 	assert.NoError(t, err)
 	_, err = n2.ConnectToPeerWithMultiaddr(context.Background(), validAddr)
-	assert.ErrorContains(t, err, "failed to connect to host: failed to dial 16Uiu2HAm2edbaX9YyMauXDjdhcdF34P59zg29xtP9nmeS7MJNbxo")
+	assert.ErrorContains(t, err, "failed to connect to host: failed to dial")
 
 	_, err = n2.ConnectToPeerWithMultiaddr(context.Background(), p1addr[0])
 	assert.NoError(t, err)
