@@ -19,7 +19,7 @@ FileFileGo is an open-source community project, with no centralized control or o
 By supporting FileFileGo, users can help promote digital rights, privacy, freedom of information, and net neutrality. We encourage contributions and innovative ideas to ensure that the internet remains an open and decentralized platform.
 
 
-# The Innovation: Proof of Transfer (PoX) / Proof of Data Possession (PoDP)
+# The Innovation: Proof of Transfer with Zero-Knowledge Proof (ZK-Proof)
 
 ## Problem
 
