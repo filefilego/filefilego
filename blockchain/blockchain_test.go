@@ -670,13 +670,14 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	nodes := []*NodeItem{
 		{
-			Admins:    [][]byte{fromAdminAddr},
-			Posters:   [][]byte{fromPosterAddr},
-			Name:      "channel one",
-			Owner:     fromAddr,
-			Enabled:   true,
-			NodeType:  NodeItemType_CHANNEL,
-			Timestamp: time.Now().Unix(),
+			Admins:      [][]byte{fromAdminAddr},
+			Posters:     [][]byte{fromPosterAddr},
+			Name:        "channel one",
+			Owner:       fromAddr,
+			Enabled:     true,
+			NodeType:    NodeItemType_CHANNEL,
+			Timestamp:   time.Now().Unix(),
+			Description: proto.String("Original Desc"),
 		},
 	}
 	txPayloadBytes := transactionWithChannelPayload(t, nodes)
@@ -707,7 +708,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	// update the channel by poster
 	channelsToBeUpdated, err := blockchain.GetChannels(0, 10, "desc")
 	assert.NoError(t, err)
-	channelsToBeUpdated[0].Enabled = false
+	channelsToBeUpdated[0].Description = proto.String("Test")
 	txUpdatePayload := transactionWithChannelUpdatePayload(t, channelsToBeUpdated)
 	txWithChannelUpdatePayload := &transaction.Transaction{
 		Nounce:          []byte{2},
@@ -724,7 +725,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	updatedChannels, err := blockchain.GetChannels(0, 10, "desc")
 	assert.NoError(t, err)
 	// the result should be still true since poster cant change
-	assert.True(t, updatedChannels[0].Enabled)
+	assert.Equal(t, proto.String("Original Desc"), updatedChannels[0].Description)
 
 	// update the channel by admin
 	txWithChannelUpdatePayload2 := &transaction.Transaction{
@@ -741,8 +742,8 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	updatedChannels2, err := blockchain.GetChannels(0, 10, "desc")
 	assert.NoError(t, err)
-	// the result should be still true since admin cant change the enabled status
-	assert.True(t, updatedChannels2[0].Enabled)
+	// admin can change the description
+	assert.Equal(t, proto.String("Test"), updatedChannels2[0].Description)
 
 	// change by owner
 	txWithChannelUpdatePayload3 := &transaction.Transaction{
@@ -761,7 +762,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	// the result should be false which means the owner made the enabled false
 	// it had enough permission to perform this
-	assert.False(t, updatedChannels3[0].Enabled)
+	assert.Equal(t, proto.String("Test"), updatedChannels3[0].Description)
 
 	// create another node with subchannel and assert the error with the required fees
 	nodes2 := []*NodeItem{
@@ -949,6 +950,43 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Equal(t, []byte{4}, contractMetadata[0].DownloadContractInTransactionDataProto.VerifierPublicKey)
 	assert.Equal(t, "0x1", contractMetadata[0].DownloadContractInTransactionDataProto.VerifierFees)
 	assert.Equal(t, "0x5", contractMetadata[0].DownloadContractInTransactionDataProto.FileHosterTotalFees)
+
+	// delete the channel and check if all childs were deleted
+	channelsToBeDeleted, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	assert.Len(t, channelsToBeDeleted, 2)
+	var whichChannelToDelete *NodeItem
+	for _, v := range channelsToBeDeleted {
+		if v.Name == "channel FFG" {
+			whichChannelToDelete = v
+		}
+	}
+
+	assert.NotNil(t, whichChannelToDelete)
+
+	whichChannelToDelete.Enabled = false
+	channelDeleteTXPayload := transactionWithChannelUpdatePayload(t, []*NodeItem{whichChannelToDelete})
+	txWithChannelUpdatePayload = &transaction.Transaction{
+		Nounce:          []byte{4},
+		From:            fromAddrString,
+		To:              fromAddrString,
+		Data:            channelDeleteTXPayload,
+		Value:           "0x0",
+		TransactionFees: "0x0",
+		Chain:           mainChain,
+	}
+	txWithChannelUpdatePayload.TransactionFees = "0x" + fees.Text(16)
+	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload)
+	assert.NoError(t, err)
+	deletedChannels, err := blockchain.GetChannels(0, 10, "desc")
+	assert.NoError(t, err)
+	assert.Len(t, deletedChannels, 1)
+
+	// check if the search if the file can be found
+	searchResults, err = searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired)
+	assert.NoError(t, err)
+	assert.Len(t, searchResults, 0)
+	assert.Equal(t, uint64(1), blockchain.GetChannelsCount())
 }
 
 func TestPerformAddressStateUpdate(t *testing.T) {

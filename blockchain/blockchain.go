@@ -804,9 +804,29 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 
 			// if its disabled remove from search index
 			if !node.Enabled {
-				_ = b.search.Delete(hexutil.Encode(node.NodeHash))
+				allChildsRecursive := []*NodeItem{node}
+				var x *NodeItem
+				for len(allChildsRecursive) > 0 {
+					// pop element
+					x, allChildsRecursive = allChildsRecursive[len(allChildsRecursive)-1], allChildsRecursive[:len(allChildsRecursive)-1]
+
+					childNodes, _, err := b.getChildNodeItems(x.NodeHash)
+					if err == nil {
+						allChildsRecursive = append(allChildsRecursive, childNodes...)
+					}
+
+					_ = b.deleteNode(x)
+					_ = b.search.Delete(hexutil.Encode(x.NodeHash))
+				}
+
+				// at this stage we have visited all the childs and deleted the entries
+				// and the child counters. we need to decrement the parent counters
+				parentChildCount := b.GetTotalChannelNodesChilds(node.ParentHash)
+				_ = b.SetTotalChannelNodesChilds(node.ParentHash, parentChildCount-1)
+
 				continue
 			}
+
 			// delete the old index
 			_ = b.search.Delete(hexutil.Encode(node.NodeHash))
 
@@ -1212,6 +1232,18 @@ func (b *Blockchain) GetChannelsCount() uint64 {
 	return binary.BigEndian.Uint64(channelsCountBytes)
 }
 
+// SetChannelsCount sets the channels count
+func (b *Blockchain) SetChannelsCount(num uint64) error {
+	channelsUint64 := make([]byte, 8)
+	binary.BigEndian.PutUint64(channelsUint64, num)
+	err := b.db.Put([]byte(channelsCountPrefix), channelsUint64)
+	if err != nil {
+		return fmt.Errorf("failed to update channels count: %w", err)
+	}
+
+	return nil
+}
+
 // GetTotalChannelNodesChilds returns the total number of channel entries in the blockchain except the channels.
 func (b *Blockchain) GetTotalChannelNodesChilds(parentHash []byte) uint64 {
 	prefix := append([]byte(channelsNodesCountPrefix), parentHash...)
@@ -1221,6 +1253,38 @@ func (b *Blockchain) GetTotalChannelNodesChilds(parentHash []byte) uint64 {
 	}
 
 	return binary.BigEndian.Uint64(channelsNodesCountBytes)
+}
+
+// SetTotalChannelNodesChilds given a node, it updates the nodes count.
+// This is useful when a node item is removed, the parent count should be updated.
+func (b *Blockchain) SetTotalChannelNodesChilds(nodeHash []byte, num uint64) error {
+	channelsUint64 := make([]byte, 8)
+	binary.BigEndian.PutUint64(channelsUint64, num)
+	err := b.db.Put(append([]byte(channelsNodesCountPrefix), nodeHash...), channelsUint64)
+	if err != nil {
+		return fmt.Errorf("failed to update node nodes count: %w", err)
+	}
+
+	return nil
+}
+
+func (b *Blockchain) removeNodeChilds(nodeHash []byte) {
+	// remove the counter
+	_ = b.db.Delete(append([]byte(channelsNodesCountPrefix), nodeHash...))
+
+	// remove the nodeNodesPrefix
+	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), nodeHash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithNodeNodes), nil)
+	defer iter.Release()
+	batch := new(leveldb.Batch)
+	for iter.Next() {
+		key := iter.Key()
+		batch.Delete(key)
+	}
+	err := b.db.Write(batch, nil)
+	if err != nil {
+		log.Warnf("failed to batch delete child nodes of a node: %v", err)
+	}
 }
 
 func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte, childItemType uint8) error {
@@ -1245,6 +1309,38 @@ func (b *Blockchain) saveNodeAsChildNode(parentHash, childHash []byte, childItem
 	}
 
 	return nil
+}
+
+func (b *Blockchain) getChildNodeItems(nodeHash []byte) ([]*NodeItem, uint64, error) {
+	prefixWithNodeNodes := append([]byte(nodeNodesPrefix), nodeHash...)
+	iter := b.db.NewIterator(util.BytesPrefix(prefixWithNodeNodes), nil)
+	defer iter.Release()
+
+	childNodes := make([]*NodeItem, 0)
+	i := 0
+
+	for iter.Next() {
+		key := iter.Key()
+		if len(key) == 0 {
+			break
+		}
+
+		item, err := b.GetNodeItem(key[9+len(prefixWithNodeNodes):])
+		if err != nil {
+			continue
+		}
+		i++
+		childNodes = append(childNodes, item)
+	}
+
+	err := iter.Error()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to release get child nodes iterator: %w", err)
+	}
+
+	totalChildsCount := b.GetTotalChannelNodesChilds(nodeHash)
+
+	return childNodes, totalChildsCount, nil
 }
 
 // GetChildNodeItems returns a list of child nodes of a node.
@@ -1457,6 +1553,35 @@ func (b *Blockchain) saveNode(node *NodeItem) error {
 		err = b.db.Put(append(prefixWithFileHash, node.NodeHash...), []byte{})
 		if err != nil {
 			return fmt.Errorf("failed to insert file hash into db: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (b *Blockchain) deleteNode(node *NodeItem) error {
+	err := b.db.Delete(append([]byte(nodePrefix), node.NodeHash...))
+	if err != nil {
+		return fmt.Errorf("failed to delete node item: %w", err)
+	}
+
+	// if channel decrement the total counter
+	if node.NodeType == NodeItemType_CHANNEL {
+		totalCount := b.GetChannelsCount()
+		err = b.SetChannelsCount(totalCount - 1)
+		if err != nil {
+			log.Warn("failed to decrement the total channels count")
+		}
+	}
+
+	// remove the childs and remove the counter that keeps track of the child counts
+	b.removeNodeChilds(node.NodeHash)
+
+	if node.NodeType == NodeItemType_FILE {
+		prefixWithFileHash := append([]byte(fileNodePrefix), node.FileHash...)
+		err = b.db.Delete(append(prefixWithFileHash, node.NodeHash...))
+		if err != nil {
+			return fmt.Errorf("failed to delete file node item: %w", err)
 		}
 	}
 
