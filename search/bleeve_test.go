@@ -55,6 +55,7 @@ func TestBleeveSearch(t *testing.T) {
 		query      string
 		searchType Type
 		results    []string
+		fieldScope string
 		expErr     string
 	}{
 		"all-terms result": {
@@ -67,13 +68,19 @@ func TestBleeveSearch(t *testing.T) {
 			searchType: AnyTermRequired,
 			results:    []string{"123", "233"},
 		},
+		"any-terms result with fieldscoping": {
+			query:      " title snsnsn",
+			searchType: AnyTermRequired,
+			results:    []string{"233"},
+			fieldScope: "+Type:2",
+		},
 	}
 
 	for name, tt := range cases {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			results, err := bleveEngine.Search(context.Background(), tt.query, 10, 0, tt.searchType)
+			results, err := bleveEngine.Search(context.Background(), tt.query, 10, 0, tt.searchType, tt.fieldScope)
 			if tt.expErr != "" {
 				assert.EqualError(t, err, tt.expErr)
 			} else {

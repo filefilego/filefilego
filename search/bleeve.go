@@ -50,7 +50,7 @@ func (b *BleveSearch) Close() error {
 }
 
 // Search prepares the query and searches in bleve.
-func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error) {
+func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPage int, searchType Type, fieldScope string) ([]string, error) {
 	terms := strings.Split(query, " ")
 	rawTerms := []string{}
 	finalTerms := []string{}
@@ -71,7 +71,16 @@ func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPag
 	}
 
 	from := size * currentPage
-	searchRequest := bleve.NewSearchRequestOptions(bleve.NewQueryStringQuery(strings.Join(finalTerms, " ")), size, from, false)
+
+	cj := bleve.NewConjunctionQuery()
+
+	if fieldScope != "" {
+		cj.AddQuery(bleve.NewMatchQuery(fieldScope))
+	}
+
+	cj.AddQuery(bleve.NewQueryStringQuery(strings.Join(finalTerms, " ")))
+	searchRequest := bleve.NewSearchRequestOptions(cj, size, from, false)
+
 	searchRequest.Fields = []string{"*"}
 
 	cursor, err := b.index.SearchInContext(ctx, searchRequest)

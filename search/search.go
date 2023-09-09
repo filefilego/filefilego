@@ -19,6 +19,7 @@ const (
 
 // IndexItem represents the indexable structure.
 type IndexItem struct {
+	ChannelHash string
 	Hash        string
 	Type        int32
 	Name        string
@@ -28,7 +29,7 @@ type IndexItem struct {
 // IndexSearcher provides searching and indexing functionality.
 type IndexSearcher interface {
 	Index(item IndexItem) error
-	Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error)
+	Search(ctx context.Context, query string, size, currentPage int, searchType Type, fieldScope string) ([]string, error)
 	Delete(key string) error
 	Close() error
 }
@@ -50,9 +51,9 @@ func New(engine IndexSearcher) (*Search, error) {
 }
 
 // Search implements a searching.
-func (s *Search) Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error) {
+func (s *Search) Search(ctx context.Context, query string, size, currentPage int, searchType Type, fieldScope string) ([]string, error) {
 	preparedQuery := strings.TrimSpace(strings.ToLower(query))
-	hashes, err := s.engine.Search(ctx, preparedQuery, size, currentPage, searchType)
+	hashes, err := s.engine.Search(ctx, preparedQuery, size, currentPage, searchType, fieldScope)
 	if err != nil {
 		return nil, fmt.Errorf("unable to search for %s: %w", query, err)
 	}

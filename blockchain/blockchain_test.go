@@ -920,7 +920,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Len(t, allChannels, 0)
 
 	// check the search engine
-	searchResults, err := searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired)
+	searchResults, err := searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired, "")
 	assert.NoError(t, err)
 	assert.Len(t, searchResults, 1)
 	assert.Equal(t, uint64(2), blockchain.GetChannelsCount())
@@ -983,7 +983,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Len(t, deletedChannels, 1)
 
 	// check if the search if the file can be found
-	searchResults, err = searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired)
+	searchResults, err = searchEngine.Search(context.TODO(), "file", 100, 0, search.AnyTermRequired, "")
 	assert.NoError(t, err)
 	assert.Len(t, searchResults, 0)
 	assert.Equal(t, uint64(1), blockchain.GetChannelsCount())

@@ -779,6 +779,12 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				node.Attributes = itemFound.Attributes
 			}
 
+			// if admin is editing a node not belonging to them
+			// keep the owner as it was
+			if owner || admin && !bytes.Equal(itemFound.Owner, fromBytes) {
+				node.Owner = itemFound.Owner
+			}
+
 			nodeDescription := ""
 			if node.Description != nil {
 				nodeDescription = *node.Description
@@ -831,6 +837,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			_ = b.search.Delete(hexutil.Encode(node.NodeHash))
 
 			indexItem := search.IndexItem{
+				ChannelHash: hexutil.Encode(rootNodeItem.NodeHash),
 				Hash:        hexutil.Encode(node.NodeHash),
 				Type:        int32(node.NodeType),
 				Name:        finalName,
@@ -872,6 +879,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				return fmt.Errorf("timestamp is empty")
 			}
 
+			var rootNodeItem *NodeItem
 			if node.NodeType == NodeItemType_CHANNEL {
 				if node.Name == "" {
 					return errors.New("channel node name is empty")
@@ -886,6 +894,8 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				)
 				node.ParentHash = []byte{}
 				node.NodeHash = crypto.Sha256(data)
+
+				rootNodeItem = node
 
 				err = b.saveNode(node)
 				if err != nil {
@@ -922,7 +932,6 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 					return fmt.Errorf("failed to satisfy node structure constraints: %w", err)
 				}
 
-				var rootNodeItem *NodeItem
 				// if parent is root
 				if parentNode.NodeType == NodeItemType_CHANNEL {
 					rootNodeItem = parentNode
@@ -950,6 +959,11 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 					return errors.New("poster can't create channel and subchannel")
 				}
 
+				// if poster, don't allow to create folder and files under folders,entries which don't belong to poster
+				if poster && (parentNode.NodeType == NodeItemType_DIR || parentNode.NodeType == NodeItemType_ENTRY) && !bytes.Equal(parentNode.Owner, node.Owner) {
+					return errors.New("poster can't create under dirs and entries of other owners")
+				}
+
 				err = b.saveNode(node)
 				if err != nil {
 					return fmt.Errorf("failed to create node: %w", err)
@@ -966,6 +980,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			}
 
 			indexItem := search.IndexItem{
+				ChannelHash: hexutil.Encode(rootNodeItem.NodeHash),
 				Hash:        hexutil.Encode(node.NodeHash),
 				Type:        int32(node.NodeType),
 				Name:        node.Name,
