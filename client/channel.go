@@ -139,12 +139,13 @@ func (cli *Client) ListChannels(ctx context.Context, currentPage, pageSize int, 
 }
 
 // SearchChannels search channel items.
-func (cli *Client) SearchChannels(ctx context.Context, query string, searchType search.Type, size, currentPage int) (rpc.SearchResponse, error) {
+func (cli *Client) SearchChannels(ctx context.Context, query string, searchType search.Type, size, currentPage int, fieldScope string) (rpc.SearchResponse, error) {
 	payload := JSONRPCRequest{
 		JSONRPC: "2.0",
 		Method:  "channel.Search",
 		Params: []interface{}{
 			rpc.SearchArgs{
+				FieldScope:  fieldScope,
 				Query:       query,
 				SearchType:  string(searchType),
 				Size:        size,

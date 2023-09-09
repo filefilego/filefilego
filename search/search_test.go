@@ -73,7 +73,7 @@ func TestSearch(t *testing.T) {
 			t.Parallel()
 			engine, err := New(tt.search)
 			assert.NoError(t, err)
-			results, err := engine.Search(context.TODO(), tt.query, tt.size, tt.currentPage, tt.searchType)
+			results, err := engine.Search(context.TODO(), tt.query, tt.size, tt.currentPage, tt.searchType, "")
 			if tt.expErr != "" {
 				assert.EqualError(t, err, tt.expErr)
 			} else {
@@ -129,7 +129,7 @@ type engineStub struct {
 	err         error
 }
 
-func (e engineStub) Search(_ context.Context, _ string, _, _ int, _ Type) ([]string, error) {
+func (e engineStub) Search(_ context.Context, _ string, _, _ int, _ Type, _ string) ([]string, error) {
 	return e.hashes, e.err
 }
 

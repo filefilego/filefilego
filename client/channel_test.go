@@ -55,7 +55,7 @@ func TestSearchChannels(t *testing.T) {
 	})
 
 	assert.NoError(t, err)
-	list, err := c.SearchChannels(context.TODO(), "ffg", search.AnyTermRequired, 10, 1)
+	list, err := c.SearchChannels(context.TODO(), "ffg", search.AnyTermRequired, 10, 1, "")
 	assert.NoError(t, err)
 
 	assert.Len(t, list.Nodes, 1)

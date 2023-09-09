@@ -50,10 +50,13 @@ func (b *BleveSearch) Close() error {
 }
 
 // Search prepares the query and searches in bleve.
-func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPage int, searchType Type) ([]string, error) {
+func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPage int, searchType Type, fieldScope string) ([]string, error) {
 	terms := strings.Split(query, " ")
 	rawTerms := []string{}
 	finalTerms := []string{}
+	if fieldScope != "" {
+		finalTerms = append(finalTerms, fieldScope)
+	}
 	for _, v := range terms {
 		if v == "" || v == " " {
 			continue

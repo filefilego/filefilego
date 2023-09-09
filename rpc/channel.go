@@ -226,6 +226,7 @@ func (api *ChannelAPI) CreateNodeItemsTxDataPayload(_ *http.Request, args *Creat
 
 // SearchArgs is a search args.
 type SearchArgs struct {
+	FieldScope  string `json:"field_scope"`
 	Query       string `json:"query"`
 	SearchType  string `json:"search_type"`
 	Size        int    `json:"size"`
@@ -239,7 +240,7 @@ type SearchResponse struct {
 
 // Search search in nodes.
 func (api *ChannelAPI) Search(r *http.Request, args *SearchArgs, response *SearchResponse) error {
-	nodeHashes, err := api.search.Search(r.Context(), args.Query, args.Size, args.CurrentPage, search.Type(args.SearchType))
+	nodeHashes, err := api.search.Search(r.Context(), args.Query, args.Size, args.CurrentPage, search.Type(args.SearchType), args.FieldScope)
 	if err != nil {
 		return fmt.Errorf("failed to perform search: %w", err)
 	}
