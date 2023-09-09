@@ -54,9 +54,6 @@ func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPag
 	terms := strings.Split(query, " ")
 	rawTerms := []string{}
 	finalTerms := []string{}
-	if fieldScope != "" {
-		finalTerms = append(finalTerms, fieldScope)
-	}
 	for _, v := range terms {
 		if v == "" || v == " " {
 			continue
@@ -74,7 +71,16 @@ func (b *BleveSearch) Search(ctx context.Context, query string, size, currentPag
 	}
 
 	from := size * currentPage
-	searchRequest := bleve.NewSearchRequestOptions(bleve.NewQueryStringQuery(strings.Join(finalTerms, " ")), size, from, false)
+
+	cj := bleve.NewConjunctionQuery()
+
+	if fieldScope != "" {
+		cj.AddQuery(bleve.NewMatchQuery(fieldScope))
+	}
+
+	cj.AddQuery(bleve.NewQueryStringQuery(strings.Join(finalTerms, " ")))
+	searchRequest := bleve.NewSearchRequestOptions(cj, size, from, false)
+
 	searchRequest.Fields = []string{"*"}
 
 	cursor, err := b.index.SearchInContext(ctx, searchRequest)
