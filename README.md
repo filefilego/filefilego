@@ -10,7 +10,7 @@
 
 ![](docs/images/ffg_header.png "Header")
 
-The FileFileGo protocol is a peer-to-peer storage & data-sharing network designed for the web3 era, with an incentive mechanism, full-text search and a storage engine. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
+The FileFileGo protocol is a peer-to-peer storage & data-sharing network designed for the web3 era, with an incentive mechanism, full-text search and a storage engine. Its decentralized architecture enables users to store and share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
 
 FileFileGo is an open-source community project, with no centralized control or ownership. Its coin distribution is designed to be fair, with an emission of 40 FFG per block that decreases by half every 24 months. The protocol is launched without ICO/STO/IEO or pre-mine, relying on a Proof of Authority consensus algorithm that will eventually transition to Proof of Stake to allow more stakeholders to participate.
 
