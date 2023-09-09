@@ -779,6 +779,12 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 				node.Attributes = itemFound.Attributes
 			}
 
+			// if admin is editing a node not belonging to them
+			// keep the owner as it was
+			if owner || admin && !bytes.Equal(itemFound.Owner, fromBytes) {
+				node.Owner = itemFound.Owner
+			}
+
 			nodeDescription := ""
 			if node.Description != nil {
 				nodeDescription = *node.Description
