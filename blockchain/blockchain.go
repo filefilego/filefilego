@@ -950,6 +950,11 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 					return errors.New("poster can't create channel and subchannel")
 				}
 
+				// if poster, don't allow to create folder and files under folders,entries which don't belong to poster
+				if poster && (parentNode.NodeType == NodeItemType_DIR || parentNode.NodeType == NodeItemType_ENTRY) && !bytes.Equal(parentNode.Owner, node.Owner) {
+					return errors.New("poster can't create under dirs and entries of other owners")
+				}
+
 				err = b.saveNode(node)
 				if err != nil {
 					return fmt.Errorf("failed to create node: %w", err)
