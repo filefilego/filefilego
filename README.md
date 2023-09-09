@@ -10,9 +10,7 @@
 
 ![](docs/images/ffg_header.png "Header")
 
-The FileFileGo protocol is a peer-to-peer data-sharing network designed for the web3 era, with an incentive mechanism, full-text search, storage, and indexing/tracking. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
-
-As the internet has grown, it has become increasingly vulnerable to censorship and control by large corporations and ISPs. Governments have also attempted to regulate the flow of information online, making it challenging for informational platforms to operate without interruption. The FileFileGo protocol was developed to address these issues and enable users to access and share information freely.
+The FileFileGo protocol is a peer-to-peer storage & data-sharing network designed for the web3 era, with an incentive mechanism, full-text search and a storage engine. Its decentralized architecture enables users to share data without censorship or a single point of failure. By leveraging game-theory concepts, FileFileGo incentivizes participation and ensures data availability while achieving fault-tolerance and preserving privacy.
 
 FileFileGo is an open-source community project, with no centralized control or ownership. Its coin distribution is designed to be fair, with an emission of 40 FFG per block that decreases by half every 24 months. The protocol is launched without ICO/STO/IEO or pre-mine, relying on a Proof of Authority consensus algorithm that will eventually transition to Proof of Stake to allow more stakeholders to participate.
 
@@ -313,73 +311,15 @@ Follow the instructions to compile and install filefilego
 https://filefilego.com/documentation/docs/installation.html#prerequisites
 ```
 
-Run the full node with search and storage enabled:
-
-```
-filefilego --node_identity_passphrase=yournodeidentitypassword --rpc_services="*" --search_engine --storage --storage_dir="/home/storageDirectory/" --storage_token="admintoken" --storage_fees_byte="10000" --addr=0.0.0.0 --http --http_addr=0.0.0.0 --data_downloads_path="/home/FFG_Downloads" --bootstrap_nodes="/ip4/18.159.124.250/tcp/10209/p2p/16Uiu2HAmVXbhxA1tiA9PRZJWwSk5jdMfWXbfeGWaubVeT7MZu8ie"
-```
-
-The above command runs a full node and starts the http rpc server. In this case, we listen on all interfaces `0.0.0.0` and port `8090` so we can build an application that can interact with this full node.
-
-# Architecture
-
-In this section, we cover the disadvantages of different protocols and platforms to get clear picture and examine the weaknesses.
-
-### XDCC
-
-XDCC is a file-sharing method that is based on IRC to serve files.
-
-| **XDCC Disadvantages**                                                                                   |
-| -------------------------------------------------------------------------------------------------------- |
-| Requires a centralized indexer/tracker/lister which is subject to censorship and single point of failure |
-| Transfer protocol rather than a complete file sharing solution                                           |
-| No built-in search functionality                                                                         |
-| No incentive to retain data                                                                              |
-
-### Usenet
-
-Usenet is a distributed discussion system since 1980.
-
-| **Usenet Disadvantages**                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------- |
-| Requires a centralized indexer/tracker/lister which is subject to censorship and single point of failure               |
-| Requires subscription and forces user to pay - ( what if only one single file is needed?!)                             |
-| Although Usenet providers retain data, it still lacks the incentive mechanism which motivates them to retain even more |
-
-### BitTorrent
-
-BitTorrent is a peer-to-peer file-sharing protocol that requires a client and trackers/DHT.
-
-| **BitTorrent Disadvantages**                                                                              |
-| --------------------------------------------------------------------------------------------------------- |
-| Requires a centralized indexer/tracker/lister which is subject to censorship and single point of failure  |
-| Inactive Torrents without seeders/Lack of incentive mechanism to reward peers for seeding                 |
-| IP addresses are completely exposed. Anyone can see what user is downloading and uploading                |
-| (Optional) Requires additional VPN and proxy services which are paid services, to solve the above problem |
-| Penalty by ISPs for downloading files, usually require users to pay up to USD 200 - USD 5000              |
-| Unstable download/upload speed                                                                            |
-
-### Cyberlocker / Filehoster
-
-A cyberlocker is a third-party online service that provides file-storing and file-sharing services.
-
-| **Cyberlocker / Filehoster Disadvantages**                                                               |
-| -------------------------------------------------------------------------------------------------------- |
-| Requires a centralized indexer/tracker/lister which is subject to censorship and single point of failure |
-| The Filehoster on its own is subject to censorship. (e.g megaupload was shut down by DOJ)                |
-| Requires subscription and premium upgrades - ( what if only one single file is needed?!)                 |
-| Extremely slow speeds which force users to pay for premium account                                       |
-| Inactive files are deleted after a few months / Lack of incentive mechanism                              |
-
 ## FileFileGo Components
 
 ![](docs/images/ffg_design.png "Design")
 
 ### Features
 
-FileFileGo is a decentralized network that incorporates the robustness of Usenet, Blockchain/Cryptocurrency, DHT, and BitTorrent's innovative technology to form an unassailable infrastructure that cannot be censored or taken down by Internet Service Providers (ISPs).
+FileFileGo is a decentralized network that incorporates the robustness of Blockchain/Cryptocurrency, DHT, and BitTorrent's innovative technology to form an unassailable infrastructure.
 
-- The platform employs Blockchain technology for indexing, tracking, and other network metadata and logic, ensuring a secure and efficient system. 
+- The platform employs Blockchain technology for indexing and other network metadata and logic, ensuring a secure and efficient system. 
 - Encrypted traffic protects user data from third-party traffic inspection, while a privacy-centric design relays traffic through a set of intermediate peers. 
 - The peer-to-peer design replicates the network's state on each full node, enhancing data reliability.
 - The network's native cryptocurrency serves as the "fuel" and guarantees an extremely low and conditional transaction fee compared to Ethereum/Bitcoin. 
