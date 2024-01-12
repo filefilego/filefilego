@@ -376,7 +376,7 @@ func (s *Storage) ExportFiles() ([]FileMetadataWithDBKey, error) {
 	return items, nil
 }
 
-// ImportFiles gets all the uploaded files list
+// ImportFiles gets all the uploaded files list.
 func (s *Storage) ImportFiles(importedFile string) (int, error) {
 	data, err := os.ReadFile(importedFile)
 	if err != nil {

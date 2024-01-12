@@ -26,9 +26,11 @@ import (
 )
 
 const (
+	lastBlockPrefix = "last_block"
+
+	// leveldb key prefixes
 	addressPrefix             = "ad"
 	blockPrefix               = "bl"
-	lastBlockPrefix           = "last_block"
 	blockNumberPrefix         = "bn"
 	addressTransactionPrefix  = "atx"
 	transactionPrefix         = "tx"

@@ -334,8 +334,6 @@ func TestNodeMethods(t *testing.T) {
 	// GetPeerID
 	pid1 := n1.GetPeerID()
 
-	// ConnectToPeerWithMultiaddr
-
 	// invalid multiAddr
 	_, err = n2.ConnectToPeerWithMultiaddr(context.Background(), &multiaddr.Component{})
 	assert.EqualError(t, err, "failed to get info from p2p addr: invalid p2p multiaddr")
