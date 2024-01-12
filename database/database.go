@@ -11,6 +11,7 @@ import (
 )
 
 // DBPutGetDeleter represents a database engine.
+// TODO: refactor the logic with Database they are almost the same
 type DBPutGetDeleter interface {
 	Get(key []byte, ro *opt.ReadOptions) (value []byte, err error)
 	Put(key, value []byte, wo *opt.WriteOptions) error

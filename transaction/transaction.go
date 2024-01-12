@@ -17,6 +17,7 @@ import (
 // ChainID represents the main-net chain id.
 const ChainID = "0x01"
 
+// the payload size inside a transaction.Data
 const maxTransactionDataSizeBytes = 300000
 
 // Transaction represents a transaction.

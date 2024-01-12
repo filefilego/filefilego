@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewBleeveSearch(t *testing.T) {
+func TestNewBleveSearch(t *testing.T) {
 	t.Cleanup(func() {
 		os.RemoveAll("db.bin")
 	})
@@ -31,7 +31,7 @@ func TestNewBleeveSearch(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestNewBleeveIndex(t *testing.T) {
+func TestNewBleveIndex(t *testing.T) {
 	bleveEngine, err := NewBleveSearch("indexable.bin")
 	assert.Nil(t, err)
 	assert.NotNil(t, bleveEngine)
@@ -42,7 +42,7 @@ func TestNewBleeveIndex(t *testing.T) {
 	indexItem(t, bleveEngine)
 }
 
-func TestBleeveSearch(t *testing.T) {
+func TestBleeeSearch(t *testing.T) {
 	bleveEngine, err := NewBleveSearch("search.bin")
 	assert.Nil(t, err)
 	t.Cleanup(func() {

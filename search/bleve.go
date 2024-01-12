@@ -12,12 +12,12 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
-// NewBleeveSearch is used to represent internals of bleve.
+// NewBleveSearch is used to represent internals of bleve.
 type BleveSearch struct {
 	index bleve.Index
 }
 
-// NewBleeveSearch constructs a new bleeve search engine.
+// NewBleveSearch constructs a new bleve search engine.
 func NewBleveSearch(dbPath string) (*BleveSearch, error) {
 	var index bleve.Index
 	var err error

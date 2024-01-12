@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	// KDF parameters
 	nameKDF      = "scrypt"
 	scryptKeyLen = 32
 	scryptN      = 1 << 18

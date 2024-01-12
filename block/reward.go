@@ -7,8 +7,10 @@ import (
 	"github.com/filefilego/filefilego/common/currency"
 )
 
+// initia reward
 const initialBlockReward = "40"
 
+// estimation of total number of blocks per year
 const totalNumberOfBlocksPerYear = 3153600
 
 // GetReward returns the correct reward for a given block number.
@@ -30,23 +32,3 @@ func GetReward(blockNumber uint64) (*big.Int, error) {
 	}
 	return ffgCurrency, nil
 }
-
-// CalculateReward prints the estimated supply emission.
-// func CalculateReward() {
-// 	// 500 Million
-// 	totalCoins := float64(500 * 1000000)
-// 	blocksPerYear := float64(3153600)
-// 	reward := float64(40)
-// 	totalCoinMined := float64(0)
-// 	for i := 0; i <= 100; i++ {
-// 		if i != 0 {
-// 			if i%2 == 0 {
-// 				reward /= 2
-// 			}
-// 		}
-// 		totalCoinMined += blocksPerYear * reward
-// 		totalCoins -= (blocksPerYear * reward)
-// 		fmt.Printf("total coins left in year: %d with reward: %f : %f === total coin mined: %f\n", i+1, reward, totalCoins, totalCoinMined)
-// 	}
-// 	fmt.Println("total coins left: ", totalCoins)
-// }
