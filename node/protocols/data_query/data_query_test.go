@@ -68,7 +68,7 @@ func TestDataQueryProtocol(t *testing.T) {
 		Timestamp:             time.Now().Unix(),
 		PublicKey:             pkbytes,
 		HashDataQueryRequest:  hashOfReq,
-		FromPeerAddr:          h1.ID().Pretty(),
+		FromPeerAddr:          h1.ID().String(),
 	}
 
 	dqr := messages.ToDataQueryResponse(&pmsg)
