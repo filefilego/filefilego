@@ -5,7 +5,6 @@ import "transaction/transaction.proto";
 
 option go_package = "github.com/filefilego/filefilego/block";
 
-
 // ProtoBlock is the proto representation of a block.
 message ProtoBlock {
     // hash represents the block hash.

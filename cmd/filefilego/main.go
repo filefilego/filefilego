@@ -60,7 +60,7 @@ const (
 	blockValidatorIntervalSeconds        = 10
 	syncIntervalSeconds                  = 18
 	purgeContractStoreIntervalSeconds    = 60 * 60
-	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 5
+	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 7 // 7 days
 	triggerSyncSinceLastUpdateSeconds    = 15
 	purgeDataQueryReqsIntervalSeconds    = 30
 	RPCBodySize                          = 1024 * 290 // 290 KB

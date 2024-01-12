@@ -143,6 +143,9 @@ func CreateAddress(ctx *cli.Context) error {
 func GetAddressInfo(ctx *cli.Context) error {
 	keyPath := ctx.Args().Get(0)
 	passphrase := ctx.Args().Get(1)
+	if passphrase == "" {
+		return errors.New("passphrase is empty")
+	}
 
 	data, err := os.ReadFile(keyPath)
 	if err != nil {

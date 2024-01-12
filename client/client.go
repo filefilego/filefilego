@@ -86,7 +86,6 @@ func (cli *Client) buildRequest(ctx context.Context, method, path string, body i
 		req.Header.Set(k, v)
 	}
 
-	// set the supplied headers
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}

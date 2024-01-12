@@ -120,6 +120,11 @@ type persistedData struct {
 	PausedContractFilesDownload map[string]bool
 }
 
+type contractTime struct {
+	contractHash string
+	timestamp    int64
+}
+
 // New constructs a contract store.
 func New(db database.Database) (*Store, error) {
 	if db == nil {
@@ -176,11 +181,6 @@ func (c *Store) SetContractFileDownloadContexts(key string, ctxData ContextFileD
 
 	cfDownloadContexts = append(cfDownloadContexts, ctxData)
 	c.contractfileDownloadContxts[key] = cfDownloadContexts
-}
-
-type contractTime struct {
-	contractHash string
-	timestamp    int64
 }
 
 // PurgeInactiveContracts removes inactive contracts
