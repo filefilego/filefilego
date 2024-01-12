@@ -329,7 +329,7 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	fileContract := &messages.DownloadContractProto{
 		FileHosterResponse: &messages.DataQueryResponseProto{
-			FromPeerAddr:         h1.ID().Pretty(),
+			FromPeerAddr:         h1.ID().String(),
 			FeesPerByte:          "0x2",      // this is the nodes global fee which is 2 per byte
 			HashDataQueryRequest: []byte{12}, // this is just a placeholder
 			PublicKey:            h1PublicKeyBytes,

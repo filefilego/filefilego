@@ -77,7 +77,7 @@ func TestStorageProtocol(t *testing.T) {
 	assert.NoError(t, err)
 
 	response := &messages.StorageQueryResponseProto{
-		StorageProviderPeerAddr: h1.ID().Pretty(),
+		StorageProviderPeerAddr: h1.ID().String(),
 		Location:                "US",
 		FeesPerByte:             "0x01",
 		PublicKey:               pubKeyBytes,

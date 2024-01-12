@@ -318,9 +318,9 @@ func (n *Node) DiscoverPeers(ctx context.Context, ns string) error {
 			continue
 		}
 		if err := n.host.Connect(ctx, peer); err != nil {
-			log.Warnf("failed connecting to %s with error: %v", peer.ID.Pretty(), err)
+			log.Warnf("failed connecting to %s with error: %v", peer.ID.String(), err)
 		} else {
-			log.Info("connected to: ", peer.ID.Pretty())
+			log.Info("connected to: ", peer.ID.String())
 		}
 	}
 	return nil
