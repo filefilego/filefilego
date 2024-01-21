@@ -40,7 +40,7 @@ const (
 
 // map the following rpc names to our internal rpc
 var methodMapping = map[string]string{
-	"eth_chainId":             "eth.ChainId",
+	"eth_chainId":             "eth.ChainID",
 	"eth_blockNumber":         "eth.BlockNumber",
 	"eth_getBalance":          "eth.GetBalance",
 	"eth_getBlockByNumber":    "eth.GetBlockByNumber",

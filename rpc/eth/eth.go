@@ -6,19 +6,19 @@ import (
 
 type EmptyArgs struct{}
 
-// EthAPI represents eth service
-type EthAPI struct{}
+// API represents eth service
+type API struct{}
 
 // ChainIDResponse is a key unlock response.
 type ChainIDResponse string
 
-// NewAddressAPI creates a new address API to be served using JSONRPC.
-func NewEthAPI() (*EthAPI, error) {
-	return &EthAPI{}, nil
+// NewAPI creates a new address API to be served using JSONRPC.
+func NewAPI() (*API, error) {
+	return &API{}, nil
 }
 
-// ChainId returns chain id.
-func (api *EthAPI) ChainId(_ *http.Request, _ *EmptyArgs, response *ChainIDResponse) error {
+// ChainID returns chain id.
+func (api *API) ChainID(_ *http.Request, _ *EmptyArgs, response *ChainIDResponse) error {
 	*response = "0x1"
 	return nil
 }
