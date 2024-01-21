@@ -111,7 +111,7 @@ type EstimateGasArgs struct {
 }
 
 // EstimateGas returns the estimated gas.
-func (api *API) EstimateGas(_ *http.Request, args *EstimateGasArgs, response *EstimateGasResponse) error {
+func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
 	*response = EstimateGasResponse(estimatedGas)
 	return nil
 }
