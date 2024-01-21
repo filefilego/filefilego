@@ -416,7 +416,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if common.Contains(conf.RPC.EnabledServices, internalrpc.EthServiceNamespace) {
-		ethAPI, err := internalethrpc.NewAPI()
+		ethAPI, err := internalethrpc.NewAPI(bchain, common.GlobalUniqueChainID)
 		if err != nil {
 			return fmt.Errorf("failed to setup eth rpc api: %w", err)
 		}

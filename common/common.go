@@ -111,5 +111,5 @@ func Contains(elements []string, el string) bool {
 	return false
 }
 
-// ChainID represents the main-net chain id.
-const ChainID = "0x01"
+// GlobalUniqueChainID represents the main-net chain id for FFG network.
+const GlobalUniqueChainID = "0x1"

@@ -260,24 +260,6 @@ func TestProtoTransactionFunctions(t *testing.T) {
 	assert.Equal(t, *tx, derviedTx)
 }
 
-func TestMarshalUnmarshalProtoTransaction(t *testing.T) {
-	tx := validTransaction(t)
-	assert.NotNil(t, tx)
-	ptx := ToProtoTransaction(*tx)
-	assert.NotNil(t, ptx)
-
-	// marshal
-	ptxData, err := MarshalProtoTransaction(ptx)
-	assert.NoError(t, err)
-	assert.NotNil(t, ptxData)
-
-	// unmarshal
-	derivedTx, err := UnmarshalProtoBlock(ptxData)
-	assert.NoError(t, err)
-	assert.NotNil(t, derivedTx)
-	equalTransactions(ptx, derivedTx, t)
-}
-
 func TestEquals(t *testing.T) {
 	tx := *validTransaction(t)
 	assert.NotNil(t, tx)
@@ -298,20 +280,6 @@ func TestEquals(t *testing.T) {
 	ok, err = tx3.Equals(tx2)
 	assert.EqualError(t, err, "publicKey is empty")
 	assert.False(t, ok)
-}
-
-func equalTransactions(ptx, derivedTx *ProtoTransaction, t *testing.T) {
-	assert.ElementsMatch(t, ptx.Data, derivedTx.Data)
-	assert.ElementsMatch(t, ptx.Hash, derivedTx.Hash)
-	assert.ElementsMatch(t, ptx.Signature, derivedTx.Signature)
-	assert.ElementsMatch(t, ptx.Nounce, derivedTx.Nounce)
-	assert.ElementsMatch(t, ptx.PublicKey, derivedTx.PublicKey)
-	assert.ElementsMatch(t, ptx.Chain, derivedTx.Chain)
-
-	assert.Equal(t, ptx.From, derivedTx.From)
-	assert.Equal(t, ptx.To, derivedTx.To)
-	assert.Equal(t, ptx.Value, derivedTx.Value)
-	assert.Equal(t, ptx.TransactionFees, derivedTx.TransactionFees)
 }
 
 func validTransaction(t *testing.T) *Transaction {

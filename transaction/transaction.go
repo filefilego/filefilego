@@ -11,13 +11,11 @@ import (
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"google.golang.org/protobuf/proto"
 )
 
 // ChainID represents the main-net chain id.
 const ChainID = "0x01"
 
-// the payload size inside a transaction.Data
 const maxTransactionDataSizeBytes = 300000
 
 // Transaction represents a transaction.
@@ -38,7 +36,7 @@ type Transaction struct {
 }
 
 // Serialize the transaction to bytes.
-func (tx Transaction) Serialize() ([]byte, error) {
+func (tx Transaction) serialize() ([]byte, error) {
 	mainChain, err := hexutil.Decode(ChainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
@@ -86,7 +84,7 @@ func (tx Transaction) Serialize() ([]byte, error) {
 
 // CalculateHash gets a hash of a transaction.
 func (tx Transaction) CalculateHash() ([]byte, error) {
-	data, err := tx.Serialize()
+	data, err := tx.serialize()
 	if err != nil {
 		return nil, err
 	}
@@ -100,12 +98,12 @@ func (tx Transaction) CalculateHash() ([]byte, error) {
 
 // Equals tests for equality of two Contents.
 func (tx Transaction) Equals(other merkletree.Content) (bool, error) {
-	data, err := tx.Serialize()
+	data, err := tx.serialize()
 	if err != nil {
 		return false, err
 	}
 
-	dataOther, err := other.(Transaction).Serialize()
+	dataOther, err := other.(Transaction).serialize()
 	if err != nil {
 		return false, err
 	}
@@ -286,22 +284,4 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
 	copy(tx.Chain, ptx.Chain)
 
 	return tx
-}
-
-// MarshalProtoTransaction serializes a block to a protobuf message.
-func MarshalProtoTransaction(tx *ProtoTransaction) ([]byte, error) {
-	txData, err := proto.Marshal(tx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal transaction: %w", err)
-	}
-	return txData, nil
-}
-
-// UnmarshalProtoBlock unserializes a byte array to a protobuf transaction.
-func UnmarshalProtoBlock(data []byte) (*ProtoTransaction, error) {
-	tx := ProtoTransaction{}
-	if err := proto.Unmarshal(data, &tx); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal a transaction: %w", err)
-	}
-	return &tx, nil
 }

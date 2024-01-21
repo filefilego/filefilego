@@ -43,12 +43,12 @@ var methodMapping = map[string]string{
 	"eth_chainId":             "eth.ChainID",
 	"eth_blockNumber":         "eth.BlockNumber",
 	"eth_getBalance":          "eth.GetBalance",
-	"eth_getBlockByNumber":    "eth.GetBlockByNumber",
 	"net_version":             "eth.Version",
 	"eth_gasPrice":            "eth.GasPrice",
-	"eth_getCode":             "eth.GetCode",
 	"eth_estimateGas":         "eth.EstimateGas",
 	"eth_getTransactionCount": "eth.GetTransactionCount",
+	"eth_getCode":             "eth.GetCode",
+	"eth_getBlockByNumber":    "eth.GetBlockByNumber",
 	"eth_sendRawTransaction":  "eth.SendRawTransaction",
 }
 
@@ -73,6 +73,7 @@ func InspectValidateCall(handler http.Handler, disAllowedRPCMethods []string) ht
 			return
 		}
 
+		// convert the method names to support method names
 		if method, ok := requestData["method"].(string); ok {
 			if common.Contains(disAllowedRPCMethods, method) {
 				http.Error(w, "method not allowed", http.StatusBadRequest)

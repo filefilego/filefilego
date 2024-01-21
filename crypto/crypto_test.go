@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -143,6 +145,20 @@ func TestSha1File(t *testing.T) {
 	hash, err := Sha1File(filePath)
 	assert.NoError(t, err)
 	assert.Equal(t, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", hash)
+}
+
+func TestPrivateKeyToEthPrivate(t *testing.T) {
+	kp, err := GenerateKeyPair()
+	assert.NoError(t, err)
+	pkBytes, err := kp.PrivateKey.Raw()
+	assert.NoError(t, err)
+	ethPriv, err := PrivateKeyToEthPrivate(pkBytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, ethPriv)
+	// get the underlying bytes and compare to the original
+	ethPkBytes := ethcrypto.FromECDSA(ethPriv)
+	assert.NotEmpty(t, ethPkBytes)
+	assert.EqualValues(t, ethPkBytes, pkBytes)
 }
 
 func writeToFile(data []byte, filePath string) (string, error) {
