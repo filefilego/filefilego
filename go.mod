@@ -20,7 +20,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/multiformats/go-multiaddr v0.12.1
 	github.com/oschwald/geoip2-golang v1.9.0
-	github.com/rodaine/table v1.1.0
+	github.com/rodaine/table v1.1.1
 	github.com/schollz/progressbar/v3 v3.14.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
@@ -108,7 +108,6 @@ require (
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/miekg/dns v1.1.57 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
