@@ -187,7 +187,13 @@ func TestRawPublicToEthAddress(t *testing.T) {
 
 func TestVerifySignature(t *testing.T) {
 	sig := testsig[:len(testsig)-1] // remove recovery id
+
+	// public key compressed
 	ok := ethcrypto.VerifySignature(testpubkeyc, testmsg, sig)
+	assert.True(t, ok)
+
+	// public key uncompressed
+	ok = ethcrypto.VerifySignature(testpubkey, testmsg, sig)
 	assert.True(t, ok)
 }
 
