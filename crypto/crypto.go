@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 
 	// nolint:gosec
 	"crypto/sha1"
@@ -13,11 +14,15 @@ import (
 	"os"
 
 	"github.com/cespare/xxhash"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/crypto/sha3"
 )
+
+// AddressLength represents the length of an address.
+const AddressLength = 20
 
 // KeyPair represents a private, publick key and the address.
 type KeyPair struct {
@@ -124,6 +129,42 @@ func RawPublicToAddressBytes(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return keccacBytes[12:], nil
+}
+
+// RawCompressedPublicToEthAddress returns the address of the public key in eth compatible.
+func RawCompressedPublicToEthAddress(data []byte) (string, error) {
+	pubKey, err := secp256k1.ParsePubKey(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse public key: %w", err)
+	}
+
+	uncompressedPubKey := pubKey.SerializeUncompressed()
+	addressBytes, err := RawPublicToAddressBytes(uncompressedPubKey[1:])
+	if err != nil {
+		return "", fmt.Errorf("failed to get address bytes: %w", err)
+	}
+
+	var cbuf [AddressLength*2 + 2]byte
+	copy(cbuf[:2], "0x")
+	hex.Encode(cbuf[2:], addressBytes)
+	buf := cbuf[:]
+
+	sha := sha3.NewLegacyKeccak256()
+	sha.Write(buf[2:])
+	hash := sha.Sum(nil)
+	for i := 2; i < len(buf); i++ {
+		hashByte := hash[(i-2)/2]
+		if i%2 == 0 {
+			hashByte >>= 4
+		} else {
+			hashByte &= 0xf
+		}
+		if buf[i] > '9' && hashByte > 7 {
+			buf[i] -= 32
+		}
+	}
+
+	return string(buf), nil
 }
 
 // Sha1File performs a sha1 hash on a file

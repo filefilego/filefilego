@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	testmsg, _     = hexutil.Decode("0xce0677bb30baa8cf067c88db9811f4333d131bf8bcf12fe7065d211dce971008")
+	testsig, _     = hexutil.Decode("0x90f27b8b488db00b00606796d2987f6a5f59ae62ea05effe84fef5b8b0e549984a691139ad57a3f0b906637673aa2f63d1f55cb1a69199d4009eea23ceaddc9301")
+	testpubkey, _  = hexutil.Decode("0x04e32df42865e97135acfb65f3bae71bdc86f4d49150ad6a440b6f15878109880a0a2b2667f7e725ceea70c673093bf67663e0312623c8e091b13cf2c0f11ef652")
+	testpubkeyc, _ = hexutil.Decode("0x02e32df42865e97135acfb65f3bae71bdc86f4d49150ad6a440b6f15878109880a")
+)
+
 func TestGenerateKeyPair(t *testing.T) {
 	keyPair, err := GenerateKeyPair()
 	assert.NoError(t, err)
@@ -159,6 +166,29 @@ func TestPrivateKeyToEthPrivate(t *testing.T) {
 	ethPkBytes := ethcrypto.FromECDSA(ethPriv)
 	assert.NotEmpty(t, ethPkBytes)
 	assert.EqualValues(t, ethPkBytes, pkBytes)
+}
+
+func TestRawPublicToEthAddress(t *testing.T) {
+	testAddrHex := "0x96233bcC823159C3c08EB76a24E98F20CE7d48DE"
+	testPrivHex := "ef66677e9aef9396d991fa876c33265921a09a31c717d48636abd7f99a45d0b5"
+
+	pkbytes, err := hexutil.DecodeNoPrefix(testPrivHex)
+	assert.NoError(t, err)
+	pkey, err := RestorePrivateKey(pkbytes)
+	assert.NoError(t, err)
+
+	rawBytes, err := pkey.GetPublic().Raw()
+	assert.NoError(t, err)
+
+	derivedEthAddr, err := RawCompressedPublicToEthAddress(rawBytes)
+	assert.NoError(t, err)
+	assert.Equal(t, testAddrHex, derivedEthAddr)
+}
+
+func TestVerifySignature(t *testing.T) {
+	sig := testsig[:len(testsig)-1] // remove recovery id
+	ok := ethcrypto.VerifySignature(testpubkeyc, testmsg, sig)
+	assert.True(t, ok)
 }
 
 func writeToFile(data []byte, filePath string) (string, error) {
