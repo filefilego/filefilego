@@ -268,7 +268,7 @@ func (b *Blockchain) indexBlockTransactions(validBlock block.Block) error {
 	binary.BigEndian.PutUint64(blockNumberBytes, validBlock.Number)
 	batch := new(leveldb.Batch)
 	for _, v := range validBlock.Transactions {
-		prefixWithTransactionHash := append([]byte(transactionPrefix), v.Hash...)
+		prefixWithTransactionHash := append([]byte(transactionPrefix), v.Hash()...)
 		batch.Put(append(prefixWithTransactionHash, blockNumberBytes...), []byte{})
 	}
 	err := b.db.Write(batch, nil)
@@ -306,7 +306,7 @@ func (b *Blockchain) GetTransactionByHash(hash []byte) ([]transaction.Transactio
 		}
 
 		for _, tx := range block.Transactions {
-			if bytes.Equal(hash, tx.Hash) {
+			if bytes.Equal(hash, tx.Hash()) {
 				transactions = append(transactions, tx)
 			}
 		}
@@ -330,8 +330,8 @@ func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error 
 		indexBytes := make([]byte, 8)
 		binary.BigEndian.PutUint64(indexBytes, uint64(i))
 
-		fromAddr, _ := hexutil.Decode(v.From)
-		toAddr, _ := hexutil.Decode(v.To)
+		fromAddr, _ := hexutil.Decode(v.From())
+		toAddr, _ := hexutil.Decode(v.To())
 
 		prefixWithFromAddress := append([]byte(addressTransactionPrefix), fromAddr...)
 		prefixWithToAddress := append([]byte(addressTransactionPrefix), toAddr...)
@@ -341,8 +341,8 @@ func (b *Blockchain) indexTransactionsByAddresses(validBlock block.Block) error 
 		// nolint:gocritic
 		prefixWithToAddressBlocknumber := append(prefixWithToAddress, blockNumberBytes...)
 
-		batch.Put(append(prefixWithFromAddressBlocknumber, indexBytes...), v.Hash)
-		batch.Put(append(prefixWithToAddressBlocknumber, indexBytes...), v.Hash)
+		batch.Put(append(prefixWithFromAddressBlocknumber, indexBytes...), v.Hash())
+		batch.Put(append(prefixWithToAddressBlocknumber, indexBytes...), v.Hash())
 	}
 	err := b.db.Write(batch, nil)
 	if err != nil {
@@ -595,12 +595,12 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 	if err != nil || !ok {
 		return fmt.Errorf("failed to validate transaction: %w", err)
 	}
-	txFees, err := hexutil.DecodeBig(transaction.TransactionFees)
+	txFees, err := hexutil.DecodeBig(transaction.TransactionFees())
 	if err != nil {
 		return fmt.Errorf("failed to decode transaction fees: %w", err)
 	}
 
-	fromAddrBytes, err := hexutil.Decode(transaction.From)
+	fromAddrBytes, err := hexutil.Decode(transaction.From())
 	if err != nil {
 		return fmt.Errorf("failed to decode from address: %w", err)
 	}
@@ -622,12 +622,12 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 
 	// if not coinbase tx, then subtract the amount from the account
 	if !isCoinbase {
-		fromAddressNounceTX := hexutil.DecodeBigFromBytesToUint64(transaction.Nounce)
+		fromAddressNounceTX := hexutil.DecodeBigFromBytesToUint64(transaction.Nounce())
 		if fromAddressNounceTX != fromAddressNounceDB+1 {
 			return fmt.Errorf("the nounce %d in transaction is not the next nounce of database value: %d", fromAddressNounceTX, fromAddressNounceDB)
 		}
 
-		txValue, err := hexutil.DecodeBig(transaction.Value)
+		txValue, err := hexutil.DecodeBig(transaction.Value())
 		if err != nil {
 			return fmt.Errorf("failed to decode transaction value: %w", err)
 		}
@@ -639,12 +639,12 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 		}
 	}
 
-	toAddrBytes, err := hexutil.Decode(transaction.To)
+	toAddrBytes, err := hexutil.Decode(transaction.To())
 	if err != nil {
 		return fmt.Errorf("failed to decode to address: %w", err)
 	}
 
-	txValue, err := hexutil.DecodeBig(transaction.Value)
+	txValue, err := hexutil.DecodeBig(transaction.Value())
 	if err != nil {
 		return fmt.Errorf("failed to decode transaction value: %w", err)
 	}
@@ -673,7 +673,7 @@ func (b *Blockchain) PerformAddressStateUpdate(transaction transaction.Transacti
 // if failed then just return without any error.
 func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transaction) error {
 	dataPayload := transaction.DataPayload{}
-	err := proto.Unmarshal(tx.Data, &dataPayload)
+	err := proto.Unmarshal(tx.Data(), &dataPayload)
 	if err != nil {
 		return nil
 	}
@@ -687,7 +687,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 		}
 
 		for _, v := range downloadContracts.Contracts {
-			err = b.saveContractFromTransactionDataPayload(v, tx.Hash)
+			err = b.saveContractFromTransactionDataPayload(v, tx.Hash())
 			if err != nil {
 				return fmt.Errorf("failed to save contract in db: %w", err)
 			}
@@ -705,7 +705,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 		}
 
 		for _, v := range downloadContracts.Contracts {
-			err = b.releaseFeesContractFromTransactionDataPayload(v, tx.Hash)
+			err = b.releaseFeesContractFromTransactionDataPayload(v, tx.Hash())
 			if err != nil {
 				return fmt.Errorf("failed to save release fees contract in db: %w", err)
 			}
@@ -721,7 +721,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return nil
 		}
 
-		txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+		txFees, err := hexutil.DecodeBig(tx.TransactionFees())
 		if err != nil {
 			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
 		}
@@ -731,7 +731,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return fmt.Errorf("total cost of channel update actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
 		}
 
-		fromBytes, _ := hexutil.Decode(tx.From)
+		fromBytes, _ := hexutil.Decode(tx.From())
 		for _, node := range nodesEnvelope.Nodes {
 			itemFound, err := b.GetNodeItem(node.NodeHash)
 			if err != nil {
@@ -862,7 +862,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return nil
 		}
 
-		txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+		txFees, err := hexutil.DecodeBig(tx.TransactionFees())
 		if err != nil {
 			return fmt.Errorf("failed to get the transaction fee value while updating tx data payload: %w", err)
 		}
@@ -872,7 +872,7 @@ func (b *Blockchain) performStateUpdateFromDataPayload(tx *transaction.Transacti
 			return fmt.Errorf("total cost of channel actions (%s) are higher than the supplied transaction fee (%s)", totalActionsFees.Text(10), txFees.Text(10))
 		}
 
-		fromBytes, _ := hexutil.Decode(tx.From)
+		fromBytes, _ := hexutil.Decode(tx.From())
 		for _, node := range nodesEnvelope.Nodes {
 			node.Enabled = true
 			node.Owner = fromBytes
@@ -1033,13 +1033,14 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 		return fmt.Errorf("failed to get/validate coinbase transaction: %w", err)
 	}
 
-	verifierAddr, err := crypto.RawPublicToAddressBytes(coinbaseTx.PublicKey)
+	verifierAddr, err := crypto.RawPublicToAddressBytes(coinbaseTx.PublicKey())
 	if err != nil {
 		return fmt.Errorf("failed to get address of verifier: %w", err)
 	}
 
 	for _, tx := range validBlock.Transactions {
-		isCoinbase, err := coinbaseTx.Equals(tx)
+		tx := tx
+		isCoinbase, err := coinbaseTx.Equals(&tx)
 		if err != nil {
 			return fmt.Errorf("failed to compare coinbase transaction: %w", err)
 		}
@@ -1102,8 +1103,8 @@ func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
 
 	tmp := uint64(0)
 	for _, v := range b.memPool {
-		if v.From == hexutil.Encode(address) {
-			nounce := hexutil.DecodeBigFromBytesToUint64(v.Nounce)
+		if v.From() == hexutil.Encode(address) {
+			nounce := hexutil.DecodeBigFromBytesToUint64(v.Nounce())
 			if nounce > tmp {
 				tmp = nounce
 			}
@@ -1121,12 +1122,12 @@ func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 	for idx, transaction := range b.memPool {
 		// transaction is already in mempool with this nounce
 		// pick the one with higher fee
-		if bytes.Equal(transaction.Nounce, tx.Nounce) && transaction.From == tx.From {
-			txFees, err := hexutil.DecodeBig(tx.TransactionFees)
+		if bytes.Equal(transaction.Nounce(), tx.Nounce()) && transaction.From() == tx.From() {
+			txFees, err := hexutil.DecodeBig(tx.TransactionFees())
 			if err != nil {
 				return fmt.Errorf("failed to decode transaction fees: %w", err)
 			}
-			txFeesInMempool, err := hexutil.DecodeBig(transaction.TransactionFees)
+			txFeesInMempool, err := hexutil.DecodeBig(transaction.TransactionFees())
 			if err != nil {
 				return fmt.Errorf("failed to decode transaction fees from mempool: %w", err)
 			}
@@ -1138,7 +1139,7 @@ func (b *Blockchain) PutMemPool(tx transaction.Transaction) error {
 		}
 	}
 
-	txHash := hexutil.Encode(tx.Hash)
+	txHash := hexutil.Encode(tx.Hash())
 	b.memPool[txHash] = tx
 	return nil
 }
@@ -1148,7 +1149,7 @@ func (b *Blockchain) DeleteFromMemPool(tx transaction.Transaction) error {
 	b.tmu.Lock()
 	defer b.tmu.Unlock()
 
-	txHash := hexutil.Encode(tx.Hash)
+	txHash := hexutil.Encode(tx.Hash())
 	delete(b.memPool, txHash)
 	return nil
 }

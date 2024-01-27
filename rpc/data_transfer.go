@@ -1518,16 +1518,8 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 
 		totalFees := currency.FFGZero().Add(fileHosterFees, verifierFees)
 		allTransactionFess = allTransactionFess.Add(allTransactionFess, totalFees)
-		tx := transaction.Transaction{
-			PublicKey:       publicKeyOfTxSigner,
-			Nounce:          hexutil.EncodeUint64ToBytes(currentNounce),
-			Data:            txPayloadBytes,
-			From:            key.Key.Address,
-			To:              dataverifierAddr,
-			Value:           hexutil.EncodeBig(totalFees),
-			TransactionFees: hexutil.EncodeBig(transactionFees),
-			Chain:           mainChain,
-		}
+		tx := transaction.NewTransaction(publicKeyOfTxSigner, hexutil.EncodeUint64ToBytes(currentNounce), txPayloadBytes, key.Key.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), hexutil.EncodeBig(transactionFees), mainChain)
+
 		err = tx.Sign(key.Key.PrivateKey)
 		if err != nil {
 			return fmt.Errorf("failed to sign the transaction with data contract inside: %w", err)
@@ -1537,15 +1529,15 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 			return fmt.Errorf("failed to validate transaction: %w", err)
 		}
 		JSONTx := JSONTransaction{
-			Hash:            hexutil.Encode(tx.Hash),
-			Signature:       hexutil.Encode(tx.Signature),
-			PublicKey:       hexutil.Encode(tx.PublicKey),
-			Nounce:          hexutil.EncodeUint64BytesToHexString(tx.Nounce),
-			Data:            hexutil.Encode(tx.Data),
-			From:            tx.From,
-			To:              tx.To,
-			Value:           tx.Value,
-			TransactionFees: tx.TransactionFees,
+			Hash:            hexutil.Encode(tx.Hash()),
+			Signature:       hexutil.Encode(tx.Signature()),
+			PublicKey:       hexutil.Encode(tx.PublicKey()),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(tx.Nounce()),
+			Data:            hexutil.Encode(tx.Data()),
+			From:            tx.From(),
+			To:              tx.To(),
+			Value:           tx.Value(),
+			TransactionFees: tx.TransactionFees(),
 			Chain:           hexutil.Encode(mainChain),
 		}
 

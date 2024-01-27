@@ -112,21 +112,15 @@ func TestValidatorMethods(t *testing.T) {
 
 	chainID, err := hexutil.Decode(transaction.ChainID)
 	assert.NoError(t, err)
-	txCoinbase := transaction.Transaction{
-		PublicKey:       pubKeyBytes,
-		Nounce:          []byte{0},
-		From:            kp.Address,
-		To:              kp.Address,
-		Value:           "0x22b1c8c1227a00000",
-		TransactionFees: "0x0",
-		Chain:           chainID,
-	}
+
+	txCoinbase := transaction.NewTransaction(pubKeyBytes, []byte{0}, []byte{}, kp.Address, kp.Address, "0x22b1c8c1227a00000", "0x0", chainID)
+
 	err = txCoinbase.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
 	newBlock := block.Block{
 		Timestamp:         time.Now().Unix(),
 		PreviousBlockHash: genesisHash,
-		Transactions:      []transaction.Transaction{txCoinbase},
+		Transactions:      []transaction.Transaction{*txCoinbase},
 		Number:            1,
 	}
 
@@ -136,46 +130,23 @@ func TestValidatorMethods(t *testing.T) {
 	err = bchain.PerformStateUpdateFromBlock(newBlock)
 	assert.NoError(t, err)
 
-	tx1 := transaction.Transaction{
-		PublicKey:       pubKeyBytes,
-		Nounce:          []byte{2},
-		From:            kp.Address,
-		To:              kp.Address,
-		Value:           "0x2",
-		TransactionFees: "0x1",
-		Chain:           chainID,
-	}
+	tx1 := transaction.NewTransaction(pubKeyBytes, []byte{2}, []byte{}, kp.Address, kp.Address, "0x2", "0x1", chainID)
+
 	err = tx1.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
-	tx2 := transaction.Transaction{
-		PublicKey:       pubKeyBytes,
-		Nounce:          []byte{1},
-		From:            kp.Address,
-		To:              kp.Address,
-		Value:           "0x2",
-		TransactionFees: "0x1",
-		Chain:           chainID,
-	}
+	tx2 := transaction.NewTransaction(pubKeyBytes, []byte{1}, []byte{}, kp.Address, kp.Address, "0x2", "0x1", chainID)
 	err = tx2.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
 
-	tx3 := transaction.Transaction{
-		PublicKey:       pubKeyBytes,
-		Nounce:          []byte{9},
-		From:            kp.Address,
-		To:              kp.Address,
-		Value:           "0x2",
-		TransactionFees: "0x1",
-		Chain:           chainID,
-	}
+	tx3 := transaction.NewTransaction(pubKeyBytes, []byte{9}, []byte{}, kp.Address, kp.Address, "0x2", "0x1", chainID)
 	err = tx3.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
 
-	err = bchain.PutMemPool(tx1)
+	err = bchain.PutMemPool(*tx1)
 	assert.NoError(t, err)
-	err = bchain.PutMemPool(tx2)
+	err = bchain.PutMemPool(*tx2)
 	assert.NoError(t, err)
-	err = bchain.PutMemPool(tx3)
+	err = bchain.PutMemPool(*tx3)
 	assert.NoError(t, err)
 	mempooltransactions := bchain.GetTransactionsFromPool()
 	assert.Len(t, mempooltransactions, 3)
@@ -183,8 +154,8 @@ func TestValidatorMethods(t *testing.T) {
 	preparedTransactions := miner.prepareMempoolTransactions()
 	assert.Len(t, preparedTransactions, 2)
 
-	assert.Equal(t, []byte{1}, preparedTransactions[0].Nounce)
-	assert.Equal(t, []byte{2}, preparedTransactions[1].Nounce)
+	assert.Equal(t, []byte{1}, preparedTransactions[0].Nounce())
+	assert.Equal(t, []byte{2}, preparedTransactions[1].Nounce())
 
 	for _, v := range preparedTransactions {
 		err := bchain.DeleteFromMemPool(v)
@@ -193,7 +164,7 @@ func TestValidatorMethods(t *testing.T) {
 
 	mempooltransactions = bchain.GetTransactionsFromPool()
 	assert.Len(t, mempooltransactions, 1)
-	assert.Equal(t, []byte{9}, mempooltransactions[0].Nounce)
+	assert.Equal(t, []byte{9}, mempooltransactions[0].Nounce())
 	assert.Equal(t, uint64(1), bchain.GetHeight())
 
 	// seal a block
@@ -214,61 +185,40 @@ func TestValidatorMethods(t *testing.T) {
 
 func TestSortTransactionsByNounce(t *testing.T) {
 	transactions := []transaction.Transaction{
-		{
-			From:   "0x1",
-			Nounce: []byte{1},
-		},
-		{
-			From:   "0x2",
-			Nounce: []byte{5},
-		},
-		{
-			From:   "0x1",
-			Nounce: []byte{3},
-		},
-		{
-			From:   "0x2",
-			Nounce: []byte{4},
-		},
-		{
-			From:   "0x1",
-			Nounce: []byte{2},
-		},
+		*transaction.NewTransaction(nil, []byte{1}, nil, "0x1", "", "0x1", "0x0", []byte{1}),
+		*transaction.NewTransaction(nil, []byte{5}, nil, "0x2", "", "0x1", "0x0", []byte{1}),
+		*transaction.NewTransaction(nil, []byte{3}, nil, "0x1", "", "0x1", "0x0", []byte{1}),
+		*transaction.NewTransaction(nil, []byte{4}, nil, "0x2", "", "0x1", "0x0", []byte{1}),
+		*transaction.NewTransaction(nil, []byte{2}, nil, "0x1", "", "0x1", "0x0", []byte{1}),
 	}
 
 	sorted := sortTransactionsByNounce(transactions)
 	assert.Len(t, sorted, 5)
-	assert.Equal(t, []byte{1}, sorted[0].Nounce)
-	assert.Equal(t, []byte{2}, sorted[1].Nounce)
-	assert.Equal(t, []byte{3}, sorted[2].Nounce)
-	assert.Equal(t, []byte{4}, sorted[3].Nounce)
-	assert.Equal(t, []byte{5}, sorted[4].Nounce)
+	assert.Equal(t, []byte{1}, sorted[0].Nounce())
+	assert.Equal(t, []byte{2}, sorted[1].Nounce())
+	assert.Equal(t, []byte{3}, sorted[2].Nounce())
+	assert.Equal(t, []byte{4}, sorted[3].Nounce())
+	assert.Equal(t, []byte{5}, sorted[4].Nounce())
 
 	transactions = []transaction.Transaction{
-		{
-			From:   "0x1",
-			Nounce: []byte{1},
-		},
-		{
-			From:   "0x1",
-			Nounce: []byte{5},
-		},
+		*transaction.NewTransaction(nil, []byte{1}, nil, "0x1", "", "0x1", "0x0", []byte{1}),
+		*transaction.NewTransaction(nil, []byte{5}, nil, "0x1", "", "0x1", "0x0", []byte{1}),
 	}
 
 	sorted = sortTransactionsByNounce(transactions)
 	assert.Len(t, sorted, 2)
-	assert.Equal(t, []byte{1}, sorted[0].Nounce)
-	assert.Equal(t, []byte{5}, sorted[1].Nounce)
+	assert.Equal(t, []byte{1}, sorted[0].Nounce())
+	assert.Equal(t, []byte{5}, sorted[1].Nounce())
 }
 
 func TestPrependTransaction(t *testing.T) {
 	transactions := []transaction.Transaction{
-		{From: "0x03"},
+		*transaction.NewTransaction(nil, []byte{1}, nil, "0x3", "", "0x1", "0x0", []byte{1}),
 	}
 	assert.Len(t, transactions, 1)
-	assert.Equal(t, "0x03", transactions[0].From)
-	transactions = prependTransaction(transactions, transaction.Transaction{From: "0x01"})
+	assert.Equal(t, "0x3", transactions[0].From())
+	transactions = prependTransaction(transactions, *transaction.NewTransaction(nil, []byte{1}, nil, "0x1", "", "0x1", "0x0", []byte{1}))
 	assert.Len(t, transactions, 2)
-	assert.Equal(t, "0x01", transactions[0].From)
-	assert.Equal(t, "0x03", transactions[1].From)
+	assert.Equal(t, "0x1", transactions[0].From())
+	assert.Equal(t, "0x3", transactions[1].From())
 }

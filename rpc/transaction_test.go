@@ -153,7 +153,7 @@ func TestTransactionAPIMethods(t *testing.T) {
 	assert.NotEmpty(t, memPoolResponse.TransactionHashes)
 
 	// Receipt
-	receiptArgs := &ReceiptArgs{Hash: hexutil.Encode(validTx.Hash)}
+	receiptArgs := &ReceiptArgs{Hash: hexutil.Encode(validTx.Hash())}
 	transactionsResponse := &TransactionsResponse{}
 	bchain.addressTransactions = []transaction.Transaction{*validTx}
 	bchain.addressTransactionsBlockNumbers = []uint64{5}

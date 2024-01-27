@@ -58,16 +58,16 @@ func (api *BlockAPI) GetByNumber(_ *http.Request, args *GetByNumberArgs, respons
 	response.Transactions = make([]JSONTransaction, len(validBlock.Transactions))
 	for i, v := range validBlock.Transactions {
 		response.Transactions[i] = JSONTransaction{
-			Hash:            hexutil.Encode(v.Hash),
-			Signature:       hexutil.Encode(v.Signature),
-			PublicKey:       hexutil.Encode(v.PublicKey),
-			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce),
-			Data:            hexutil.Encode(v.Data),
-			From:            v.From,
-			To:              v.To,
-			Value:           v.Value,
-			TransactionFees: v.TransactionFees,
-			Chain:           hexutil.Encode(v.Chain),
+			Hash:            hexutil.Encode(v.Hash()),
+			Signature:       hexutil.Encode(v.Signature()),
+			PublicKey:       hexutil.Encode(v.PublicKey()),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce()),
+			Data:            hexutil.Encode(v.Data()),
+			From:            v.From(),
+			To:              v.To(),
+			Value:           v.Value(),
+			TransactionFees: v.TransactionFees(),
+			Chain:           hexutil.Encode(v.Chain()),
 		}
 	}
 
@@ -101,16 +101,16 @@ func (api *BlockAPI) GetByHash(_ *http.Request, args *GetByHashArgs, response *J
 	response.Transactions = make([]JSONTransaction, len(validBlock.Transactions))
 	for i, v := range validBlock.Transactions {
 		response.Transactions[i] = JSONTransaction{
-			Hash:            hexutil.Encode(v.Hash),
-			Signature:       hexutil.Encode(v.Signature),
-			PublicKey:       hexutil.Encode(v.PublicKey),
-			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce),
-			Data:            hexutil.Encode(v.Data),
-			From:            v.From,
-			To:              v.To,
-			Value:           v.Value,
-			TransactionFees: v.TransactionFees,
-			Chain:           hexutil.Encode(v.Chain),
+			Hash:            hexutil.Encode(v.Hash()),
+			Signature:       hexutil.Encode(v.Signature()),
+			PublicKey:       hexutil.Encode(v.PublicKey()),
+			Nounce:          hexutil.EncodeUint64BytesToHexString(v.Nounce()),
+			Data:            hexutil.Encode(v.Data()),
+			From:            v.From(),
+			To:              v.To(),
+			Value:           v.Value(),
+			TransactionFees: v.TransactionFees(),
+			Chain:           hexutil.Encode(v.Chain()),
 		}
 	}
 	return nil

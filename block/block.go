@@ -40,7 +40,7 @@ func (b Block) GetAndValidateCoinbaseTransaction() (transaction.Transaction, err
 	}
 
 	coinbaseTx := b.Transactions[0]
-	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbaseTx.PublicKey)
+	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbaseTx.PublicKey())
 	if err != nil {
 		return transaction.Transaction{}, fmt.Errorf("failed to derive public key from transaction: %w", err)
 	}
@@ -50,12 +50,12 @@ func (b Block) GetAndValidateCoinbaseTransaction() (transaction.Transaction, err
 		return transaction.Transaction{}, fmt.Errorf("coinbase transaction signer doesn't match the block signer: %w", err)
 	}
 
-	coinbaseValue, err := hexutil.DecodeBig(coinbaseTx.Value)
+	coinbaseValue, err := hexutil.DecodeBig(coinbaseTx.Value())
 	if err != nil {
 		return transaction.Transaction{}, fmt.Errorf("failed to decode transaction value %w", err)
 	}
 
-	coinbaseFees, err := hexutil.DecodeBig(coinbaseTx.TransactionFees)
+	coinbaseFees, err := hexutil.DecodeBig(coinbaseTx.TransactionFees())
 	if err != nil {
 		return transaction.Transaction{}, fmt.Errorf("failed to decode transaction fees %w", err)
 	}
@@ -73,7 +73,7 @@ func (b Block) GetAndValidateCoinbaseTransaction() (transaction.Transaction, err
 		return transaction.Transaction{}, fmt.Errorf("invalid block reward in the coinbase transaction, should be: %s given: %s", reward.Text(16), coinbaseValue.Text(16))
 	}
 
-	if hexutil.DecodeBigFromBytesToUint64(coinbaseTx.Nounce) != 0 {
+	if hexutil.DecodeBigFromBytesToUint64(coinbaseTx.Nounce()) != 0 {
 		return transaction.Transaction{}, errors.New("coinbase transactions should have a zero nounce")
 	}
 
@@ -89,7 +89,8 @@ func (b Block) GetMerkleHash() ([]byte, error) {
 	list := make([]merkletree.Content, 0, len(b.Transactions))
 
 	for _, tx := range b.Transactions {
-		list = append(list, tx)
+		tx := tx
+		list = append(list, &tx)
 	}
 
 	tree, err := merkletree.NewTree(list)
@@ -199,7 +200,7 @@ func (b Block) Validate() (bool, error) {
 		return false, fmt.Errorf("failed to get coinbase transaction: %w", err)
 	}
 
-	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbase.PublicKey)
+	pubKey, err := ffgcrypto.PublicKeyFromBytes(coinbase.PublicKey())
 	if err != nil {
 		return false, fmt.Errorf("failed to derive public key from coinbase transaction: %w", err)
 	}
@@ -218,7 +219,7 @@ func (b Block) Validate() (bool, error) {
 		return false, errors.New("block is altered and doesn't match the hash")
 	}
 
-	verifierAddr, err := ffgcrypto.RawPublicToAddress(coinbase.PublicKey)
+	verifierAddr, err := ffgcrypto.RawPublicToAddress(coinbase.PublicKey())
 	if err != nil {
 		return false, errors.New("failed to get verifier's address")
 	}

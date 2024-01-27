@@ -137,7 +137,7 @@ func TestAccountAPIMethods(t *testing.T) {
 	// valid address of genesis validator
 	balanceArgs = &BalanceOfAddressArgs{}
 	balanceResponse = &BalanceOfAddressResponse{}
-	balanceArgs.Address = genesisblockValid.Transactions[0].From
+	balanceArgs.Address = genesisblockValid.Transactions[0].From()
 	err = api.Balance(&http.Request{}, balanceArgs, balanceResponse)
 	assert.NoError(t, err)
 	assert.Equal(t, BalanceOfAddressResponse{Balance: "40.000000000000000000", BalanceHex: "0x22b1c8c1227a00000", Nounce: "0x0", NextNounce: "0x1"}, *balanceResponse)

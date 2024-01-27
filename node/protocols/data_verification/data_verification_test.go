@@ -621,8 +621,8 @@ func TestDataVerificationMethods(t *testing.T) {
 
 	// we will use the overridden fee
 	hosterFees := totalSize * 1
-	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value)
-	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees)
+	assert.Equal(t, hexutil.EncodeBig(big.NewInt(0).SetUint64(hosterFees)), mempoolTxs[0].Value())
+	assert.Equal(t, "0x1", mempoolTxs[0].TransactionFees())
 
 	transferredBytes := protocolH2.contractStore.GetTransferredBytes(contractHashHex, fileHash2Bytes)
 	assert.Equal(t, uint64(fileSize2), transferredBytes)
@@ -688,16 +688,7 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 	mainChain, err := hexutil.Decode("0x01")
 	assert.NoError(t, err)
 
-	coinbasetx := transaction.Transaction{
-		PublicKey:       pkyData,
-		Nounce:          []byte{0},
-		Data:            []byte{1},
-		From:            addr,
-		To:              addr,
-		Chain:           mainChain,
-		Value:           "0x22b1c8c1227a00000",
-		TransactionFees: "0x0",
-	}
+	coinbasetx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 	err = coinbasetx.Sign(privateKey)
 	assert.NoError(t, err)
 
@@ -706,16 +697,7 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 
 	txData := validContractPayload(t, dcinTX)
 
-	validTx2 := transaction.Transaction{
-		PublicKey:       pkyData,
-		Nounce:          []byte{1},
-		Data:            txData,
-		From:            from,
-		To:              to,
-		Chain:           mainChain,
-		Value:           txValue,
-		TransactionFees: "0x1",
-	}
+	validTx2 := transaction.NewTransaction(pkyData, []byte{1}, txData, from, to, txValue, "0x1", mainChain)
 
 	err = validTx2.Sign(privateKey)
 	assert.NoError(t, err)
@@ -726,8 +708,8 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 		PreviousBlockHash: []byte{1, 1},
 		Transactions: []transaction.Transaction{
 			// its a coinbase tx
-			coinbasetx,
-			validTx2,
+			*coinbasetx,
+			*validTx2,
 		},
 		Number: blockNumber,
 	}

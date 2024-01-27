@@ -650,16 +650,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		return fmt.Errorf("failed to decode transaction fees for contract fees releaser: %w", err)
 	}
 
-	tx := transaction.Transaction{
-		PublicKey:       publicKeyBytes,
-		Nounce:          addrState.Nounce,
-		Data:            txPayloadBytes,
-		From:            hexutil.Encode(verifierAddr),
-		To:              fileHosterAddr,
-		Value:           hexutil.EncodeBig(fileHosterFees),
-		TransactionFees: hexutil.EncodeBig(transactionFees),
-		Chain:           chainID,
-	}
+	tx := transaction.NewTransaction(publicKeyBytes, addrState.Nounce, txPayloadBytes, hexutil.Encode(verifierAddr), fileHosterAddr, hexutil.EncodeBig(fileHosterFees), hexutil.EncodeBig(transactionFees), chainID)
 
 	err = tx.Sign(d.host.Peerstore().PrivKey(d.host.ID()))
 	if err != nil {
@@ -672,7 +663,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		return errors.New("contract fees already released")
 	}
 
-	if err := d.blockchain.PutMemPool(tx); err != nil {
+	if err := d.blockchain.PutMemPool(*tx); err != nil {
 		return fmt.Errorf("failed to insert transaction to mempool in handleIncomingEncryptionDataTransfer: %w", err)
 	}
 
@@ -680,7 +671,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 
 	gossipPayload := messages.GossipPayload{
 		Message: &messages.GossipPayload_Transaction{
-			Transaction: transaction.ToProtoTransaction(tx),
+			Transaction: transaction.ToProtoTransaction(*tx),
 		},
 	}
 
@@ -1522,12 +1513,12 @@ func (d *Protocol) checkValidateContractCreationInTX(contractHash []byte, downlo
 			return nil, fmt.Errorf("file requester public key in tx data is not same as the one in contract shared between nodes: %w", err)
 		}
 
-		if tx[0].To != verifierAddr {
+		if tx[0].To() != verifierAddr {
 			return nil, fmt.Errorf("no transactions found with transaction hash of %s", hexutil.Encode(v.TxHash))
 		}
 
 		// check the fees
-		txValue, _ := hexutil.DecodeBig(tx[0].Value)
+		txValue, _ := hexutil.DecodeBig(tx[0].Value())
 		verifierFees, err := hexutil.DecodeBig(downloadContract.VerifierFees)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get the verifier fees of a download contract: %w", err)

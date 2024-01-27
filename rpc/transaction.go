@@ -134,18 +134,7 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		return fmt.Errorf("failed to decode transaction chain: %w", err)
 	}
 
-	tx := transaction.Transaction{
-		Hash:            txHash,
-		Signature:       txSig,
-		PublicKey:       txPublicKey,
-		Nounce:          txNounceBytes,
-		Data:            txData,
-		From:            jsonTX.From,
-		To:              jsonTX.To,
-		Value:           jsonTX.Value,
-		TransactionFees: jsonTX.TransactionFees,
-		Chain:           txChain,
-	}
+	tx := transaction.NewTransaction(txPublicKey, txNounceBytes, txData, jsonTX.From, jsonTX.To, jsonTX.Value, jsonTX.TransactionFees, txChain).SetHash(txHash).SetSignature(txSig)
 
 	ok, err := tx.Validate()
 	if err != nil {
@@ -156,7 +145,7 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		return errors.New("failed to validate raw transaction with false result")
 	}
 
-	return api.validateBroadcastTxSetResponse(r.Context(), &tx, response)
+	return api.validateBroadcastTxSetResponse(r.Context(), tx, response)
 }
 
 func (api *TransactionAPI) validateBroadcastTxSetResponse(ctx context.Context, tx *transaction.Transaction, response *TransactionResponse) error {
@@ -234,22 +223,13 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 		return fmt.Errorf("failed to get public key of unlocked account: %w", err)
 	}
 
-	tx := transaction.Transaction{
-		PublicKey:       publicKeyBytes,
-		Nounce:          txNounceBytes,
-		Data:            txData,
-		From:            args.From,
-		To:              args.To,
-		Value:           args.Value,
-		TransactionFees: args.TransactionFees,
-		Chain:           mainChain,
-	}
+	tx := transaction.NewTransaction(publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
 
 	if err := tx.Sign(unlockedKey.Key.PrivateKey); err != nil {
 		return fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
-	return api.validateBroadcastTxSetResponse(r.Context(), &tx, response)
+	return api.validateBroadcastTxSetResponse(r.Context(), tx, response)
 }
 
 // CreateTransaction creates a transaction and returns the json encoded payload.
@@ -287,16 +267,7 @@ func (api *TransactionAPI) CreateTransaction(_ *http.Request, args *SendTransact
 		return fmt.Errorf("failed to get public key of unlocked account: %w", err)
 	}
 
-	tx := transaction.Transaction{
-		PublicKey:       publicKeyBytes,
-		Nounce:          txNounceBytes,
-		Data:            txData,
-		From:            args.From,
-		To:              args.To,
-		Value:           args.Value,
-		TransactionFees: args.TransactionFees,
-		Chain:           mainChain,
-	}
+	tx := transaction.NewTransaction(publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
 
 	if err := tx.Sign(unlockedKey.Key.PrivateKey); err != nil {
 		return fmt.Errorf("failed to sign transaction: %w", err)
@@ -307,7 +278,7 @@ func (api *TransactionAPI) CreateTransaction(_ *http.Request, args *SendTransact
 		return fmt.Errorf("failed to validate transaction: %w", err)
 	}
 
-	response.Transaction = toJSONTransaction(tx)
+	response.Transaction = toJSONTransaction(*tx)
 
 	return nil
 }
@@ -322,7 +293,7 @@ func (api *TransactionAPI) Pool(_ *http.Request, _ *EmptyArgs, response *MemPool
 	memPool := api.blockchain.GetTransactionsFromPool()
 	response.TransactionHashes = make([]string, len(memPool))
 	for i, v := range memPool {
-		response.TransactionHashes[i] = hexutil.Encode(v.Hash)
+		response.TransactionHashes[i] = hexutil.Encode(v.Hash())
 	}
 	return nil
 }
@@ -392,15 +363,15 @@ func (api *TransactionAPI) ByAddress(_ *http.Request, args *ByAddressArgs, respo
 
 func toJSONTransaction(t transaction.Transaction) JSONTransaction {
 	return JSONTransaction{
-		Hash:            hexutil.Encode(t.Hash),
-		Signature:       hexutil.Encode(t.Signature),
-		PublicKey:       hexutil.Encode(t.PublicKey),
-		Nounce:          hexutil.EncodeUint64BytesToHexString(t.Nounce),
-		Data:            hexutil.Encode(t.Data),
-		From:            t.From,
-		To:              t.To,
-		Value:           t.Value,
-		TransactionFees: t.TransactionFees,
-		Chain:           hexutil.Encode(t.Chain),
+		Hash:            hexutil.Encode(t.Hash()),
+		Signature:       hexutil.Encode(t.Signature()),
+		PublicKey:       hexutil.Encode(t.PublicKey()),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(t.Nounce()),
+		Data:            hexutil.Encode(t.Data()),
+		From:            t.From(),
+		To:              t.To(),
+		Value:           t.Value(),
+		TransactionFees: t.TransactionFees(),
+		Chain:           hexutil.Encode(t.Chain()),
 	}
 }

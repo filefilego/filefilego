@@ -8,6 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// {"type":"0x0","chainId":"0xbf","nonce":"0x0","to":"0xb000e8bbf1fa6b3391802393d8200b5936cf56f6","gas":"0x5208","gasPrice":"0x3e8","maxPriorityFeePerGas":null,"maxFeePerGas":null,"value":"0x989680","input":"0x","v":"0x1a1","r":"0xa154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326","s":"0x5c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c","hash":"0x56ac5faa78cb9efc2bc677281252a9ff8e927b3c6b9cf825487253eb63b50c2b"}
+
+func TestEthCompatibleTx(t *testing.T) {
+	tx, err := NewEthTX("f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c")
+	assert.NoError(t, err)
+	assert.NotNil(t, tx)
+}
+
 func TestCalculateHash(t *testing.T) {
 	t.Parallel()
 
@@ -21,52 +29,52 @@ func TestCalculateHash(t *testing.T) {
 		},
 		"invalid nounce": {
 			tx: Transaction{
-				PublicKey: []byte{12},
+				publicKey: []byte{12},
 			},
 			expErr: "nounce is empty",
 		},
 		"invalid from": {
 			tx: Transaction{
-				PublicKey: []byte{12},
-				Nounce:    []byte{222},
+				publicKey: []byte{12},
+				nounce:    []byte{222},
 			},
 			expErr: "from is empty",
 		},
 		"invalid to": {
 			tx: Transaction{
-				PublicKey: []byte{12},
-				Nounce:    []byte{222},
-				From:      "0x0123",
+				publicKey: []byte{12},
+				nounce:    []byte{222},
+				from:      "0x0123",
 			},
 			expErr: "to is empty",
 		},
 		"invalid value": {
 			tx: Transaction{
-				PublicKey: []byte{12},
-				Nounce:    []byte{222},
-				From:      "0x0123",
-				To:        "0x0123",
+				publicKey: []byte{12},
+				nounce:    []byte{222},
+				from:      "0x0123",
+				to:        "0x0123",
 			},
 			expErr: "value is empty",
 		},
 		"invalid transactionfees": {
 			tx: Transaction{
-				PublicKey: []byte{12},
-				Nounce:    []byte{222},
-				From:      "0x0123",
-				To:        "0x0123",
-				Value:     "0x123",
+				publicKey: []byte{12},
+				nounce:    []byte{222},
+				from:      "0x0123",
+				to:        "0x0123",
+				value:     "0x123",
 			},
 			expErr: "transactionFees is empty",
 		},
 		"valid transaction": {
 			tx: Transaction{
-				PublicKey:       []byte{12},
-				Nounce:          []byte{222},
-				From:            "0x0123",
-				To:              "0x0123",
-				Value:           "0x123",
-				TransactionFees: "0x33",
+				publicKey:       []byte{12},
+				nounce:          []byte{222},
+				from:            "0x0123",
+				to:              "0x0123",
+				value:           "0x123",
+				transactionFees: "0x33",
 			},
 		},
 	}
@@ -92,21 +100,21 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	publicKeyData, err := keypair.PublicKey.Raw()
 	assert.NoError(t, err)
 	tx := Transaction{
-		PublicKey:       publicKeyData,
-		Nounce:          []byte{0},
-		From:            "0x0123",
-		To:              "0x0123",
-		Value:           "0x123",
-		TransactionFees: "0x33",
+		publicKey:       publicKeyData,
+		nounce:          []byte{0},
+		from:            "0x0123",
+		to:              "0x0123",
+		value:           "0x123",
+		transactionFees: "0x33",
 	}
 
-	assert.Empty(t, tx.Hash)
-	assert.Empty(t, tx.Signature)
+	assert.Empty(t, tx.hash)
+	assert.Empty(t, tx.signature)
 	// sign tx with private key
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, tx.Hash)
-	assert.NotEmpty(t, tx.Signature)
+	assert.NotEmpty(t, tx.hash)
+	assert.NotEmpty(t, tx.signature)
 
 	// veirfy with wrong public key
 	keypair2, err := crypto.GenerateKeyPair()
@@ -119,7 +127,7 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	assert.NoError(t, err)
 
 	// remove sig from tx
-	tx.Signature = []byte{}
+	tx.signature = []byte{}
 	err = tx.VerifyWithPublicKey(keypair.PublicKey)
 	assert.EqualError(t, err, "failed to verify transaction: malformed signature: too short: 0 < 8")
 }
@@ -134,7 +142,7 @@ func TestValidate(t *testing.T) {
 			expErr: "hash is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.Hash = []byte{}
+				tx.hash = []byte{}
 				return tx
 			},
 		},
@@ -143,7 +151,7 @@ func TestValidate(t *testing.T) {
 			when: func() *Transaction {
 				tx := validTransaction(t)
 				dt, _ := crypto.RandomEntropy(maxTransactionDataSizeBytes + 1)
-				tx.Data = dt
+				tx.data = dt
 				return tx
 			},
 		},
@@ -151,7 +159,7 @@ func TestValidate(t *testing.T) {
 			expErr: "from is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.From = ""
+				tx.from = ""
 				return tx
 			},
 		},
@@ -159,7 +167,7 @@ func TestValidate(t *testing.T) {
 			expErr: "to is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.To = ""
+				tx.to = ""
 				return tx
 			},
 		},
@@ -167,7 +175,7 @@ func TestValidate(t *testing.T) {
 			expErr: "nounce is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.Nounce = []byte{}
+				tx.nounce = []byte{}
 				return tx
 			},
 		},
@@ -175,7 +183,7 @@ func TestValidate(t *testing.T) {
 			expErr: "publicKey is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.PublicKey = []byte{}
+				tx.publicKey = []byte{}
 				return tx
 			},
 		},
@@ -183,7 +191,7 @@ func TestValidate(t *testing.T) {
 			expErr: "transactionFees is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.TransactionFees = ""
+				tx.transactionFees = ""
 				return tx
 			},
 		},
@@ -191,7 +199,7 @@ func TestValidate(t *testing.T) {
 			expErr: "value is empty",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.Value = ""
+				tx.value = ""
 				return tx
 			},
 		},
@@ -199,7 +207,7 @@ func TestValidate(t *testing.T) {
 			expErr: "value is malformed: hex string without 0x prefix",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.Value = "_X1"
+				tx.value = "_X1"
 				return tx
 			},
 		},
@@ -207,7 +215,7 @@ func TestValidate(t *testing.T) {
 			expErr: "failed to decode transactionFees: hex string without 0x prefix",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.TransactionFees = "_X1"
+				tx.transactionFees = "_X1"
 				return tx
 			},
 		},
@@ -215,7 +223,7 @@ func TestValidate(t *testing.T) {
 			expErr: "transaction is altered and doesn't match the hash",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.PublicKey = []byte{1}
+				tx.publicKey = []byte{1}
 				return tx
 			},
 		},
@@ -223,7 +231,7 @@ func TestValidate(t *testing.T) {
 			expErr: "transaction is altered and doesn't match the hash",
 			when: func() *Transaction {
 				tx := validTransaction(t)
-				tx.From = "0x12"
+				tx.from = "0x12"
 				return tx
 			},
 		},
@@ -268,16 +276,16 @@ func TestEquals(t *testing.T) {
 	assert.NotNil(t, tx2)
 
 	// nolint:gocritic
-	ok, err := tx.Equals(tx)
+	ok, err := tx.Equals(&tx)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
-	ok, _ = tx.Equals(tx2)
+	ok, _ = tx.Equals(&tx2)
 	assert.False(t, ok)
 
 	// invalid tx
 	tx3 := Transaction{}
-	ok, err = tx3.Equals(tx2)
+	ok, err = tx3.Equals(&tx2)
 	assert.EqualError(t, err, "publicKey is empty")
 	assert.False(t, ok)
 }
@@ -296,14 +304,14 @@ func validTransaction(t *testing.T) *Transaction {
 	assert.NoError(t, err)
 
 	tx := Transaction{
-		PublicKey:       pkyData,
-		Nounce:          []byte{0},
-		Data:            []byte{1},
-		From:            addr,
-		To:              addr,
-		Chain:           mainChain,
-		Value:           "0x64",
-		TransactionFees: "0x64",
+		publicKey:       pkyData,
+		nounce:          []byte{0},
+		data:            []byte{1},
+		from:            addr,
+		to:              addr,
+		chain:           mainChain,
+		value:           "0x64",
+		transactionFees: "0x64",
 	}
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
