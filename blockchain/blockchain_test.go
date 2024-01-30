@@ -366,7 +366,7 @@ func TestMemPoolBlockPoolMethods(t *testing.T) {
 	transactions := blockchain.GetTransactionsFromPool()
 	assert.Len(t, transactions, 0)
 
-	tx := transaction.NewTransaction([]byte{40}, []byte{1}, []byte{20}, "0x01", "0x02", "0x03", "0x0", []byte{1})
+	tx := transaction.NewTransaction(transaction.LegacyTxType, []byte{40}, []byte{1}, []byte{20}, "0x01", "0x02", "0x03", "0x0", []byte{1})
 
 	err = blockchain.PutMemPool(*tx)
 	assert.NoError(t, err)
@@ -673,7 +673,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	}
 	txPayloadBytes := transactionWithChannelPayload(t, nodes)
 	// create a payload with not enough balance for channel operations
-	txWithChannelPayload := transaction.NewTransaction(nil, []byte{1}, txPayloadBytes, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
+	txWithChannelPayload := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{1}, txPayloadBytes, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
 
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload)
 	assert.EqualError(t, err, "total cost of channel actions (400000000000000000000) are higher than the supplied transaction fee (0)")
@@ -694,7 +694,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.NoError(t, err)
 	channelsToBeUpdated[0].Description = proto.String("Test")
 	txUpdatePayload := transactionWithChannelUpdatePayload(t, channelsToBeUpdated)
-	txWithChannelUpdatePayload := transaction.NewTransaction(nil, []byte{2}, txUpdatePayload, fromAddrPosterString, fromAddrPosterString, "0x0", "0x0", mainChain)
+	txWithChannelUpdatePayload := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{2}, txUpdatePayload, fromAddrPosterString, fromAddrPosterString, "0x0", "0x0", mainChain)
 
 	txWithChannelUpdatePayload.SetTransactionFees("0x" + fees.Text(16))
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload)
@@ -705,7 +705,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Equal(t, proto.String("Original Desc"), updatedChannels[0].Description)
 
 	// update the channel by admin
-	txWithChannelUpdatePayload2 := transaction.NewTransaction(nil, []byte{2}, txUpdatePayload, fromAddrAdminString, fromAddrAdminString, "0x0", "0x0", mainChain)
+	txWithChannelUpdatePayload2 := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{2}, txUpdatePayload, fromAddrAdminString, fromAddrAdminString, "0x0", "0x0", mainChain)
 	txWithChannelUpdatePayload2.SetTransactionFees("0x" + fees.Text(16))
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload2)
 	assert.NoError(t, err)
@@ -715,7 +715,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	assert.Equal(t, proto.String("Test"), updatedChannels2[0].Description)
 
 	// change by owner
-	txWithChannelUpdatePayload3 := transaction.NewTransaction(nil, []byte{2}, txUpdatePayload, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
+	txWithChannelUpdatePayload3 := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{2}, txUpdatePayload, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
 	txWithChannelUpdatePayload3.SetTransactionFees("0x" + fees.Text(16))
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload3)
 	assert.NoError(t, err)
@@ -737,7 +737,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 		},
 	}
 	txPayloadBytes2 := transactionWithChannelPayload(t, nodes2)
-	txWithChannelPayload2 := transaction.NewTransaction(nil, []byte{1}, txPayloadBytes2, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
+	txWithChannelPayload2 := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{1}, txPayloadBytes2, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload2)
 	assert.EqualError(t, err, "total cost of channel actions (100000000000000000) are higher than the supplied transaction fee (0)")
 	txWithChannelPayload2.SetTransactionFees("0x" + fees.Text(16))
@@ -815,7 +815,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 	}
 
 	txPayloadBytes3 := transactionWithChannelPayload(t, nodes3)
-	txWithChannelPayload3 := transaction.NewTransaction(nil, []byte{1}, txPayloadBytes3, fromAddrString, fromAddrString, "0x0", "0x"+fees.Mul(fees, big.NewInt(4)).Text(16), mainChain)
+	txWithChannelPayload3 := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{1}, txPayloadBytes3, fromAddrString, fromAddrString, "0x0", "0x"+fees.Mul(fees, big.NewInt(4)).Text(16), mainChain)
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelPayload3)
 	assert.NoError(t, err)
 
@@ -872,7 +872,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 
 	// transaction with download contract payload
 	txPayloadBytes4 := transactionWithContractPayload(t)
-	txWithContractPayload := transaction.NewTransaction(nil, []byte{1}, txPayloadBytes4, fromAddrString, fromAddrString, "0x0", "0x"+fees.Mul(fees, big.NewInt(4)).Text(16), mainChain)
+	txWithContractPayload := transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{1}, txPayloadBytes4, fromAddrString, fromAddrString, "0x0", "0x"+fees.Mul(fees, big.NewInt(4)).Text(16), mainChain)
 	txWithContractPayload.SetHash([]byte{2, 4})
 	err = blockchain.performStateUpdateFromDataPayload(txWithContractPayload)
 	assert.NoError(t, err)
@@ -903,7 +903,7 @@ func TestPerformStateUpdateFromDataPayload(t *testing.T) {
 
 	whichChannelToDelete.Enabled = false
 	channelDeleteTXPayload := transactionWithChannelUpdatePayload(t, []*NodeItem{whichChannelToDelete})
-	txWithChannelUpdatePayload = transaction.NewTransaction(nil, []byte{4}, channelDeleteTXPayload, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
+	txWithChannelUpdatePayload = transaction.NewTransaction(transaction.LegacyTxType, nil, []byte{4}, channelDeleteTXPayload, fromAddrString, fromAddrString, "0x0", "0x0", mainChain)
 	txWithChannelUpdatePayload.SetTransactionFees("0x" + fees.Text(16))
 	err = blockchain.performStateUpdateFromDataPayload(txWithChannelUpdatePayload)
 	assert.NoError(t, err)
@@ -993,7 +993,7 @@ func validBlock(t *testing.T, blockNumber uint64) (*block.Block, crypto.KeyPair,
 	pubKeyBytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
 
-	validTx2 = transaction.NewTransaction(pubKeyBytes, []byte{1}, validTx2.Data(), kp.Address, kp2.Address, "0x1", "0x1", validTx2.Chain())
+	validTx2 = transaction.NewTransaction(transaction.LegacyTxType, pubKeyBytes, []byte{1}, validTx2.Data(), kp.Address, kp2.Address, "0x1", "0x1", validTx2.Chain())
 	err = validTx2.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
 
@@ -1084,7 +1084,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 	addr, err := crypto.RawPublicToAddress(pkyData)
 	assert.NoError(t, err)
 
-	tx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 
 	assert.NoError(t, err)
 	return tx, keypair

@@ -272,7 +272,7 @@ func validBlock(t *testing.T, blockNumber uint64) (*block.Block, ffgcrypto.KeyPa
 	pubkeybytes, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
 
-	validTx2 = transaction.NewTransaction(pubkeybytes, []byte{1}, validTx2.Data(), kp.Address, kp2.Address, "0x1", "0x1", validTx2.Chain())
+	validTx2 = transaction.NewTransaction(transaction.LegacyTxType, pubkeybytes, []byte{1}, validTx2.Data(), kp.Address, kp2.Address, "0x1", "0x1", validTx2.Chain())
 
 	err = validTx2.Sign(kp.PrivateKey)
 	assert.NoError(t, err)
@@ -306,7 +306,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair
 	addr, err := ffgcrypto.RawPublicToAddress(pkyData)
 	assert.NoError(t, err)
 
-	tx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 
 	assert.NoError(t, err)
 	return tx, keypair

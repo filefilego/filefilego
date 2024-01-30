@@ -1,19 +1,67 @@
 package transaction
 
 import (
+	"fmt"
 	"testing"
 
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/stretchr/testify/assert"
 )
 
-// {"type":"0x0","chainId":"0xbf","nonce":"0x0","to":"0xb000e8bbf1fa6b3391802393d8200b5936cf56f6","gas":"0x5208","gasPrice":"0x3e8","maxPriorityFeePerGas":null,"maxFeePerGas":null,"value":"0x989680","input":"0x","v":"0x1a1","r":"0xa154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326","s":"0x5c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c","hash":"0x56ac5faa78cb9efc2bc677281252a9ff8e927b3c6b9cf825487253eb63b50c2b"}
-
-func TestEthCompatibleTx(t *testing.T) {
-	tx, err := NewEthTX("f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c")
+func TestParseEthTX(t *testing.T) {
+	rawTX := "f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c"
+	tx, err := ParseEth(rawTX)
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
+
+	// check if the hash is correct
+	var ethTx ethTypes.Transaction
+	txData, err := hexutil.DecodeNoPrefix(rawTX)
+	assert.NoError(t, err)
+
+	hash := ethcrypto.Keccak256Hash(txData)
+	fmt.Println("all tx hash ", hash.Hex())
+
+	derivedTX, err := &ethTx, rlp.DecodeBytes(txData, &ethTx)
+	assert.NoError(t, err)
+	assert.EqualValues(t, derivedTX.Hash().Bytes(), tx.Hash())
+
+	fmt.Println("original hash: ", derivedTX.Hash().Hex())
+
+	// calculate hash from transaction data
+	calculatedHash, err := tx.CalculateHash()
+	assert.NoError(t, err)
+	fmt.Println(hexutil.Encode(calculatedHash))
+
+	v, r, s := derivedTX.RawSignatureValues()
+	newTX := ethTypes.NewTx(&ethTypes.LegacyTx{
+		Nonce:    derivedTX.Nonce(),
+		GasPrice: derivedTX.GasPrice(),
+		Gas:      derivedTX.Gas(),
+		To:       derivedTX.To(),
+		Value:    derivedTX.Value(),
+		Data:     derivedTX.Data(),
+		V:        v,
+		R:        r,
+		S:        s,
+	})
+
+	ms, _ := derivedTX.MarshalJSON()
+	fmt.Println("derivedTX ", string(ms))
+
+	// Serialize the transaction using RLP encoding
+	rlpEncodedTx, err := rlp.EncodeToBytes(newTX)
+	if err != nil {
+		panic(err)
+	}
+
+	// Hash the RLP encoded transaction using Keccak-256
+	txHash := ethcrypto.Keccak256(rlpEncodedTx)
+	fmt.Println("Manual hash ", hexutil.Encode(txHash))
 }
 
 func TestCalculateHash(t *testing.T) {
@@ -27,18 +75,19 @@ func TestCalculateHash(t *testing.T) {
 			tx:     Transaction{},
 			expErr: "publicKey is empty",
 		},
-		"invalid nounce": {
-			tx: Transaction{
-				publicKey: []byte{12},
-			},
-			expErr: "nounce is empty",
-		},
 		"invalid from": {
 			tx: Transaction{
 				publicKey: []byte{12},
 				nounce:    []byte{222},
 			},
 			expErr: "from is empty",
+		},
+		"invalid nounce": {
+			tx: Transaction{
+				publicKey: []byte{12},
+				from:      "0x0123",
+			},
+			expErr: "nounce is empty",
 		},
 		"invalid to": {
 			tx: Transaction{

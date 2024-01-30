@@ -326,7 +326,7 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	nounceBytes := hexutil.EncodeUint64ToBytes(nextNounce)
 
-	tx1 := transaction.NewTransaction(publicKeyV1, nounceBytes, []byte{0}, kpV1.Address, kpFileDownloader1.Address, hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))), "0x1", mainChain)
+	tx1 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyV1, nounceBytes, []byte{0}, kpV1.Address, kpFileDownloader1.Address, hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))), "0x1", mainChain)
 
 	err = tx1.Sign(kpV1.PrivateKey)
 	assert.NoError(t, err)
@@ -435,7 +435,7 @@ func TestE2E(t *testing.T) {
 	}
 	txPayloadBytes, err := proto.Marshal(&txPayload)
 	assert.NoError(t, err)
-	tx2 := transaction.NewTransaction(publicKeyBytesOfFileDownloader, []byte{1}, txPayloadBytes, kpFileDownloader1.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), "0x1", mainChain)
+	tx2 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytesOfFileDownloader, []byte{1}, txPayloadBytes, kpFileDownloader1.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), "0x1", mainChain)
 
 	err = tx2.Sign(kpFileDownloader1.PrivateKey)
 	assert.NoError(t, err)
@@ -496,7 +496,7 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	channelBytes, err := hexutil.Decode(channelBytesStr)
 	assert.NoError(t, err)
-	tx3 := transaction.NewTransaction(publicKeyBytesOfFileDownloader, []byte{2}, channelBytes, kpFileDownloader1.Address, dataverifierAddr, "0x1", fees, mainChain)
+	tx3 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytesOfFileDownloader, []byte{2}, channelBytes, kpFileDownloader1.Address, dataverifierAddr, "0x1", fees, mainChain)
 	err = tx3.Sign(kpFileDownloader1.PrivateKey)
 	assert.NoError(t, err)
 	ok, err = tx3.Validate()

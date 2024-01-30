@@ -351,7 +351,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 	addr, err := crypto.RawPublicToAddress(pkyData)
 	assert.NoError(t, err)
 
-	tx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)

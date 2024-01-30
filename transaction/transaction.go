@@ -8,7 +8,9 @@ import (
 	"math/big"
 
 	"github.com/cbergoon/merkletree"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
@@ -17,6 +19,14 @@ import (
 
 // ChainID represents the main-net chain id.
 const ChainID = "0x01"
+
+// ChainIDGlobal is the global evm compatible chain id.
+const ChainIDGlobal = 191
+
+// ChainIDGlobalHex
+const ChainIDGlobalHex = "0xbf"
+
+const gasLimit = 21000
 
 const maxTransactionDataSizeBytes = 300000
 
@@ -43,10 +53,11 @@ type Transaction struct {
 
 	// additions
 	txType uint8
-	// gas    string
+	// gasPrice string
 }
 
-func NewTransaction(publicKey, nounce, data []byte, from, to, value, transactionFees string, chain []byte) *Transaction {
+// NewTransaction constructs a new transaction.
+func NewTransaction(txType uint8, publicKey, nounce, data []byte, from, to, value, transactionFees string, chain []byte) *Transaction {
 	tx := &Transaction{
 		publicKey:       make([]byte, len(publicKey)),
 		nounce:          make([]byte, len(nounce)),
@@ -56,6 +67,7 @@ func NewTransaction(publicKey, nounce, data []byte, from, to, value, transaction
 		value:           value,
 		transactionFees: transactionFees,
 		chain:           make([]byte, len(chain)),
+		txType:          txType,
 	}
 
 	copy(tx.publicKey, publicKey)
@@ -129,28 +141,72 @@ func (tx *Transaction) Chain() []byte {
 	return tx.chain
 }
 
-func (tx *Transaction) TxType() uint8 {
+func (tx *Transaction) Type() uint8 {
 	return tx.txType
 }
 
-func NewEthTX(rawTX string) (*Transaction, error) {
+func ParseEth(rawTX string) (*Transaction, error) {
 	var ethTx ethTypes.Transaction
 	txData, err := hexutil.DecodeNoPrefix(rawTX)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode transaction: %w", err)
 	}
 
-	derivedTX, err := &ethTx, rlp.DecodeBytes(txData, &ethTx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode rpl bytes: %w", err)
+	if err := ethTx.UnmarshalBinary(txData); err != nil {
+		return nil, fmt.Errorf("failed to decode typed transaction: %w", err)
 	}
 
-	// derivedTX.
+	v, r, s := ethTx.RawSignatureValues()
+	hash := ethTx.Hash()
+
+	signatureRS := append(r.Bytes(), s.Bytes()...)
+	signature := append(r.Bytes(), s.Bytes()...)
+
+	// v = chain_id * 2 + 35 + recovery_id
+	tmp := big.NewInt(0).Set(v)
+	recoveryID := tmp.Sub(tmp, big.NewInt(ChainIDGlobal*2+35))
+
+	if recoveryID.Cmp(big.NewInt(0)) == 0 {
+		signature = append(signature, []byte{0}...)
+	} else {
+		signature = append(signature, []byte{1}...)
+	}
+
+	pubkeyData, err := ethcrypto.Ecrecover(hash.Bytes(), signature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recover public key: %v", err)
+	}
+
+	verified := ethcrypto.VerifySignature(pubkeyData, hash.Bytes(), signatureRS)
+	if !verified {
+		return nil, errors.New("failed to verify transaction")
+	}
+
+	from, err := ethTypes.Sender(ethTypes.NewCancunSigner(big.NewInt(ChainIDGlobal)), &ethTx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recover from address: %v", err)
+	}
+
+	nounce := big.NewInt(0).SetUint64(ethTx.Nonce()).Bytes()
+	if len(nounce) == 0 {
+		nounce = []byte{0}
+	}
 
 	tx := &Transaction{
-		txType: EthTxType,
-		hash:   derivedTX.Hash().Bytes(),
-		// Nounce: ,
+		txType:    EthTxType,
+		hash:      ethTx.Hash().Bytes(),
+		signature: signature,
+
+		// publicKey can be derived
+		// we keep it empty to save disk space
+		publicKey:       []byte{},
+		nounce:          nounce,
+		data:            ethTx.Data(),
+		from:            from.Hex(),
+		to:              ethTx.To().Hex(),
+		value:           "0x" + ethTx.Value().Text(16),
+		transactionFees: "0x" + ethTx.GasPrice().Text(16),
+		chain:           ethTx.ChainId().Bytes(),
 	}
 
 	return tx, nil
@@ -158,21 +214,25 @@ func NewEthTX(rawTX string) (*Transaction, error) {
 
 // serialize the transaction to bytes.
 func (tx *Transaction) serialize() ([]byte, error) {
-	mainChain, err := hexutil.Decode(ChainID)
+	whichChain := ChainIDGlobalHex
+	if tx.txType == LegacyTxType {
+		whichChain = ChainID
+		if len(tx.publicKey) == 0 {
+			return nil, errors.New("publicKey is empty")
+		}
+
+		if tx.from == "" {
+			return nil, errors.New("from is empty")
+		}
+	}
+
+	mainChain, err := hexutil.Decode(whichChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode chainID: %w", err)
 	}
 
-	if len(tx.publicKey) == 0 {
-		return nil, errors.New("publicKey is empty")
-	}
-
 	if len(tx.nounce) == 0 {
 		return nil, errors.New("nounce is empty")
-	}
-
-	if tx.from == "" {
-		return nil, errors.New("from is empty")
 	}
 
 	if tx.to == "" {
@@ -205,10 +265,76 @@ func (tx *Transaction) serialize() ([]byte, error) {
 
 // CalculateHash gets a hash of a transaction.
 func (tx *Transaction) CalculateHash() ([]byte, error) {
+	return tx.getHash()
+}
+
+// getHash gets a hash of a transaction.
+func (tx *Transaction) getHash() ([]byte, error) {
 	data, err := tx.serialize()
 	if err != nil {
 		return nil, err
 	}
+
+	// eth
+	if tx.txType == EthTxType {
+		nounce := big.NewInt(0).SetBytes(tx.nounce).Uint64()
+		to := ethcommon.HexToAddress(tx.to)
+		value, err := hexutil.DecodeBig(tx.value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode value: %v", err)
+		}
+
+		transactionFees, err := hexutil.DecodeBig(tx.transactionFees)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode transactionFees: %v", err)
+		}
+
+		if len(tx.signature) != 65 {
+			return nil, fmt.Errorf("signature must be 65 bytes but got %d", len(tx.signature))
+		}
+
+		r := big.NewInt(0).SetBytes(tx.signature[0:32])
+		s := big.NewInt(0).SetBytes(tx.signature[32:64])
+		vByte := tx.signature[64]
+		v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
+
+		ethTx := ethTypes.NewTx(&ethTypes.LegacyTx{
+			Nonce:    nounce,
+			GasPrice: transactionFees,
+			Gas:      gasLimit,
+			To:       &to,
+			Value:    value,
+			Data:     tx.Data(),
+			V:        v,
+			R:        r,
+			S:        s,
+		})
+
+		// Serialize the transaction using RLP encoding
+		rlpEncodedTx, err := rlp.EncodeToBytes(ethTx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode transaction data: %v", err)
+		}
+
+		// Hash the RLP encoded transaction using Keccak-256
+		txHash := ethcrypto.Keccak256(rlpEncodedTx)
+
+		// ethTx := ethTypes.NewTx(&ethTypes.AccessListTx{
+		// 	ChainID:  big.NewInt(ChainIDGlobal),
+		// 	Nonce:    nounce,
+		// 	GasPrice: transactionFees,
+		// 	Gas:      gasLimit,
+		// 	To:       &to,
+		// 	Value:    value,
+		// 	Data:     tx.Data(),
+		// })
+
+		// ethTx := ethTypes.NewTransaction(nounce, to, value, gasLimit, transactionFees, tx.data)
+		// hashedData := ethTypes.NewLondonSigner(big.NewInt(ChainIDGlobal)).Hash(ethTx).Bytes()
+		return txHash, nil
+	}
+
+	// ffg
 	h := sha256.New()
 	if _, err := h.Write(data); err != nil {
 		return nil, err
@@ -219,6 +345,20 @@ func (tx *Transaction) CalculateHash() ([]byte, error) {
 
 // Equals tests for equality of two Contents.
 func (tx *Transaction) Equals(other merkletree.Content) (bool, error) {
+	if tx.txType == EthTxType {
+		thisTx, err := tx.getHash()
+		if err != nil {
+			return false, err
+		}
+
+		otherTx, err := other.(*Transaction).getHash()
+		if err != nil {
+			return false, err
+		}
+
+		return bytes.Equal(thisTx, otherTx), nil
+	}
+
 	data, err := tx.serialize()
 	if err != nil {
 		return false, err
@@ -234,7 +374,7 @@ func (tx *Transaction) Equals(other merkletree.Content) (bool, error) {
 
 // SignTransaction signs a transaction with a private key.
 func (tx *Transaction) Sign(key crypto.PrivKey) error {
-	hash, err := tx.CalculateHash()
+	hash, err := tx.getHash()
 	if err != nil {
 		return fmt.Errorf("failed to get transactionHash: %w", err)
 	}
@@ -322,11 +462,12 @@ func (tx *Transaction) Validate() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to decode transactionFees: %w", err)
 	}
+
 	if valFees.Cmp(zero) == -1 {
 		return false, errors.New("transactionFees is negative")
 	}
 
-	hash, err := tx.CalculateHash()
+	hash, err := tx.getHash()
 	if err != nil {
 		return false, errors.New("failed to get transaction hash")
 	}
@@ -370,6 +511,7 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 		Value:           tx.value,
 		TransactionFees: tx.transactionFees,
 		Chain:           make([]byte, len(tx.chain)),
+		TxType:          TxType(tx.txType),
 	}
 
 	copy(ptx.Hash, tx.hash)
@@ -395,6 +537,7 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
 		value:           ptx.Value,
 		transactionFees: ptx.TransactionFees,
 		chain:           make([]byte, len(ptx.Chain)),
+		txType:          uint8(ptx.TxType),
 	}
 
 	copy(tx.hash, ptx.Hash)

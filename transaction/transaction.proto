@@ -27,6 +27,14 @@ message ProtoTransaction {
     string transaction_fees = 9;
     // chain represents the network chain.
     bytes chain = 10;
+    // tx_type indicated the transaction type
+    TxType tx_type = 11;
+}
+
+// TxType represents transaction types.
+enum TxType {
+  LEGACY_TX_TYPE = 0;
+  ETH_TX_TYPE = 1;
 }
 
 // DataType is the transaction data type.

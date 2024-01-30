@@ -397,7 +397,7 @@ func TestNodeMethods(t *testing.T) {
 	assert.NoError(t, err)
 
 	// send an invalid transaction to the network
-	tx := transaction.NewTransaction(nil, nil, nil, "0x2", "", "", "", nil)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, nil, nil, nil, "0x2", "", "", "", nil)
 
 	payload := messages.GossipPayload{
 		Message: &messages.GossipPayload_Transaction{Transaction: transaction.ToProtoTransaction(*tx)},
@@ -565,7 +565,7 @@ func validTransaction(t *testing.T) (*transaction.Transaction, ffgcrypto.KeyPair
 	addr, err := ffgcrypto.RawPublicToAddress(pkyData)
 	assert.NoError(t, err)
 
-	tx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
 	return tx, keypair

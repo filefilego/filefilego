@@ -171,7 +171,7 @@ func (m *Validator) getCoinbaseTX(pk crypto.PrivKey, address string) (*transacti
 		return nil, fmt.Errorf("failed to get block reward: %w", err)
 	}
 
-	coinbaseTx := transaction.NewTransaction(publicKeyBytes, []byte{0}, []byte{}, address, address, hexutil.EncodeBig(blockReward), "0x0", mainChain)
+	coinbaseTx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytes, []byte{0}, []byte{}, address, address, hexutil.EncodeBig(blockReward), "0x0", mainChain)
 
 	err = coinbaseTx.Sign(pk)
 	if err != nil {

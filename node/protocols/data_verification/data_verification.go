@@ -650,7 +650,7 @@ func (d *Protocol) releaseFees(contractHash []byte) error {
 		return fmt.Errorf("failed to decode transaction fees for contract fees releaser: %w", err)
 	}
 
-	tx := transaction.NewTransaction(publicKeyBytes, addrState.Nounce, txPayloadBytes, hexutil.Encode(verifierAddr), fileHosterAddr, hexutil.EncodeBig(fileHosterFees), hexutil.EncodeBig(transactionFees), chainID)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytes, addrState.Nounce, txPayloadBytes, hexutil.Encode(verifierAddr), fileHosterAddr, hexutil.EncodeBig(fileHosterFees), hexutil.EncodeBig(transactionFees), chainID)
 
 	err = tx.Sign(d.host.Peerstore().PrivKey(d.host.ID()))
 	if err != nil {

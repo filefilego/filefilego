@@ -688,7 +688,7 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 	mainChain, err := hexutil.Decode("0x01")
 	assert.NoError(t, err)
 
-	coinbasetx := transaction.NewTransaction(pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+	coinbasetx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
 	err = coinbasetx.Sign(privateKey)
 	assert.NoError(t, err)
 
@@ -697,7 +697,7 @@ func validBlock(t *testing.T, blockNumber uint64, dcinTX *messages.DownloadContr
 
 	txData := validContractPayload(t, dcinTX)
 
-	validTx2 := transaction.NewTransaction(pkyData, []byte{1}, txData, from, to, txValue, "0x1", mainChain)
+	validTx2 := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{1}, txData, from, to, txValue, "0x1", mainChain)
 
 	err = validTx2.Sign(privateKey)
 	assert.NoError(t, err)

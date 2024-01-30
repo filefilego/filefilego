@@ -1518,7 +1518,7 @@ func (api *DataTransferAPI) CreateTransactionsWithDataPayloadFromContractHashes(
 
 		totalFees := currency.FFGZero().Add(fileHosterFees, verifierFees)
 		allTransactionFess = allTransactionFess.Add(allTransactionFess, totalFees)
-		tx := transaction.NewTransaction(publicKeyOfTxSigner, hexutil.EncodeUint64ToBytes(currentNounce), txPayloadBytes, key.Key.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), hexutil.EncodeBig(transactionFees), mainChain)
+		tx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyOfTxSigner, hexutil.EncodeUint64ToBytes(currentNounce), txPayloadBytes, key.Key.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), hexutil.EncodeBig(transactionFees), mainChain)
 
 		err = tx.Sign(key.Key.PrivateKey)
 		if err != nil {

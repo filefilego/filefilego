@@ -58,6 +58,7 @@ type JSONTransaction struct {
 	Value           string `json:"value"`
 	TransactionFees string `json:"transaction_fees"`
 	Chain           string `json:"chain"`
+	Type            uint8  `json:"type"`
 }
 
 // TransactionAPI represents the transaction rpc service.
@@ -134,7 +135,7 @@ func (api *TransactionAPI) SendRawTransaction(r *http.Request, args *SendRawTran
 		return fmt.Errorf("failed to decode transaction chain: %w", err)
 	}
 
-	tx := transaction.NewTransaction(txPublicKey, txNounceBytes, txData, jsonTX.From, jsonTX.To, jsonTX.Value, jsonTX.TransactionFees, txChain).SetHash(txHash).SetSignature(txSig)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, txPublicKey, txNounceBytes, txData, jsonTX.From, jsonTX.To, jsonTX.Value, jsonTX.TransactionFees, txChain).SetHash(txHash).SetSignature(txSig)
 
 	ok, err := tx.Validate()
 	if err != nil {
@@ -223,7 +224,7 @@ func (api *TransactionAPI) SendTransaction(r *http.Request, args *SendTransactio
 		return fmt.Errorf("failed to get public key of unlocked account: %w", err)
 	}
 
-	tx := transaction.NewTransaction(publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
 
 	if err := tx.Sign(unlockedKey.Key.PrivateKey); err != nil {
 		return fmt.Errorf("failed to sign transaction: %w", err)
@@ -267,7 +268,7 @@ func (api *TransactionAPI) CreateTransaction(_ *http.Request, args *SendTransact
 		return fmt.Errorf("failed to get public key of unlocked account: %w", err)
 	}
 
-	tx := transaction.NewTransaction(publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
+	tx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytes, txNounceBytes, txData, args.From, args.To, args.Value, args.TransactionFees, mainChain)
 
 	if err := tx.Sign(unlockedKey.Key.PrivateKey); err != nil {
 		return fmt.Errorf("failed to sign transaction: %w", err)
@@ -373,5 +374,6 @@ func toJSONTransaction(t transaction.Transaction) JSONTransaction {
 		Value:           t.Value(),
 		TransactionFees: t.TransactionFees(),
 		Chain:           hexutil.Encode(t.Chain()),
+		Type:            t.Type(),
 	}
 }
