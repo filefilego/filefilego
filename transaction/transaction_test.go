@@ -12,6 +12,44 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewTransaction(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		tx     Transaction
+		expErr string
+	}{
+		"invalid": {
+			tx: Transaction{
+				nounce: []byte{222},
+				from:   "0x0123",
+				to:     "0x0123",
+				value:  "0x123",
+			},
+			expErr: "transactionFees is empty",
+		},
+		"valid transaction": {
+			tx: Transaction{
+				publicKey:       []byte{12},
+				nounce:          []byte{222},
+				from:            "0x0123",
+				to:              "0x0123",
+				value:           "0x123",
+				transactionFees: "0x33",
+			},
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			newTx := NewTransaction(tt.tx.Type(), tt.tx.PublicKey(), tt.tx.Nounce(), tt.tx.Data(), tt.tx.From(), tt.tx.To(), tt.tx.Value(), tt.tx.TransactionFees(), tt.tx.Chain())
+			assert.NotNil(t, newTx)
+		})
+	}
+}
+
 func TestParseEthTX(t *testing.T) {
 	rawTX := "f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c"
 	tx, err := ParseEth(rawTX)
