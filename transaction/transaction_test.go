@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"fmt"
+	sync "sync"
 	"testing"
 
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
@@ -12,8 +13,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	allTestsDone bool
+	wg           sync.WaitGroup
+)
+
+func TestMain(m *testing.M) {
+	wg.Add(7)
+
+	go func() {
+		wg.Wait()
+		allTestsDone = true
+		TestParseEthTX2(&testing.T{}) // Run the final test
+	}()
+
+	m.Run()
+}
+
 func TestNewTransaction(t *testing.T) {
 	t.Parallel()
+	t.Cleanup(func() {
+		wg.Done()
+	})
 
 	cases := map[string]struct {
 		tx     Transaction
@@ -50,7 +71,44 @@ func TestNewTransaction(t *testing.T) {
 	}
 }
 
+func TestParseEthTX2(t *testing.T) {
+	if !allTestsDone {
+		t.Skip("Skipping final test until all others are complete because we will change the ChainIDGlobal and it will make the rest of tests fail")
+	}
+
+	ChainIDGlobal = 1
+	raw := "02f872011c8405f5e10085027740ca5782520894b969b3f17071205ec1c928e7006111620fc0bfcf8712d7083f26a80080c001a07a14584e838032eaffe5b3f78b304d05e2ea3723f9099a6e06a1fa24bcfe448fa07886500164ad53a33baef4dd6b1a0e9dbd45465f7ef295afb2dcc4ba8724c8a6"
+	tx, err := ParseEth(raw)
+	assert.NoError(t, err)
+	assert.NotNil(t, tx)
+
+	txHashOriginal := "0x87d69a4734971ffee37c397274fe9909ef18ba17b2437d3bbc5b8b3be0b32ac8"
+
+	fmt.Println("tx hash ", hexutil.Encode(tx.Hash()))
+
+	hash, err := tx.CalculateHash()
+	assert.NoError(t, err)
+	assert.Equal(t, txHashOriginal, hexutil.Encode(hash))
+
+	// another tx
+	raw = "02f874018202688405f5e10085088ac5c910825208945c543c580288237bcb771d1677b8adab36d4138a8758d15e1762800080c080a02d6a0025789f6b7ca4cd700bc82fd9a8255d902d4aa8c6efa99ed20ef2dd65f0a048e1a0da1ffd32cac2ee67503ee1f2b86e450c1099d1518c0a6dc9e7f93ac4e0"
+	tx, err = ParseEth(raw)
+	assert.NoError(t, err)
+	assert.NotNil(t, tx)
+
+	txHashOriginal = "0x701b89261eff4a83a57503aa831f084954da25561084b1017db60018f869a04e"
+
+	fmt.Println("tx hash ", hexutil.Encode(tx.Hash()))
+
+	hash, err = tx.CalculateHash()
+	assert.NoError(t, err)
+	assert.Equal(t, txHashOriginal, hexutil.Encode(hash))
+}
+
 func TestParseEthTX(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
 	rawTX := "f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c"
 	tx, err := ParseEth(rawTX)
 	assert.NoError(t, err)
@@ -74,6 +132,8 @@ func TestParseEthTX(t *testing.T) {
 	calculatedHash, err := tx.CalculateHash()
 	assert.NoError(t, err)
 	fmt.Println(hexutil.Encode(calculatedHash))
+
+	assert.Equal(t, hexutil.Encode(calculatedHash), hash.Hex())
 
 	v, r, s := derivedTX.RawSignatureValues()
 	newTX := ethTypes.NewTx(&ethTypes.LegacyTx{
@@ -104,6 +164,9 @@ func TestParseEthTX(t *testing.T) {
 
 func TestCalculateHash(t *testing.T) {
 	t.Parallel()
+	t.Cleanup(func() {
+		wg.Done()
+	})
 
 	cases := map[string]struct {
 		tx     Transaction
@@ -182,6 +245,9 @@ func TestCalculateHash(t *testing.T) {
 }
 
 func TestSignAndVerifyTransaction(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
 	keypair, err := crypto.GenerateKeyPair()
 	assert.NoError(t, err)
 	publicKeyData, err := keypair.PublicKey.Raw()
@@ -221,6 +287,10 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	t.Parallel()
+	t.Cleanup(func() {
+		wg.Done()
+	})
+
 	cases := map[string]struct {
 		when   func() *Transaction
 		expErr string
@@ -347,6 +417,9 @@ func TestValidate(t *testing.T) {
 }
 
 func TestProtoTransactionFunctions(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
 	tx := validTransaction(t)
 	assert.NotNil(t, tx)
 	ptx := ToProtoTransaction(*tx)
@@ -356,6 +429,9 @@ func TestProtoTransactionFunctions(t *testing.T) {
 }
 
 func TestEquals(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
 	tx := *validTransaction(t)
 	assert.NotNil(t, tx)
 

@@ -3,6 +3,7 @@ package transaction
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,7 +12,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/filefilego/filefilego/common/hexutil"
 	ffgcrypto "github.com/filefilego/filefilego/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -21,10 +21,10 @@ import (
 const ChainID = "0x01"
 
 // ChainIDGlobal is the global evm compatible chain id.
-const ChainIDGlobal = 191
+var ChainIDGlobal = int(191)
 
-// ChainIDGlobalHex
-const ChainIDGlobalHex = "0xbf"
+// ChainIDGlobalHex represents the hex value of global chain.
+var ChainIDGlobalHex = "0xbf"
 
 const gasLimit = 21000
 
@@ -33,6 +33,16 @@ const maxTransactionDataSizeBytes = 300000
 const (
 	LegacyTxType = 0
 	EthTxType    = 1
+)
+
+const (
+	EthLegacyTxType = 0x00
+	// EIP-2930 transaction
+	EthAccessListTxType = 0x01
+	// EIP-1559 transaction
+	EthDynamicFeeTxType = 0x02
+	// EIP-4844: Shard Blob Transactions
+	EthBlobTxType = 0x03
 )
 
 // Transaction represents a transaction.
@@ -53,7 +63,19 @@ type Transaction struct {
 
 	// additions
 	txType uint8
-	// gasPrice string
+
+	// eth transaction type
+	ethTxType uint8
+
+	// EIP-1559 dynamic fees transaction
+	// for gasFees we store it inside storageFees
+	gasTip []byte
+
+	// EIP-2930 transaction access list tx
+	accessList ethTypes.AccessList
+
+	// runtime value
+	// innerEth *ethTypes.Transaction
 }
 
 // NewTransaction constructs a new transaction.
@@ -163,8 +185,9 @@ func ParseEth(rawTX string) (*Transaction, error) {
 	signature := append(r.Bytes(), s.Bytes()...)
 
 	// v = chain_id * 2 + 35 + recovery_id
-	tmp := big.NewInt(0).Set(v)
-	recoveryID := tmp.Sub(tmp, big.NewInt(ChainIDGlobal*2+35))
+	tmpV := big.NewInt(0).Set(v)
+
+	recoveryID := tmpV.Sub(tmpV, big.NewInt(int64(ChainIDGlobal*2+35)))
 
 	if recoveryID.Cmp(big.NewInt(0)) == 0 {
 		signature = append(signature, []byte{0}...)
@@ -172,7 +195,20 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		signature = append(signature, []byte{1}...)
 	}
 
-	pubkeyData, err := ethcrypto.Ecrecover(hash.Bytes(), signature)
+	pubKeyDeriveSig := make([]byte, len(signature))
+	copy(pubKeyDeriveSig, signature)
+
+	if ethTx.Type() != EthLegacyTxType {
+		signature = make([]byte, len(signatureRS))
+		copy(signature, signatureRS)
+		vbytes := v.Bytes()
+		if len(vbytes) == 0 {
+			vbytes = append(vbytes, []byte{0}...)
+		}
+		signature = append(signature, vbytes...)
+	}
+
+	pubkeyData, err := ethcrypto.Ecrecover(hash.Bytes(), pubKeyDeriveSig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover public key: %v", err)
 	}
@@ -182,7 +218,7 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		return nil, errors.New("failed to verify transaction")
 	}
 
-	from, err := ethTypes.Sender(ethTypes.NewCancunSigner(big.NewInt(ChainIDGlobal)), &ethTx)
+	from, err := ethTypes.Sender(ethTypes.NewCancunSigner(big.NewInt(int64(ChainIDGlobal))), &ethTx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover from address: %v", err)
 	}
@@ -207,6 +243,14 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		value:           "0x" + ethTx.Value().Text(16),
 		transactionFees: "0x" + ethTx.GasPrice().Text(16),
 		chain:           ethTx.ChainId().Bytes(),
+
+		accessList: ethTx.AccessList(),
+		ethTxType:  ethTx.Type(),
+		gasTip:     ethTx.GasTipCap().Bytes(),
+	}
+
+	if ethTx.Type() == EthDynamicFeeTxType {
+		tx.transactionFees = hexutil.EncodeBig(ethTx.GasFeeCap())
 	}
 
 	return tx, nil
@@ -295,42 +339,78 @@ func (tx *Transaction) getHash() ([]byte, error) {
 
 		r := big.NewInt(0).SetBytes(tx.signature[0:32])
 		s := big.NewInt(0).SetBytes(tx.signature[32:64])
-		vByte := tx.signature[64]
-		v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
 
-		ethTx := ethTypes.NewTx(&ethTypes.LegacyTx{
-			Nonce:    nounce,
-			GasPrice: transactionFees,
-			Gas:      gasLimit,
-			To:       &to,
-			Value:    value,
-			Data:     tx.Data(),
-			V:        v,
-			R:        r,
-			S:        s,
-		})
+		// vByte := tx.signature[64]
+		// v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
+		// v := tx.v
 
-		// Serialize the transaction using RLP encoding
-		rlpEncodedTx, err := rlp.EncodeToBytes(ethTx)
+		var ethTx *ethTypes.Transaction
+
+		switch tx.ethTxType {
+		case EthLegacyTxType:
+			{
+				vByte := tx.signature[64]
+				v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
+				newTxType := &ethTypes.LegacyTx{
+					Nonce:    nounce,
+					GasPrice: transactionFees,
+					Gas:      gasLimit,
+					To:       &to,
+					Value:    value,
+					Data:     tx.Data(),
+					V:        v,
+					R:        r,
+					S:        s,
+				}
+				ethTx = ethTypes.NewTx(newTxType)
+			}
+		case EthAccessListTxType:
+			{
+				v := big.NewInt(0).SetBytes(tx.signature[64:])
+				newTxType := &ethTypes.AccessListTx{
+					ChainID:    big.NewInt(int64(ChainIDGlobal)),
+					Nonce:      nounce,
+					GasPrice:   transactionFees,
+					Gas:        gasLimit,
+					To:         &to,
+					Value:      value,
+					Data:       tx.Data(),
+					AccessList: tx.accessList,
+					V:          v,
+					R:          r,
+					S:          s,
+				}
+				ethTx = ethTypes.NewTx(newTxType)
+			}
+
+		case EthDynamicFeeTxType:
+			{
+				v := big.NewInt(0).SetBytes(tx.signature[64:])
+				newTxType := &ethTypes.DynamicFeeTx{
+					GasTipCap:  big.NewInt(0).SetBytes(tx.gasTip),
+					GasFeeCap:  transactionFees,
+					ChainID:    big.NewInt(int64(ChainIDGlobal)),
+					Nonce:      nounce,
+					Gas:        gasLimit,
+					To:         &to,
+					Value:      value,
+					Data:       tx.Data(),
+					AccessList: ethTypes.AccessList{},
+					V:          v,
+					R:          r,
+					S:          s,
+				}
+				ethTx = ethTypes.NewTx(newTxType)
+			}
+		}
+
+		marshalledTx, err := ethTx.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode transaction data: %v", err)
 		}
 
-		// Hash the RLP encoded transaction using Keccak-256
-		txHash := ethcrypto.Keccak256(rlpEncodedTx)
+		txHash := ethcrypto.Keccak256(marshalledTx)
 
-		// ethTx := ethTypes.NewTx(&ethTypes.AccessListTx{
-		// 	ChainID:  big.NewInt(ChainIDGlobal),
-		// 	Nonce:    nounce,
-		// 	GasPrice: transactionFees,
-		// 	Gas:      gasLimit,
-		// 	To:       &to,
-		// 	Value:    value,
-		// 	Data:     tx.Data(),
-		// })
-
-		// ethTx := ethTypes.NewTransaction(nounce, to, value, gasLimit, transactionFees, tx.data)
-		// hashedData := ethTypes.NewLondonSigner(big.NewInt(ChainIDGlobal)).Hash(ethTx).Bytes()
 		return txHash, nil
 	}
 
@@ -374,6 +454,10 @@ func (tx *Transaction) Equals(other merkletree.Content) (bool, error) {
 
 // SignTransaction signs a transaction with a private key.
 func (tx *Transaction) Sign(key crypto.PrivKey) error {
+	// if tx.txType == EthTxType {
+
+	// }
+
 	hash, err := tx.getHash()
 	if err != nil {
 		return fmt.Errorf("failed to get transactionHash: %w", err)
@@ -407,6 +491,10 @@ func (tx *Transaction) VerifyWithPublicKey(key crypto.PubKey) error {
 
 // Validate a transaction.
 func (tx *Transaction) Validate() (bool, error) {
+	// if tx.txType == EthTxType {
+
+	// }
+
 	zero := big.NewInt(0)
 	if len(tx.hash) == 0 || tx.hash == nil {
 		return false, errors.New("hash is empty")
@@ -500,6 +588,11 @@ func (tx *Transaction) Validate() (bool, error) {
 
 // ToProtoTransaction converts a transaction to protobuf message.
 func ToProtoTransaction(tx Transaction) *ProtoTransaction {
+	accessListBytes := []byte{}
+	if len(tx.accessList) > 0 {
+		accessListBytes, _ = json.Marshal(tx.accessList)
+	}
+
 	ptx := &ProtoTransaction{
 		Hash:            make([]byte, len(tx.hash)),
 		Signature:       make([]byte, len(tx.signature)),
@@ -512,6 +605,13 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 		TransactionFees: tx.transactionFees,
 		Chain:           make([]byte, len(tx.chain)),
 		TxType:          TxType(tx.txType),
+		EthTxType:       EthTransactionType(tx.ethTxType),
+		AccessList:      accessListBytes,
+	}
+
+	if len(tx.gasTip) != 0 {
+		ptx.GasTip = make([]byte, len(tx.gasTip))
+		copy(ptx.GasTip, tx.gasTip)
 	}
 
 	copy(ptx.Hash, tx.hash)
@@ -538,6 +638,21 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
 		transactionFees: ptx.TransactionFees,
 		chain:           make([]byte, len(ptx.Chain)),
 		txType:          uint8(ptx.TxType),
+		ethTxType:       uint8(ptx.EthTxType),
+	}
+
+	if len(ptx.GasTip) > 0 {
+		tx.gasTip = make([]byte, len(ptx.GasTip))
+		copy(tx.gasTip, ptx.GasTip)
+
+	}
+
+	if len(ptx.AccessList) > 0 {
+		var ac ethTypes.AccessList
+		err := json.Unmarshal(ptx.AccessList, &ac)
+		if err == nil {
+			tx.accessList = ac
+		}
 	}
 
 	copy(tx.hash, ptx.Hash)
