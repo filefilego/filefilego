@@ -644,7 +644,6 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
 	if len(ptx.GasTip) > 0 {
 		tx.gasTip = make([]byte, len(ptx.GasTip))
 		copy(tx.gasTip, ptx.GasTip)
-
 	}
 
 	if len(ptx.AccessList) > 0 {
