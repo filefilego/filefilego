@@ -418,13 +418,17 @@ func (n *Node) processIncomingMessage(ctx context.Context, message *pubsub.Messa
 			return nil
 		}
 
-		tx := transaction.ProtoTransactionToTransaction(payload.GetTransaction())
+		tx, err := transaction.ProtoTransactionToTransaction(payload.GetTransaction())
+		if err != nil {
+			return fmt.Errorf("failed to convert wire data to transaction: %w", err)
+		}
+
 		ok, err := tx.Validate()
 		if err != nil {
 			return fmt.Errorf("failed to validate incoming transaction: %w", err)
 		}
 		if ok {
-			if err := n.blockchain.PutMemPool(tx); err != nil {
+			if err := n.blockchain.PutMemPool(*tx); err != nil {
 				return fmt.Errorf("failed to insert transaction to mempool: %w", err)
 			}
 		}

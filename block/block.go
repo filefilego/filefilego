@@ -292,8 +292,10 @@ func ProtoBlockToBlock(pblock *ProtoBlock) Block {
 	copy(block.Signature, pblock.Signature)
 	copy(block.Data, pblock.Data)
 	copy(block.PreviousBlockHash, pblock.PreviousBlockHash)
+
 	for _, t := range pblock.Transactions {
-		block.Transactions = append(block.Transactions, transaction.ProtoTransactionToTransaction(t))
+		tx, _ := transaction.ProtoTransactionToTransaction(t)
+		block.Transactions = append(block.Transactions, *tx)
 	}
 
 	return block

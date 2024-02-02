@@ -2,15 +2,18 @@ package transaction
 
 import (
 	"fmt"
+	"math/big"
 	sync "sync"
 	"testing"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -19,7 +22,8 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	wg.Add(7)
+	// when a test func is added, increment this
+	wg.Add(8)
 
 	go func() {
 		wg.Wait()
@@ -109,6 +113,8 @@ func TestParseEthTX(t *testing.T) {
 	t.Cleanup(func() {
 		wg.Done()
 	})
+	// this tx was signed with pkey 0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8
+	// the address would be 0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B
 	rawTX := "f866808203e882520894b000e8bbf1fa6b3391802393d8200b5936cf56f683989680808201a1a0a154e401962ae5135763bd348780a114b8564b83d46494d1d1ec6ff7cd1d6326a05c2662275ebc59ab44fd7c671c1e90ab99c090cc7d09a6b3d83e457b5dd9d88c"
 	tx, err := ParseEth(rawTX)
 	assert.NoError(t, err)
@@ -272,17 +278,88 @@ func TestSignAndVerifyTransaction(t *testing.T) {
 	// veirfy with wrong public key
 	keypair2, err := crypto.GenerateKeyPair()
 	assert.NoError(t, err)
-	err = tx.VerifyWithPublicKey(keypair2.PublicKey)
+	pk2, _ := keypair2.PublicKey.Raw()
+	tx.SetPublicKey(pk2)
+	err = tx.verifyWithPublicKey()
 	assert.EqualError(t, err, "failed verification of transaction")
 
 	// verify tx with public key
-	err = tx.VerifyWithPublicKey(keypair.PublicKey)
+	pk3, _ := keypair.PublicKey.Raw()
+	tx.SetPublicKey(pk3)
+	err = tx.verifyWithPublicKey()
 	assert.NoError(t, err)
 
 	// remove sig from tx
 	tx.signature = []byte{}
-	err = tx.VerifyWithPublicKey(keypair.PublicKey)
+	tx.SetPublicKey(pk3)
+	err = tx.verifyWithPublicKey()
 	assert.EqualError(t, err, "failed to verify transaction: malformed signature: too short: 0 < 8")
+
+	// sign eth transaction
+	chain, err := hexutil.Decode(ChainIDGlobalHex)
+	assert.NoError(t, err)
+	ethTx := NewTransaction(EthTxType, nil, []byte{}, []byte{}, "", "0xb000e8bbf1fa6b3391802393d8200b5936cf56f6", "0x989680", "0x3E8", chain)
+
+	pkeyBytes, err := hexutil.Decode("0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8")
+	assert.NoError(t, err)
+	pkey, err := crypto.RestorePrivateKey(pkeyBytes)
+	assert.NoError(t, err)
+
+	err = ethTx.Sign(pkey)
+	assert.NoError(t, err)
+	assert.Equal(t, "0x56ac5faa78cb9efc2bc677281252a9ff8e927b3c6b9cf825487253eb63b50c2b", hexutil.Encode(ethTx.Hash()))
+
+	// recover public key and compare
+	rawPub, err := pkey.GetPublic().Raw()
+	assert.NoError(t, err)
+
+	pubKey, err := secp256k1.ParsePubKey(rawPub)
+	assert.NoError(t, err)
+	uncompressedPubKey := pubKey.SerializeUncompressed()
+
+	publicKey, address, err := ethTx.recoverPublicKeyWithFromAddress()
+	assert.NoError(t, err)
+	assert.Equal(t, "0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B", address)
+	assert.Equal(t, hexutil.Encode(uncompressedPubKey), hexutil.Encode(publicKey))
+
+	// validate the tx
+	ok, err := ethTx.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	// convert to proto
+	protoTx := ToProtoTransaction(*ethTx)
+	protoTxBytes, err := proto.Marshal(protoTx)
+	assert.NoError(t, err)
+	err = proto.Unmarshal(protoTxBytes, protoTx)
+	assert.NoError(t, err)
+	reconstractedTx, err := ProtoTransactionToTransaction(protoTx)
+	assert.NoError(t, err)
+
+	ok, err = reconstractedTx.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestSimulateMultipleEthTx(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
+
+	chain, err := hexutil.Decode(ChainIDGlobalHex)
+	assert.NoError(t, err)
+	initialVal := 10000
+	for i := 1; i < 5000; i++ {
+		keypair, err := crypto.GenerateKeyPair()
+		assert.NoError(t, err)
+		nounce := big.NewInt(int64(i)).Bytes()
+		ethTx := NewTransaction(EthTxType, nil, nounce, []byte{}, "", "0xb000e8bbf1fa6b3391802393d8200b5936cf56f6", hexutil.EncodeBig(big.NewInt(int64(initialVal*i))), "0x3E8", chain)
+		err = ethTx.Sign(keypair.PrivateKey)
+		assert.NoError(t, err)
+		ok, err := ethTx.Validate()
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	}
 }
 
 func TestValidate(t *testing.T) {
@@ -424,8 +501,9 @@ func TestProtoTransactionFunctions(t *testing.T) {
 	assert.NotNil(t, tx)
 	ptx := ToProtoTransaction(*tx)
 	assert.NotNil(t, ptx)
-	derviedTx := ProtoTransactionToTransaction(ptx)
-	assert.Equal(t, *tx, derviedTx)
+	derviedTx, err := ProtoTransactionToTransaction(ptx)
+	assert.NoError(t, err)
+	assert.Equal(t, *tx, *derviedTx)
 }
 
 func TestEquals(t *testing.T) {

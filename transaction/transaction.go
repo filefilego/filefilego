@@ -75,11 +75,14 @@ type Transaction struct {
 	accessList ethTypes.AccessList
 
 	// runtime value
-	// innerEth *ethTypes.Transaction
+	innerEth *ethTypes.Transaction
 }
 
 // NewTransaction constructs a new transaction.
 func NewTransaction(txType uint8, publicKey, nounce, data []byte, from, to, value, transactionFees string, chain []byte) *Transaction {
+	if len(nounce) == 0 {
+		nounce = []byte{0}
+	}
 	tx := &Transaction{
 		publicKey:       make([]byte, len(publicKey)),
 		nounce:          make([]byte, len(nounce)),
@@ -96,6 +99,21 @@ func NewTransaction(txType uint8, publicKey, nounce, data []byte, from, to, valu
 	copy(tx.nounce, nounce)
 	copy(tx.data, data)
 	copy(tx.chain, chain)
+
+	if txType == EthTxType {
+		txFees, _ := hexutil.DecodeBig(transactionFees)
+		nounce := big.NewInt(0).SetBytes(tx.nounce).Uint64()
+		to := ethcommon.HexToAddress(tx.to)
+		value, _ := hexutil.DecodeBig(tx.value)
+		tx.innerEth = ethTypes.NewTx(&ethTypes.LegacyTx{
+			Nonce:    nounce,
+			To:       &to,
+			Value:    value,
+			Gas:      gasLimit,
+			GasPrice: txFees,
+			Data:     tx.data,
+		})
+	}
 
 	return tx
 }
@@ -179,10 +197,24 @@ func ParseEth(rawTX string) (*Transaction, error) {
 	}
 
 	v, r, s := ethTx.RawSignatureValues()
-	hash := ethTx.Hash()
+	// hash := ethTx.Hash()
 
-	signatureRS := append(r.Bytes(), s.Bytes()...)
-	signature := append(r.Bytes(), s.Bytes()...)
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	// Pad rBytes and sBytes with leading zeros if they are less than 32 bytes
+	if len(rBytes) < 32 {
+		rBytes = append(make([]byte, 32-len(rBytes)), rBytes...)
+	}
+
+	if len(sBytes) < 32 {
+		sBytes = append(make([]byte, 32-len(sBytes)), sBytes...)
+	}
+
+	// nolint:gocritic
+	signatureRS := append(rBytes, sBytes...)
+	// nolint:gocritic
+	signature := append(rBytes, sBytes...)
 
 	// v = chain_id * 2 + 35 + recovery_id
 	tmpV := big.NewInt(0).Set(v)
@@ -208,17 +240,19 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		signature = append(signature, vbytes...)
 	}
 
-	pubkeyData, err := ethcrypto.Ecrecover(hash.Bytes(), pubKeyDeriveSig)
+	signer := ethTypes.NewCancunSigner(big.NewInt(int64(ChainIDGlobal)))
+
+	pubkeyData, err := ethcrypto.Ecrecover(signer.Hash(&ethTx).Bytes(), pubKeyDeriveSig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover public key: %v", err)
 	}
 
-	verified := ethcrypto.VerifySignature(pubkeyData, hash.Bytes(), signatureRS)
+	verified := ethcrypto.VerifySignature(pubkeyData, signer.Hash(&ethTx).Bytes(), signatureRS)
 	if !verified {
 		return nil, errors.New("failed to verify transaction")
 	}
 
-	from, err := ethTypes.Sender(ethTypes.NewCancunSigner(big.NewInt(int64(ChainIDGlobal))), &ethTx)
+	from, err := ethTypes.Sender(signer, &ethTx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover from address: %v", err)
 	}
@@ -247,6 +281,8 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		accessList: ethTx.AccessList(),
 		ethTxType:  ethTx.Type(),
 		gasTip:     ethTx.GasTipCap().Bytes(),
+
+		innerEth: &ethTx,
 	}
 
 	if ethTx.Type() == EthDynamicFeeTxType {
@@ -312,6 +348,124 @@ func (tx *Transaction) CalculateHash() ([]byte, error) {
 	return tx.getHash()
 }
 
+func (tx *Transaction) recoverPublicKeyWithFromAddress() ([]byte, string, error) {
+	signer := ethTypes.NewCancunSigner(big.NewInt(int64(ChainIDGlobal)))
+
+	pubkeyData, err := ethcrypto.Ecrecover(signer.Hash(tx.innerEth).Bytes(), tx.signature)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to recover public key: %v", err)
+	}
+
+	verified := ethcrypto.VerifySignature(pubkeyData, signer.Hash(tx.innerEth).Bytes(), tx.signature[:64])
+	if !verified {
+		return nil, "", errors.New("failed to verify transaction")
+	}
+
+	from, err := ethTypes.Sender(signer, tx.innerEth)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to recover from address: %v", err)
+	}
+
+	publicKey, err := ethcrypto.UnmarshalPubkey(pubkeyData)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to convert sig to public key: %v", err)
+	}
+	addressOfPublicKey := ethcrypto.PubkeyToAddress(*publicKey).Hex()
+	if addressOfPublicKey != from.Hex() {
+		return nil, "", fmt.Errorf("sender is different from the derived public key sender address %s %s", addressOfPublicKey, from.Hex())
+	}
+
+	return pubkeyData, from.Hex(), nil
+}
+
+func (tx *Transaction) buildEthInnerTx() error {
+	nounce := big.NewInt(0).SetBytes(tx.nounce).Uint64()
+	to := ethcommon.HexToAddress(tx.to)
+	value, err := hexutil.DecodeBig(tx.value)
+	if err != nil {
+		return fmt.Errorf("failed to decode value: %v", err)
+	}
+
+	transactionFees, err := hexutil.DecodeBig(tx.transactionFees)
+	if err != nil {
+		return fmt.Errorf("failed to decode transactionFees: %v", err)
+	}
+
+	if len(tx.signature) < 65 {
+		return fmt.Errorf("signature must be 65 bytes but got %d", len(tx.signature))
+	}
+
+	r := big.NewInt(0).SetBytes(tx.signature[0:32])
+	s := big.NewInt(0).SetBytes(tx.signature[32:64])
+
+	// vByte := tx.signature[64]
+	// v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
+	// v := tx.v
+
+	var ethTx *ethTypes.Transaction
+
+	switch tx.ethTxType {
+	case EthLegacyTxType:
+		{
+			vByte := tx.signature[64]
+			v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
+			newTxType := &ethTypes.LegacyTx{
+				Nonce:    nounce,
+				GasPrice: transactionFees,
+				Gas:      gasLimit,
+				To:       &to,
+				Value:    value,
+				Data:     tx.Data(),
+				V:        v,
+				R:        r,
+				S:        s,
+			}
+			ethTx = ethTypes.NewTx(newTxType)
+		}
+	case EthAccessListTxType:
+		{
+			v := big.NewInt(0).SetBytes(tx.signature[64:])
+			newTxType := &ethTypes.AccessListTx{
+				ChainID:    big.NewInt(int64(ChainIDGlobal)),
+				Nonce:      nounce,
+				GasPrice:   transactionFees,
+				Gas:        gasLimit,
+				To:         &to,
+				Value:      value,
+				Data:       tx.Data(),
+				AccessList: tx.accessList,
+				V:          v,
+				R:          r,
+				S:          s,
+			}
+			ethTx = ethTypes.NewTx(newTxType)
+		}
+
+	case EthDynamicFeeTxType:
+		{
+			v := big.NewInt(0).SetBytes(tx.signature[64:])
+			newTxType := &ethTypes.DynamicFeeTx{
+				GasTipCap:  big.NewInt(0).SetBytes(tx.gasTip),
+				GasFeeCap:  transactionFees,
+				ChainID:    big.NewInt(int64(ChainIDGlobal)),
+				Nonce:      nounce,
+				Gas:        gasLimit,
+				To:         &to,
+				Value:      value,
+				Data:       tx.Data(),
+				AccessList: ethTypes.AccessList{},
+				V:          v,
+				R:          r,
+				S:          s,
+			}
+			ethTx = ethTypes.NewTx(newTxType)
+		}
+	}
+
+	tx.innerEth = ethTx
+	return nil
+}
+
 // getHash gets a hash of a transaction.
 func (tx *Transaction) getHash() ([]byte, error) {
 	data, err := tx.serialize()
@@ -321,96 +475,15 @@ func (tx *Transaction) getHash() ([]byte, error) {
 
 	// eth
 	if tx.txType == EthTxType {
-		nounce := big.NewInt(0).SetBytes(tx.nounce).Uint64()
-		to := ethcommon.HexToAddress(tx.to)
-		value, err := hexutil.DecodeBig(tx.value)
+		err = tx.buildEthInnerTx()
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode value: %v", err)
+			return nil, fmt.Errorf("failed to build inner eth transaction: %w", err)
 		}
-
-		transactionFees, err := hexutil.DecodeBig(tx.transactionFees)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode transactionFees: %v", err)
-		}
-
-		if len(tx.signature) != 65 {
-			return nil, fmt.Errorf("signature must be 65 bytes but got %d", len(tx.signature))
-		}
-
-		r := big.NewInt(0).SetBytes(tx.signature[0:32])
-		s := big.NewInt(0).SetBytes(tx.signature[32:64])
-
-		// vByte := tx.signature[64]
-		// v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
-		// v := tx.v
-
-		var ethTx *ethTypes.Transaction
-
-		switch tx.ethTxType {
-		case EthLegacyTxType:
-			{
-				vByte := tx.signature[64]
-				v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
-				newTxType := &ethTypes.LegacyTx{
-					Nonce:    nounce,
-					GasPrice: transactionFees,
-					Gas:      gasLimit,
-					To:       &to,
-					Value:    value,
-					Data:     tx.Data(),
-					V:        v,
-					R:        r,
-					S:        s,
-				}
-				ethTx = ethTypes.NewTx(newTxType)
-			}
-		case EthAccessListTxType:
-			{
-				v := big.NewInt(0).SetBytes(tx.signature[64:])
-				newTxType := &ethTypes.AccessListTx{
-					ChainID:    big.NewInt(int64(ChainIDGlobal)),
-					Nonce:      nounce,
-					GasPrice:   transactionFees,
-					Gas:        gasLimit,
-					To:         &to,
-					Value:      value,
-					Data:       tx.Data(),
-					AccessList: tx.accessList,
-					V:          v,
-					R:          r,
-					S:          s,
-				}
-				ethTx = ethTypes.NewTx(newTxType)
-			}
-
-		case EthDynamicFeeTxType:
-			{
-				v := big.NewInt(0).SetBytes(tx.signature[64:])
-				newTxType := &ethTypes.DynamicFeeTx{
-					GasTipCap:  big.NewInt(0).SetBytes(tx.gasTip),
-					GasFeeCap:  transactionFees,
-					ChainID:    big.NewInt(int64(ChainIDGlobal)),
-					Nonce:      nounce,
-					Gas:        gasLimit,
-					To:         &to,
-					Value:      value,
-					Data:       tx.Data(),
-					AccessList: ethTypes.AccessList{},
-					V:          v,
-					R:          r,
-					S:          s,
-				}
-				ethTx = ethTypes.NewTx(newTxType)
-			}
-		}
-
-		marshalledTx, err := ethTx.MarshalBinary()
+		marshalledTx, err := tx.innerEth.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode transaction data: %v", err)
 		}
-
 		txHash := ethcrypto.Keccak256(marshalledTx)
-
 		return txHash, nil
 	}
 
@@ -426,15 +499,8 @@ func (tx *Transaction) getHash() ([]byte, error) {
 // Equals tests for equality of two Contents.
 func (tx *Transaction) Equals(other merkletree.Content) (bool, error) {
 	if tx.txType == EthTxType {
-		thisTx, err := tx.getHash()
-		if err != nil {
-			return false, err
-		}
-
-		otherTx, err := other.(*Transaction).getHash()
-		if err != nil {
-			return false, err
-		}
+		thisTx := tx.Hash()
+		otherTx := other.(*Transaction).Hash()
 
 		return bytes.Equal(thisTx, otherTx), nil
 	}
@@ -454,9 +520,91 @@ func (tx *Transaction) Equals(other merkletree.Content) (bool, error) {
 
 // SignTransaction signs a transaction with a private key.
 func (tx *Transaction) Sign(key crypto.PrivKey) error {
-	// if tx.txType == EthTxType {
+	if tx.txType == EthTxType {
+		pkBytes, err := key.Raw()
+		if err != nil {
+			return fmt.Errorf("failed to get private key bytes: %w", err)
+		}
 
-	// }
+		pkey, err := ffgcrypto.PrivateKeyToEthPrivate(pkBytes)
+		if err != nil {
+			return fmt.Errorf("failed to derive eth private key: %w", err)
+		}
+
+		signer := ethTypes.NewCancunSigner(big.NewInt(int64(ChainIDGlobal)))
+
+		signed, err := ethTypes.SignTx(tx.innerEth, signer, pkey)
+		if err != nil {
+			return fmt.Errorf("failed to sign eth transaction: %w", err)
+		}
+
+		// copy hash and signature to the tx type
+		v, r, s := signed.RawSignatureValues()
+		// Convert r and s to 32-byte slices
+		rBytes := r.Bytes()
+		sBytes := s.Bytes()
+
+		// Pad rBytes and sBytes with leading zeros if they are less than 32 bytes
+		if len(rBytes) < 32 {
+			rBytes = append(make([]byte, 32-len(rBytes)), rBytes...)
+		}
+
+		if len(sBytes) < 32 {
+			sBytes = append(make([]byte, 32-len(sBytes)), sBytes...)
+		}
+
+		// nolint:gocritic
+		signatureRS := append(rBytes, sBytes...)
+		// nolint:gocritic
+		signature := append(rBytes, sBytes...)
+		fmt.Println("sig before", len(signature))
+		// v = chain_id * 2 + 35 + recovery_id
+		tmpV := big.NewInt(0).Set(v)
+
+		recoveryID := tmpV.Sub(tmpV, big.NewInt(int64(ChainIDGlobal*2+35)))
+
+		if recoveryID.Cmp(big.NewInt(0)) == 0 {
+			fmt.Println("[]byte{0} ")
+			signature = append(signature, []byte{0}...)
+		} else {
+			fmt.Println("[]byte{1} ")
+			signature = append(signature, []byte{1}...)
+		}
+
+		if signed.Type() != EthLegacyTxType {
+			signature = make([]byte, len(signatureRS))
+			copy(signature, signatureRS)
+			vbytes := v.Bytes()
+			if len(vbytes) == 0 {
+				vbytes = append(vbytes, []byte{0}...)
+			}
+			signature = append(signature, vbytes...)
+		}
+
+		fmt.Println("inside hash ", len(signature))
+
+		from := ethcrypto.PubkeyToAddress(pkey.PublicKey)
+
+		tx.from = from.Hex()
+		tx.signature = make([]byte, len(signature))
+		copy(tx.signature, signature)
+
+		signedHash := signed.Hash().Bytes()
+		tx.hash = make([]byte, len(signedHash))
+		copy(tx.hash, signedHash)
+
+		tx.innerEth = signed
+
+		pubkeyBytes, _, err := tx.recoverPublicKeyWithFromAddress()
+		if err != nil {
+			return fmt.Errorf("failed to recover public key from signed tx: %w", err)
+		}
+
+		tx.publicKey = make([]byte, len(pubkeyBytes))
+		copy(tx.publicKey, pubkeyBytes)
+
+		return nil
+	}
 
 	hash, err := tx.getHash()
 	if err != nil {
@@ -477,8 +625,17 @@ func (tx *Transaction) Sign(key crypto.PrivKey) error {
 	return nil
 }
 
-// VerifyWithPublicKey verifies a transaction with a public key.
-func (tx *Transaction) VerifyWithPublicKey(key crypto.PubKey) error {
+// verifyWithPublicKey verifies a transaction with a public key.
+func (tx *Transaction) verifyWithPublicKey() error {
+	if tx.txType == EthTxType {
+		_, _, err := tx.recoverPublicKeyWithFromAddress()
+		if err != nil {
+			return fmt.Errorf("failed to recover and verify signature: %w", err)
+		}
+		return nil
+	}
+
+	key, _ := ffgcrypto.PublicKeyFromBytes(tx.publicKey)
 	ok, err := key.Verify(tx.hash, tx.signature)
 	if err != nil {
 		return fmt.Errorf("failed to verify transaction: %w", err)
@@ -491,10 +648,6 @@ func (tx *Transaction) VerifyWithPublicKey(key crypto.PubKey) error {
 
 // Validate a transaction.
 func (tx *Transaction) Validate() (bool, error) {
-	// if tx.txType == EthTxType {
-
-	// }
-
 	zero := big.NewInt(0)
 	if len(tx.hash) == 0 || tx.hash == nil {
 		return false, errors.New("hash is empty")
@@ -507,6 +660,13 @@ func (tx *Transaction) Validate() (bool, error) {
 	mainChain, err := hexutil.Decode(ChainID)
 	if err != nil {
 		return false, fmt.Errorf("failed to decode chainID: %w", err)
+	}
+
+	if tx.txType == EthTxType {
+		mainChain, err = hexutil.Decode(ChainIDGlobalHex)
+		if err != nil {
+			return false, fmt.Errorf("failed to decode global chainID: %w", err)
+		}
 	}
 
 	if !bytes.Equal(tx.chain, mainChain) {
@@ -564,23 +724,20 @@ func (tx *Transaction) Validate() (bool, error) {
 		return false, errors.New("transaction is altered and doesn't match the hash")
 	}
 
-	newPubKey, err := ffgcrypto.PublicKeyFromBytes(tx.publicKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to get publicKey: %w", err)
-	}
-
-	err = tx.VerifyWithPublicKey(newPubKey)
+	err = tx.verifyWithPublicKey()
 	if err != nil {
 		return false, fmt.Errorf("failed to verify: %w", err)
 	}
 
-	fromAddr, err := ffgcrypto.RawPublicToAddress(tx.publicKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to get address from publicKey: %w", err)
-	}
+	if tx.txType == LegacyTxType {
+		fromAddr, err := ffgcrypto.RawPublicToAddress(tx.publicKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to get address from publicKey: %w", err)
+		}
 
-	if tx.from != fromAddr {
-		return false, errors.New("from address doesn't match the public key")
+		if tx.from != fromAddr {
+			return false, errors.New("from address doesn't match the public key")
+		}
 	}
 
 	return true, nil
@@ -596,10 +753,8 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 	ptx := &ProtoTransaction{
 		Hash:            make([]byte, len(tx.hash)),
 		Signature:       make([]byte, len(tx.signature)),
-		PublicKey:       make([]byte, len(tx.publicKey)),
 		Nounce:          make([]byte, len(tx.nounce)),
 		Data:            make([]byte, len(tx.data)),
-		From:            tx.from,
 		To:              tx.to,
 		Value:           tx.value,
 		TransactionFees: tx.transactionFees,
@@ -609,6 +764,12 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 		AccessList:      accessListBytes,
 	}
 
+	if tx.txType == LegacyTxType {
+		ptx.From = tx.from
+		ptx.PublicKey = make([]byte, len(tx.publicKey))
+		copy(ptx.PublicKey, tx.publicKey)
+	}
+
 	if len(tx.gasTip) != 0 {
 		ptx.GasTip = make([]byte, len(tx.gasTip))
 		copy(ptx.GasTip, tx.gasTip)
@@ -616,7 +777,6 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 
 	copy(ptx.Hash, tx.hash)
 	copy(ptx.Signature, tx.signature)
-	copy(ptx.PublicKey, tx.publicKey)
 	copy(ptx.Nounce, tx.nounce)
 	copy(ptx.Data, tx.data)
 	copy(ptx.Chain, tx.chain)
@@ -625,7 +785,7 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 }
 
 // ProtoTransactionToTransaction returns a domain transaction from a protobuf message.
-func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
+func ProtoTransactionToTransaction(ptx *ProtoTransaction) (*Transaction, error) {
 	tx := Transaction{
 		hash:            make([]byte, len(ptx.Hash)),
 		signature:       make([]byte, len(ptx.Signature)),
@@ -656,10 +816,28 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) Transaction {
 
 	copy(tx.hash, ptx.Hash)
 	copy(tx.signature, ptx.Signature)
-	copy(tx.publicKey, ptx.PublicKey)
 	copy(tx.nounce, ptx.Nounce)
 	copy(tx.data, ptx.Data)
 	copy(tx.chain, ptx.Chain)
 
-	return tx
+	if tx.txType == EthTxType {
+		err := tx.buildEthInnerTx()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build inner eth transaction: %w", err)
+		}
+
+		pubKey, fromAddr, err := tx.recoverPublicKeyWithFromAddress()
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive public key and from address: %w", err)
+		}
+
+		tx.from = fromAddr
+		tx.publicKey = make([]byte, len(pubKey))
+		copy(tx.publicKey, pubKey)
+	} else {
+		// legacy tx
+		copy(tx.publicKey, ptx.PublicKey)
+	}
+
+	return &tx, nil
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/filefilego/filefilego/common/hexutil"
@@ -166,23 +167,18 @@ func TestPrivateKeyToEthPrivate(t *testing.T) {
 	ethPkBytes := ethcrypto.FromECDSA(ethPriv)
 	assert.NotEmpty(t, ethPkBytes)
 	assert.EqualValues(t, ethPkBytes, pkBytes)
-}
 
-func TestRawPublicToEthAddress(t *testing.T) {
-	testAddrHex := "0x96233bcC823159C3c08EB76a24E98F20CE7d48DE"
-	testPrivHex := "ef66677e9aef9396d991fa876c33265921a09a31c717d48636abd7f99a45d0b5"
-
-	pkbytes, err := hexutil.DecodeNoPrefix(testPrivHex)
+	// test the public keys
+	rawpublic, err := kp.PublicKey.Raw()
 	assert.NoError(t, err)
-	pkey, err := RestorePrivateKey(pkbytes)
+	pubKey, err := secp256k1.ParsePubKey(rawpublic)
 	assert.NoError(t, err)
-
-	rawBytes, err := pkey.GetPublic().Raw()
+	uncompressedPubKey := pubKey.SerializeUncompressed()
+	ethBytes := ethcrypto.FromECDSAPub(&ethPriv.PublicKey)
+	reconstructEthPub, err := ethcrypto.UnmarshalPubkey(ethBytes)
 	assert.NoError(t, err)
-
-	derivedEthAddr, err := RawCompressedPublicToEthAddress(rawBytes)
-	assert.NoError(t, err)
-	assert.Equal(t, testAddrHex, derivedEthAddr)
+	assert.True(t, reconstructEthPub.Equal(&ethPriv.PublicKey))
+	assert.Equal(t, hexutil.Encode(uncompressedPubKey), hexutil.Encode(ethBytes))
 }
 
 func TestVerifySignature(t *testing.T) {
