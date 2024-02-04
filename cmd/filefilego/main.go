@@ -43,6 +43,7 @@ import (
 	internalethrpc "github.com/filefilego/filefilego/rpc/eth"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
+	"github.com/filefilego/filefilego/transaction"
 	"github.com/filefilego/filefilego/validator"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -416,7 +417,7 @@ func run(ctx *cli.Context) error {
 	}
 
 	if common.Contains(conf.RPC.EnabledServices, internalrpc.EthServiceNamespace) {
-		ethAPI, err := internalethrpc.NewAPI(bchain, common.GlobalUniqueChainID)
+		ethAPI, err := internalethrpc.NewAPI(bchain, transaction.ChainIDGlobalHex, ffgNode, conf.Global.SuperLightNode)
 		if err != nil {
 			return fmt.Errorf("failed to setup eth rpc api: %w", err)
 		}

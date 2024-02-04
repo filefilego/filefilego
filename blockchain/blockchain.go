@@ -61,9 +61,11 @@ type Interface interface {
 	GetTransactionsFromPool() []transaction.Transaction
 	SaveBlockInDB(blck block.Block) error
 	GetBlockByHash(blockHash []byte) (block.Block, error)
-	GetNounceFromMemPool(address []byte) uint64
+
 	GetAddressState(address []byte) (AddressState, error)
 	UpdateAddressState(address []byte, state AddressState) error
+	GetNounceFromMemPool(address []byte) uint64
+
 	CloseDB() error
 	IncrementHeightBy(h uint64)
 	GetHeight() uint64
@@ -1097,13 +1099,15 @@ func (b *Blockchain) PerformStateUpdateFromBlock(validBlock block.Block) error {
 }
 
 // GetNounceFromMemPool get the nounce of an address from mempool.
-func (b *Blockchain) GetNounceFromMemPool(address []byte) uint64 {
+func (b *Blockchain) GetNounceFromMemPool(addr []byte) uint64 {
 	b.tmu.RLock()
 	defer b.tmu.RUnlock()
 
+	address := strings.ToLower(hexutil.Encode(addr))
+
 	tmp := uint64(0)
 	for _, v := range b.memPool {
-		if v.From() == hexutil.Encode(address) {
+		if strings.ToLower(v.From()) == address {
 			nounce := hexutil.DecodeBigFromBytesToUint64(v.Nounce())
 			if nounce > tmp {
 				tmp = nounce
@@ -1204,7 +1208,12 @@ func (b *Blockchain) GetBlockByHash(blockHash []byte) (block.Block, error) {
 }
 
 // GetAddressState returns the state of the address from the db.
-func (b *Blockchain) GetAddressState(address []byte) (AddressState, error) {
+func (b *Blockchain) GetAddressState(addr []byte) (AddressState, error) {
+	address, err := hexutil.Decode(strings.ToLower(hexutil.Encode(addr)))
+	if err != nil {
+		return AddressState{}, fmt.Errorf("failed to decode address: %w", err)
+	}
+
 	data, err := b.db.Get(append([]byte(addressPrefix), address...))
 	if err != nil {
 		return AddressState{}, fmt.Errorf("failed to get address state: %w", err)
@@ -1217,7 +1226,12 @@ func (b *Blockchain) GetAddressState(address []byte) (AddressState, error) {
 }
 
 // UpdateAddressState updates the state of the address in the db.
-func (b *Blockchain) UpdateAddressState(address []byte, state AddressState) error {
+func (b *Blockchain) UpdateAddressState(addr []byte, state AddressState) error {
+	address, err := hexutil.Decode(strings.ToLower(hexutil.Encode(addr)))
+	if err != nil {
+		return fmt.Errorf("failed to decode address: %w", err)
+	}
+
 	if len(address) == 0 {
 		return errors.New("address is empty")
 	}

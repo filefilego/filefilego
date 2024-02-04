@@ -33,8 +33,10 @@ message ProtoTransaction {
     EthTransactionType eth_tx_type = 12;
     // gas_tip is used for DynamicFee transactions.
     optional bytes gas_tip = 13;
+    // gas_limit represents the gaslimit.
+    optional bytes gas_limit = 14;
     // access_list is used for AccessList transactions.
-    optional bytes access_list = 14;
+    optional bytes access_list = 15;
 }
 
 // TxType represents transaction types.

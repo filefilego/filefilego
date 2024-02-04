@@ -26,7 +26,7 @@ var ChainIDGlobal = int(191)
 // ChainIDGlobalHex represents the hex value of global chain.
 var ChainIDGlobalHex = "0xbf"
 
-const gasLimit = 21000
+const GasLimitFromFFGNetwork = 21000
 
 const maxTransactionDataSizeBytes = 300000
 
@@ -62,13 +62,14 @@ type Transaction struct {
 	chain           []byte
 
 	// additions
-	txType uint8
+	txType   uint8
+	gasLimit []byte
 
 	// eth transaction type
 	ethTxType uint8
 
 	// EIP-1559 dynamic fees transaction
-	// for gasFees we store it inside storageFees
+	// for gasFees we store it inside transactionFees
 	gasTip []byte
 
 	// EIP-2930 transaction access list tx
@@ -109,10 +110,16 @@ func NewTransaction(txType uint8, publicKey, nounce, data []byte, from, to, valu
 			Nonce:    nounce,
 			To:       &to,
 			Value:    value,
-			Gas:      gasLimit,
+			Gas:      GasLimitFromFFGNetwork,
 			GasPrice: txFees,
 			Data:     tx.data,
 		})
+
+		gasLimitBytes := big.NewInt(GasLimitFromFFGNetwork).Bytes()
+		if len(gasLimitBytes) > 0 {
+			tx.gasLimit = make([]byte, len(gasLimitBytes))
+			copy(tx.gasLimit, gasLimitBytes)
+		}
 	}
 
 	return tx
@@ -183,6 +190,18 @@ func (tx *Transaction) Chain() []byte {
 
 func (tx *Transaction) Type() uint8 {
 	return tx.txType
+}
+
+func (tx *Transaction) EthType() uint8 {
+	return tx.ethTxType
+}
+
+func (tx *Transaction) GasTip() []byte {
+	return tx.gasTip
+}
+
+func (tx *Transaction) GasLimit() []byte {
+	return tx.gasLimit
 }
 
 func ParseEth(rawTX string) (*Transaction, error) {
@@ -269,7 +288,7 @@ func ParseEth(rawTX string) (*Transaction, error) {
 
 		// publicKey can be derived
 		// we keep it empty to save disk space
-		publicKey:       []byte{},
+		publicKey:       pubkeyData,
 		nounce:          nounce,
 		data:            ethTx.Data(),
 		from:            from.Hex(),
@@ -283,6 +302,12 @@ func ParseEth(rawTX string) (*Transaction, error) {
 		gasTip:     ethTx.GasTipCap().Bytes(),
 
 		innerEth: &ethTx,
+	}
+
+	gasLimit := big.NewInt(0).SetUint64(ethTx.Gas()).Bytes()
+	if len(gasLimit) > 0 {
+		tx.gasLimit = make([]byte, len(gasLimit))
+		copy(tx.gasLimit, gasLimit)
 	}
 
 	if ethTx.Type() == EthDynamicFeeTxType {
@@ -402,6 +427,8 @@ func (tx *Transaction) buildEthInnerTx() error {
 	// v := big.NewInt(int64(ChainIDGlobal*2 + 35 + int(vByte)))
 	// v := tx.v
 
+	gasLimit := big.NewInt(0).SetBytes(tx.gasLimit).Uint64()
+
 	var ethTx *ethTypes.Transaction
 
 	switch tx.ethTxType {
@@ -475,6 +502,10 @@ func (tx *Transaction) getHash() ([]byte, error) {
 
 	// eth
 	if tx.txType == EthTxType {
+		// if tx.innerEth != nil && len(tx.Hash()) > 0 {
+		// 	return tx.Hash(), nil
+		// }
+
 		err = tx.buildEthInnerTx()
 		if err != nil {
 			return nil, fmt.Errorf("failed to build inner eth transaction: %w", err)
@@ -557,17 +588,14 @@ func (tx *Transaction) Sign(key crypto.PrivKey) error {
 		signatureRS := append(rBytes, sBytes...)
 		// nolint:gocritic
 		signature := append(rBytes, sBytes...)
-		fmt.Println("sig before", len(signature))
 		// v = chain_id * 2 + 35 + recovery_id
 		tmpV := big.NewInt(0).Set(v)
 
 		recoveryID := tmpV.Sub(tmpV, big.NewInt(int64(ChainIDGlobal*2+35)))
 
 		if recoveryID.Cmp(big.NewInt(0)) == 0 {
-			fmt.Println("[]byte{0} ")
 			signature = append(signature, []byte{0}...)
 		} else {
-			fmt.Println("[]byte{1} ")
 			signature = append(signature, []byte{1}...)
 		}
 
@@ -581,10 +609,7 @@ func (tx *Transaction) Sign(key crypto.PrivKey) error {
 			signature = append(signature, vbytes...)
 		}
 
-		fmt.Println("inside hash ", len(signature))
-
 		from := ethcrypto.PubkeyToAddress(pkey.PublicKey)
-
 		tx.from = from.Hex()
 		tx.signature = make([]byte, len(signature))
 		copy(tx.signature, signature)
@@ -775,6 +800,11 @@ func ToProtoTransaction(tx Transaction) *ProtoTransaction {
 		copy(ptx.GasTip, tx.gasTip)
 	}
 
+	if len(tx.gasLimit) != 0 {
+		ptx.GasLimit = make([]byte, len(tx.gasLimit))
+		copy(ptx.GasLimit, tx.gasLimit)
+	}
+
 	copy(ptx.Hash, tx.hash)
 	copy(ptx.Signature, tx.signature)
 	copy(ptx.Nounce, tx.nounce)
@@ -799,6 +829,11 @@ func ProtoTransactionToTransaction(ptx *ProtoTransaction) (*Transaction, error) 
 		chain:           make([]byte, len(ptx.Chain)),
 		txType:          uint8(ptx.TxType),
 		ethTxType:       uint8(ptx.EthTxType),
+	}
+
+	if len(ptx.GasLimit) > 0 {
+		tx.gasLimit = make([]byte, len(ptx.GasLimit))
+		copy(tx.gasLimit, ptx.GasLimit)
 	}
 
 	if len(ptx.GasTip) > 0 {

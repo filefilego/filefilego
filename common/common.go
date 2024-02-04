@@ -110,6 +110,3 @@ func Contains(elements []string, el string) bool {
 	}
 	return false
 }
-
-// GlobalUniqueChainID represents the main-net chain id for FFG network.
-const GlobalUniqueChainID = "0x1"

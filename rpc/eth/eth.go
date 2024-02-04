@@ -1,13 +1,22 @@
 package eth
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"reflect"
+	"strings"
 
+	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
+	"github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
+	"github.com/filefilego/filefilego/node/protocols/messages"
+	"github.com/filefilego/filefilego/transaction"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -16,104 +25,49 @@ const (
 	estimatedGas = "0x38d7ea4c68000"
 )
 
+// NetworkMessagePublisher is a pub sub message broadcaster.
+type NetworkMessagePublisher interface {
+	PublishMessageToNetwork(ctx context.Context, topicName string, data []byte) error
+}
+
 type bcInterface interface {
 	GetHeight() uint64
 	GetAddressState(address []byte) (blockchain.AddressState, error)
+	GetBlockByNumber(blockNumber uint64) (*block.Block, error)
+	PutMemPool(tx transaction.Transaction) error
+	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
 }
 
 type EmptyArgs struct{}
 
 // API represents eth service
 type API struct {
-	chainID string
-	bc      bcInterface
+	chainID        string
+	bc             bcInterface
+	superLightNode bool
+	publisher      NetworkMessagePublisher
 }
 
 // NewAPI creates a new address API to be served using JSONRPC.
-func NewAPI(blockchain bcInterface, chainID string) (*API, error) {
+func NewAPI(blockchain bcInterface, chainID string, publisher NetworkMessagePublisher, superLightNode bool) (*API, error) {
+	if blockchain == nil {
+		return nil, errors.New("blockchain is nil")
+	}
+
+	if chainID == "" {
+		return nil, errors.New("chainID is nil")
+	}
+
+	if publisher == nil {
+		return nil, errors.New("publisher is nil")
+	}
+
 	return &API{
-		chainID: chainID,
-		bc:      blockchain,
+		chainID:        chainID,
+		bc:             blockchain,
+		publisher:      publisher,
+		superLightNode: superLightNode,
 	}, nil
-}
-
-// SendRawTransaction sends a raw transaction.
-func (api *API) SendRawTransaction(_ *http.Request, _ *GetCodeArgs, response *GetCodeResponse) error {
-	// tx := new(types.Transaction)
-	// 	if err := tx.UnmarshalBinary(input); err != nil {
-	// 		return common.Hash{}, err
-	// 	}
-	// 	return SubmitTransaction(ctx, s.b, tx)
-
-	*response = "0x"
-	return nil
-}
-
-type GetCodeResponse string
-
-type GetCodeArgs []interface{}
-
-// GetCode returns 0x
-func (api *API) GetCode(_ *http.Request, _ *GetCodeArgs, response *GetCodeResponse) error {
-	*response = "0x"
-	return nil
-}
-
-type GetTransactionCountResponse string
-
-type GetTransactionCountArgs []interface{}
-
-// GetTransactionCount returns the transaction counts of an address.
-func (api *API) GetTransactionCount(_ *http.Request, args *GetTransactionCountArgs, response *GetTransactionCountResponse) error {
-	arg1, ok := (*args)[0].(string)
-	if !ok {
-		return errors.New("invalid address")
-	}
-
-	addr, err := hexutil.Decode(arg1)
-	if err != nil {
-		return fmt.Errorf("failed to decode address: %w", err)
-	}
-
-	state, err := api.bc.GetAddressState(addr)
-	if err != nil {
-		*response = GetTransactionCountResponse("0x0")
-		return nil
-	}
-
-	nounce, err := state.GetNounce()
-	if err != nil {
-		*response = GetTransactionCountResponse("0x0")
-		return nil
-	}
-
-	*response = GetTransactionCountResponse(hexutil.EncodeUint64(nounce))
-	return nil
-}
-
-// GasPriceResponse
-type GasPriceResponse string
-
-// GasPrice returns the gas price.
-func (api *API) GasPrice(_ *http.Request, _ *EmptyArgs, response *GasPriceResponse) error {
-	*response = GasPriceResponse(gasPrice)
-	return nil
-}
-
-type EstimateGasResponse string
-
-type EstimateGasArgs struct {
-	Data     string `json:"data"`
-	From     string `json:"from"`
-	To       string `json:"to"`
-	GasPrice string `json:"gasPrice"`
-	Value    string `json:"value"`
-}
-
-// EstimateGas returns the estimated gas.
-func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
-	*response = EstimateGasResponse(estimatedGas)
-	return nil
 }
 
 // ChainIDResponse
@@ -122,13 +76,6 @@ type ChainIDResponse string
 // ChainID returns chain id.
 func (api *API) ChainID(_ *http.Request, _ *EmptyArgs, response *ChainIDResponse) error {
 	*response = ChainIDResponse(api.chainID)
-	return nil
-}
-
-// Version returns chain id in human readable format.
-func (api *API) Version(_ *http.Request, _ *EmptyArgs, response *ChainIDResponse) error {
-	chain, _ := hexutil.DecodeBig(api.chainID)
-	*response = ChainIDResponse(fmt.Sprintf("%d", chain.Uint64()))
 	return nil
 }
 
@@ -174,5 +121,319 @@ func (api *API) GetBalance(_ *http.Request, args *GetBalanceArgs, response *GetB
 	balanceHex := hexutil.EncodeBig(balance)
 
 	*response = GetBalanceResponse(balanceHex)
+	return nil
+}
+
+// Version returns chain id in human readable format.
+func (api *API) Version(_ *http.Request, _ *EmptyArgs, response *ChainIDResponse) error {
+	chain, _ := hexutil.DecodeBig(api.chainID)
+	*response = ChainIDResponse(fmt.Sprintf("%d", chain.Uint64()))
+	return nil
+}
+
+// GasPriceResponse
+type GasPriceResponse string
+
+// GasPrice returns the gas price.
+func (api *API) GasPrice(_ *http.Request, _ *EmptyArgs, response *GasPriceResponse) error {
+	*response = GasPriceResponse(gasPrice)
+	return nil
+}
+
+type EstimateGasResponse string
+
+type EstimateGasArgs struct {
+	Data     string `json:"data"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	GasPrice string `json:"gasPrice"`
+	Value    string `json:"value"`
+}
+
+// EstimateGas returns the estimated gas.
+func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
+	*response = EstimateGasResponse(estimatedGas)
+	return nil
+}
+
+type GetTransactionCountResponse string
+
+type GetTransactionCountArgs []interface{}
+
+// GetTransactionCount returns the transaction counts of an address.
+func (api *API) GetTransactionCount(_ *http.Request, args *GetTransactionCountArgs, response *GetTransactionCountResponse) error {
+	arg1, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid address")
+	}
+
+	addr, err := hexutil.Decode(arg1)
+	if err != nil {
+		return fmt.Errorf("failed to decode address: %w", err)
+	}
+
+	state, err := api.bc.GetAddressState(addr)
+	if err != nil {
+		*response = GetTransactionCountResponse("0x1")
+		return nil
+	}
+
+	nounce, err := state.GetNounce()
+	if err != nil {
+		*response = GetTransactionCountResponse("0x1")
+		return nil
+	}
+
+	if nounce == 0 {
+		nounce = 1
+	} else {
+		nounce++
+	}
+
+	*response = GetTransactionCountResponse(hexutil.EncodeUint64(nounce))
+	return nil
+}
+
+type GetCodeResponse string
+
+type GetCodeArgs []interface{}
+
+// GetCode returns 0x
+func (api *API) GetCode(_ *http.Request, _ *GetCodeArgs, response *GetCodeResponse) error {
+	*response = "0x"
+	return nil
+}
+
+type GetBlockByNumberArgs []interface{}
+
+type GetBlockByNumberResponse struct {
+	BaseFeePerGas    string        `json:"baseFeePerGas"`
+	Difficulty       string        `json:"difficulty"`
+	ExtraData        string        `json:"extraData"`
+	GasLimit         string        `json:"gasLimit"`
+	GasUsed          string        `json:"gasUsed"`
+	Hash             string        `json:"hash"`
+	LogsBloom        string        `json:"logsBloom"`
+	Miner            string        `json:"miner"`
+	MixHash          string        `json:"mixHash"`
+	Nonce            string        `json:"nonce"`
+	Number           string        `json:"number"`
+	ParentHash       string        `json:"parentHash"`
+	ReceiptsRoot     string        `json:"receiptsRoot"`
+	Sha3Uncles       string        `json:"sha3Uncles"`
+	Size             string        `json:"size"`
+	StateRoot        string        `json:"stateRoot"`
+	Timestamp        string        `json:"timestamp"`
+	TotalDifficulty  string        `json:"totalDifficulty"`
+	Transactions     []string      `json:"transactions"`
+	TransactionsRoot string        `json:"transactionsRoot"`
+	Uncles           []interface{} `json:"uncles"`
+	Withdrawals      []Withdrawal  `json:"withdrawals"`
+	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
+}
+
+type Withdrawal struct {
+	Address        string `json:"address"`
+	Amount         string `json:"amount"`
+	Index          string `json:"index"`
+	ValidatorIndex string `json:"validatorIndex"`
+}
+
+// GetBlockByNumber gets block by number.
+func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
+	arg1, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid block number")
+	}
+
+	blockNo, err := hexutil.DecodeBig(arg1)
+	if err != nil {
+		return errors.New("invalid block number hex")
+	}
+
+	block, err := api.bc.GetBlockByNumber(blockNo.Uint64())
+	if err != nil {
+		return fmt.Errorf("failed to get block: %w", err)
+	}
+
+	coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
+	if err != nil {
+		return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
+	}
+
+	blockHash := hexutil.Encode(block.Hash)
+	parentHash := hexutil.Encode(block.PreviousBlockHash)
+	response.BaseFeePerGas = estimatedGas
+	response.Difficulty = "0x0"
+	response.ExtraData = hexutil.Encode(block.Data)
+	response.GasLimit = hexutil.EncodeBig(big.NewInt(int64(transaction.GasLimitFromFFGNetwork * len(block.Transactions))))
+	response.GasUsed = hexutil.EncodeBig(big.NewInt(int64(len(block.Transactions))))
+	response.Hash = blockHash
+	response.LogsBloom = "0x0"
+	response.Miner = coinbaseTx.To()
+	response.MixHash = blockHash
+	response.Nonce = "0x0000000000000000"
+	response.Number = arg1
+	response.ParentHash = parentHash
+	response.ReceiptsRoot = blockHash
+	response.Sha3Uncles = blockHash
+	response.Size = hexutil.EncodeBig(big.NewInt(int64(3000 * len(block.Transactions))))
+	response.StateRoot = blockHash
+	response.Timestamp = hexutil.EncodeBig(big.NewInt(block.Timestamp))
+	response.TotalDifficulty = "0x1"
+	response.Transactions = make([]string, len(block.Transactions))
+	for i, v := range block.Transactions {
+		response.Transactions[i] = hexutil.Encode(v.Hash())
+	}
+	response.TransactionsRoot = hexutil.Encode(block.MerkleHash)
+	response.Uncles = make([]interface{}, 0)
+	response.Withdrawals = make([]Withdrawal, 1)
+	response.Withdrawals[0] = Withdrawal{
+		Address:        coinbaseTx.To(),
+		Amount:         coinbaseTx.Value(),
+		Index:          "0x0",
+		ValidatorIndex: "0x0",
+	}
+	response.WithdrawalsRoot = hexutil.Encode(block.MerkleHash)
+
+	return nil
+}
+
+type SendRawTransactionArgs []interface{}
+
+type SendRawTransactionResponse string
+
+// SendRawTransaction sends a raw transaction.
+func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs, response *SendRawTransactionResponse) error {
+	arg1, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid tx data")
+	}
+
+	tx, err := transaction.ParseEth(strings.TrimPrefix(arg1, "0x"))
+	if err != nil {
+		return fmt.Errorf("failed to parse eth transaction: %w", err)
+	}
+
+	ok, err = tx.Validate()
+	if err != nil {
+		fmt.Println("raw tx error ", arg1, hexutil.Encode(tx.Hash()))
+		return fmt.Errorf("failed to validate transaction with error: %w", err)
+	}
+	if !ok {
+		return errors.New("failed to validate transaction")
+	}
+
+	if !api.superLightNode {
+		if err := api.bc.PutMemPool(*tx); err != nil {
+			return fmt.Errorf("failed to insert transaction from rpc method to mempool: %w", err)
+		}
+	}
+
+	payload := messages.GossipPayload{
+		Message: &messages.GossipPayload_Transaction{
+			Transaction: transaction.ToProtoTransaction(*tx),
+		},
+	}
+
+	txBytes, err := proto.Marshal(&payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal gossip payload: %w", err)
+	}
+
+	if err := api.publisher.PublishMessageToNetwork(r.Context(), common.FFGNetPubSubBlocksTXQuery, txBytes); err != nil {
+		return fmt.Errorf("failed to publish transaction to network: %w", err)
+	}
+
+	txHash := hexutil.Encode(tx.Hash())
+	*response = SendRawTransactionResponse(txHash)
+	return nil
+}
+
+type GetTransactionByHashArgs []interface{}
+
+// Transaction represents an Ethereum transaction.
+type GetTransactionByHashResponse struct {
+	BlockHash            string   `json:"blockHash"`
+	BlockNumber          string   `json:"blockNumber"`
+	From                 string   `json:"from"`
+	Gas                  string   `json:"gas"`
+	GasPrice             string   `json:"gasPrice"`
+	MaxFeePerGas         string   `json:"maxFeePerGas"`
+	MaxPriorityFeePerGas string   `json:"maxPriorityFeePerGas"`
+	Hash                 string   `json:"hash"`
+	Input                string   `json:"input"`
+	Nonce                string   `json:"nonce"`
+	To                   string   `json:"to"`
+	TransactionIndex     string   `json:"transactionIndex"`
+	Value                string   `json:"value"`
+	Type                 string   `json:"type"`
+	AccessList           []string `json:"accessList"`
+	V                    string   `json:"v"`
+	R                    string   `json:"r"`
+	S                    string   `json:"s"`
+	ChainID              string   `json:"chainId,omitempty"`
+}
+
+// SendRawTransaction sends a raw transaction.
+func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHashArgs, response *GetTransactionByHashResponse) error {
+	txHash, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid tx data")
+	}
+
+	h, err := hexutil.Decode(txHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction hash: %w", err)
+	}
+
+	txs, blockNumbers, err := api.bc.GetTransactionByHash(h)
+	if err != nil || len(txs) == 0 {
+		response = nil
+		return nil
+	}
+
+	block, err := api.bc.GetBlockByNumber(blockNumbers[0])
+	if err != nil {
+		return fmt.Errorf("failed to get block: %w", err)
+	}
+
+	txIndex := -1
+
+	for i, v := range block.Transactions {
+		if bytes.Equal(v.Hash(), h) {
+			txIndex = i
+		}
+	}
+
+	if txIndex == -1 {
+		return fmt.Errorf("failed to find transaction in block: %w", err)
+	}
+
+	response.AccessList = []string{}
+	response.BlockHash = hexutil.Encode(block.Hash)
+	response.BlockNumber = hexutil.EncodeBig(big.NewInt(0).SetUint64(blockNumbers[0]))
+	response.TransactionIndex = hexutil.EncodeInt64(int64(txIndex))
+	response.ChainID = api.chainID
+	response.From = txs[0].From()
+	response.Gas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
+	response.GasPrice = txs[0].TransactionFees()
+	response.Hash = hexutil.Encode(txs[0].Hash())
+	response.Input = hexutil.Encode(txs[0].Data())
+
+	if txs[0].EthType() == transaction.EthDynamicFeeTxType {
+		// for dynamic transaction fees, we store MaxFeePerGas inside TransactionFees
+		response.MaxFeePerGas = txs[0].TransactionFees()
+		response.MaxPriorityFeePerGas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasTip()))
+	}
+
+	response.Nonce = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].Nounce()))
+	response.R = hexutil.Encode(txs[0].Signature()[:32])
+	response.S = hexutil.Encode(txs[0].Signature()[32:64])
+	response.V = hexutil.Encode(txs[0].Signature()[64:])
+	response.To = txs[0].To()
+	response.Type = hexutil.EncodeInt64(int64(txs[0].EthType()))
+	response.Value = txs[0].Value()
+
 	return nil
 }

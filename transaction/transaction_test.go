@@ -23,7 +23,7 @@ var (
 
 func TestMain(m *testing.M) {
 	// when a test func is added, increment this
-	wg.Add(8)
+	wg.Add(9)
 
 	go func() {
 		wg.Wait()
@@ -109,6 +109,29 @@ func TestParseEthTX2(t *testing.T) {
 	assert.Equal(t, txHashOriginal, hexutil.Encode(hash))
 }
 
+func TestParseEthTx2(t *testing.T) {
+	t.Cleanup(func() {
+		wg.Done()
+	})
+
+	rawTX := "02f87081bf01010187038d7ea4c6800094e113a8e7de54c3edd455e0d597830b0aa9a838b2883fd67ba0cecc000080c080a0269e531b8f0da7c049f6eb8160a900f8fd738beef8d6059a9b035d9a620c75b2a0125078ad9b01e3abe70918398993caf3bb4178a0db9f328b486dcd1056713ed8"
+	// txhash := "0xe84ef10c7dd1ba43c6d897c31757ddaf2a908a9720cae0ccba51fe3a349954c0"
+	tx, err := ParseEth(rawTX)
+	assert.NoError(t, err)
+	assert.NotNil(t, tx)
+	assert.Equal(t, "0xe84ef10c7dd1ba43c6d897c31757ddaf2a908a9720cae0ccba51fe3a349954c0", hexutil.Encode(tx.Hash()))
+
+	js, err := tx.innerEth.MarshalJSON()
+	assert.NoError(t, err)
+	fmt.Println("ss ", string(js))
+
+	_, err = tx.Validate()
+	assert.NoError(t, err)
+	calculateHash, err := tx.getHash()
+	assert.NoError(t, err)
+	assert.Equal(t, "0xe84ef10c7dd1ba43c6d897c31757ddaf2a908a9720cae0ccba51fe3a349954c0", hexutil.Encode(calculateHash))
+}
+
 func TestParseEthTX(t *testing.T) {
 	t.Cleanup(func() {
 		wg.Done()
@@ -120,6 +143,9 @@ func TestParseEthTX(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
 
+	ok, err := tx.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
 	// check if the hash is correct
 	var ethTx ethTypes.Transaction
 	txData, err := hexutil.DecodeNoPrefix(rawTX)
