@@ -40,17 +40,18 @@ const (
 
 // map the following rpc names to our internal rpc
 var methodMapping = map[string]string{
-	"eth_chainId":              "eth.ChainID",
-	"eth_blockNumber":          "eth.BlockNumber",
-	"eth_getBalance":           "eth.GetBalance",
-	"net_version":              "eth.Version",
-	"eth_gasPrice":             "eth.GasPrice",
-	"eth_estimateGas":          "eth.EstimateGas",
-	"eth_getTransactionCount":  "eth.GetTransactionCount",
-	"eth_getCode":              "eth.GetCode",
-	"eth_getBlockByNumber":     "eth.GetBlockByNumber",
-	"eth_sendRawTransaction":   "eth.SendRawTransaction",
-	"eth_getTransactionByHash": "eth.GetTransactionByHash",
+	"eth_chainId":               "eth.ChainID",
+	"eth_blockNumber":           "eth.BlockNumber",
+	"eth_getBalance":            "eth.GetBalance",
+	"net_version":               "eth.Version",
+	"eth_gasPrice":              "eth.GasPrice",
+	"eth_estimateGas":           "eth.EstimateGas",
+	"eth_getTransactionCount":   "eth.GetTransactionCount",
+	"eth_getCode":               "eth.GetCode",
+	"eth_getBlockByNumber":      "eth.GetBlockByNumber",
+	"eth_sendRawTransaction":    "eth.SendRawTransaction",
+	"eth_getTransactionByHash":  "eth.GetTransactionByHash",
+	"eth_getTransactionReceipt": "eth.GetTransactionReceipt",
 }
 
 // InspectValidateCall insepcts and validates rpc call.

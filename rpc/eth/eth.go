@@ -375,7 +375,7 @@ type GetTransactionByHashResponse struct {
 	ChainID              string   `json:"chainId,omitempty"`
 }
 
-// SendRawTransaction sends a raw transaction.
+// SendRawTransaction gets the transaction by hash.
 func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHashArgs, response *GetTransactionByHashResponse) error {
 	txHash, ok := (*args)[0].(string)
 	if !ok {
@@ -434,6 +434,75 @@ func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHash
 	response.To = txs[0].To()
 	response.Type = hexutil.EncodeInt64(int64(txs[0].EthType()))
 	response.Value = txs[0].Value()
+
+	return nil
+}
+
+type GetTransactionReceiptArgs []interface{}
+
+type GetTransactionReceiptResponse struct {
+	TransactionHash   string   `json:"transactionHash"`
+	TransactionIndex  string   `json:"transactionIndex"`
+	BlockHash         string   `json:"blockHash"`
+	BlockNumber       string   `json:"blockNumber"`
+	From              string   `json:"from"`
+	To                string   `json:"to"`
+	CumulativeGasUsed string   `json:"cumulativeGasUsed"`
+	EffectiveGasPrice string   `json:"effectiveGasPrice"`
+	GasUsed           string   `json:"gasUsed"`
+	ContractAddress   string   `json:"contractAddress,omitempty"`
+	Logs              []string `json:"logs"`
+	Status            string   `json:"status"` // 0x1 indicates success, 0x0 indicates failure
+	LogsBloom         string   `json:"logsBloom"`
+}
+
+// GetTransactionReceipt get's transaction receipt.
+func (api *API) GetTransactionReceipt(_ *http.Request, args *GetTransactionReceiptArgs, response *GetTransactionReceiptResponse) error {
+	txHash, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid tx data")
+	}
+
+	h, err := hexutil.Decode(txHash)
+	if err != nil {
+		return fmt.Errorf("failed to decode transaction hash: %w", err)
+	}
+
+	txs, blockNumbers, err := api.bc.GetTransactionByHash(h)
+	if err != nil || len(txs) == 0 {
+		response = nil
+		return nil
+	}
+
+	block, err := api.bc.GetBlockByNumber(blockNumbers[0])
+	if err != nil {
+		return fmt.Errorf("failed to get block: %w", err)
+	}
+
+	txIndex := -1
+
+	for i, v := range block.Transactions {
+		if bytes.Equal(v.Hash(), h) {
+			txIndex = i
+		}
+	}
+
+	if txIndex == -1 {
+		return fmt.Errorf("failed to find transaction in block: %w", err)
+	}
+
+	response.BlockHash = hexutil.Encode(block.Hash)
+	response.BlockNumber = hexutil.EncodeBig(big.NewInt(0).SetUint64(blockNumbers[0]))
+	response.CumulativeGasUsed = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
+	response.EffectiveGasPrice = txs[0].TransactionFees()
+	response.From = txs[0].From()
+	response.GasUsed = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
+	response.Logs = []string{}
+	response.LogsBloom = ""
+	response.Status = "0x1"
+	response.To = txs[0].To()
+	response.TransactionHash = hexutil.Encode(txs[0].Hash())
+	response.TransactionIndex = hexutil.EncodeInt64(int64(txIndex))
 
 	return nil
 }
