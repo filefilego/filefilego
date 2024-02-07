@@ -314,7 +314,7 @@ func getEthBlock(blockNumber *big.Int, timestamp uint64, parentHash []byte, txs 
 		Number:     blockNumber,
 		GasLimit:   12345678,
 		GasUsed:    1476322,
-		Time:       1707152154,
+		Time:       timestamp,
 		ParentHash: common.BytesToHash(parentHash),
 	}
 
