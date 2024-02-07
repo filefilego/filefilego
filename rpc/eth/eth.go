@@ -10,9 +10,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
-	"github.com/filefilego/filefilego/common"
+	ffgcommon "github.com/filefilego/filefilego/common"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	"github.com/filefilego/filefilego/transaction"
@@ -36,6 +39,7 @@ type bcInterface interface {
 	GetBlockByNumber(blockNumber uint64) (*block.Block, error)
 	PutMemPool(tx transaction.Transaction) error
 	GetTransactionByHash(hash []byte) ([]transaction.Transaction, []uint64, error)
+	GetBlockByHash(blockHash []byte) (block.Block, error)
 }
 
 type EmptyArgs struct{}
@@ -239,7 +243,6 @@ type Withdrawal struct {
 	ValidatorIndex string `json:"validatorIndex"`
 }
 
-// GetBlockByNumber gets block by number.
 func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
 	arg1, ok := (*args)[0].(string)
 	if !ok {
@@ -256,48 +259,196 @@ func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, re
 		return fmt.Errorf("failed to get block: %w", err)
 	}
 
-	coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
-	if err != nil {
-		return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
+	// coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
+	// }
+
+	transactions := make([]*ethTypes.Transaction, 0)
+	for _, v := range block.Transactions {
+		if v.Type() != transaction.LegacyTxType {
+			innerEth := v.InnerEth()
+			transactions = append(transactions, innerEth)
+		}
 	}
 
-	blockHash := hexutil.Encode(block.Hash)
-	parentHash := hexutil.Encode(block.PreviousBlockHash)
-	response.BaseFeePerGas = estimatedGas
-	response.Difficulty = "0x0"
+	ethBlock := getEthBlock(big.NewInt(0).SetUint64(block.Number), uint64(block.Timestamp), block.PreviousBlockHash, transactions)
+	parentHash := ethBlock.ParentHash().Hex()
+	response.BaseFeePerGas = hexutil.EncodeBig(ethBlock.BaseFee())
+	response.Difficulty = hexutil.EncodeBig(ethBlock.Difficulty())
+
 	response.ExtraData = hexutil.Encode(block.Data)
-	response.GasLimit = hexutil.EncodeBig(big.NewInt(int64(transaction.GasLimitFromFFGNetwork * len(block.Transactions))))
-	response.GasUsed = hexutil.EncodeBig(big.NewInt(int64(len(block.Transactions))))
-	response.Hash = blockHash
-	response.LogsBloom = "0x0"
-	response.Miner = coinbaseTx.To()
-	response.MixHash = blockHash
-	response.Nonce = "0x0000000000000000"
+	response.GasLimit = hexutil.EncodeUint64(ethBlock.GasLimit())
+	response.GasUsed = hexutil.EncodeUint64(ethBlock.GasUsed())
+	response.Hash = ethBlock.Hash().Hex()
+	response.LogsBloom = hexutil.Encode(ethBlock.Bloom().Bytes())
+
+	response.Miner = ethBlock.Coinbase().Hex()
+
+	response.MixHash = ethBlock.MixDigest().Hex()
+	response.Nonce = hexutil.EncodeUint64(ethBlock.Nonce())
 	response.Number = arg1
 	response.ParentHash = parentHash
-	response.ReceiptsRoot = blockHash
-	response.Sha3Uncles = blockHash
-	response.Size = hexutil.EncodeBig(big.NewInt(int64(3000 * len(block.Transactions))))
-	response.StateRoot = blockHash
-	response.Timestamp = hexutil.EncodeBig(big.NewInt(block.Timestamp))
-	response.TotalDifficulty = "0x1"
+	response.ReceiptsRoot = ethBlock.ReceiptHash().Hex()
+	response.Sha3Uncles = ethBlock.UncleHash().Hex()
+	response.Size = hexutil.EncodeUint64(ethBlock.Size())
+	response.StateRoot = ethBlock.Root().Hex()
+	response.Timestamp = hexutil.EncodeUint64(ethBlock.Time())
+	response.TotalDifficulty = hexutil.EncodeBig(ethBlock.Difficulty())
 	response.Transactions = make([]string, len(block.Transactions))
 	for i, v := range block.Transactions {
 		response.Transactions[i] = hexutil.Encode(v.Hash())
 	}
-	response.TransactionsRoot = hexutil.Encode(block.MerkleHash)
+	response.TransactionsRoot = ethBlock.TxHash().Hex()
 	response.Uncles = make([]interface{}, 0)
-	response.Withdrawals = make([]Withdrawal, 1)
-	response.Withdrawals[0] = Withdrawal{
-		Address:        coinbaseTx.To(),
-		Amount:         coinbaseTx.Value(),
-		Index:          "0x0",
-		ValidatorIndex: "0x0",
-	}
-	response.WithdrawalsRoot = hexutil.Encode(block.MerkleHash)
+	response.Withdrawals = []Withdrawal{}
+	// response.WithdrawalsRoot = ethBlock.Header().WithdrawalsHash.Hex()
 
 	return nil
 }
+
+func getEthBlock(blockNumber *big.Int, timestamp uint64, parentHash []byte, txs []*ethTypes.Transaction) *ethTypes.Block {
+	header := &ethTypes.Header{
+		BaseFee:    big.NewInt(12),
+		Difficulty: big.NewInt(0),
+		Number:     blockNumber,
+		GasLimit:   12345678,
+		GasUsed:    1476322,
+		Time:       1707152154,
+		ParentHash: common.BytesToHash(parentHash),
+	}
+
+	receipts := make([]*ethTypes.Receipt, len(txs))
+	for i, v := range txs {
+		receipts[i] = ethTypes.NewReceipt(make([]byte, 32), false, v.Gas())
+	}
+
+	return ethTypes.NewBlock(header, txs, []*ethTypes.Header{}, receipts, trie.NewStackTrie(nil))
+}
+
+func (api *API) GetBlockByHash(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
+	arg1, ok := (*args)[0].(string)
+	if !ok {
+		return errors.New("invalid block number")
+	}
+
+	blockHash, err := hexutil.Decode(arg1)
+	if err != nil {
+		return errors.New("invalid block number hex")
+	}
+
+	block, err := api.bc.GetBlockByHash(blockHash)
+	if err != nil {
+		return fmt.Errorf("failed to get block: %w", err)
+	}
+
+	// coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
+	// }
+
+	transactions := make([]*ethTypes.Transaction, 0)
+	for _, v := range block.Transactions {
+		if v.Type() != transaction.LegacyTxType {
+			innerEth := v.InnerEth()
+			transactions = append(transactions, innerEth)
+		}
+	}
+
+	ethBlock := getEthBlock(big.NewInt(0).SetUint64(block.Number), uint64(block.Timestamp), block.PreviousBlockHash, transactions)
+	parentHash := ethBlock.ParentHash().Hex()
+	response.BaseFeePerGas = hexutil.EncodeBig(ethBlock.BaseFee())
+	response.Difficulty = hexutil.EncodeBig(ethBlock.Difficulty())
+
+	response.ExtraData = hexutil.Encode(block.Data)
+	response.GasLimit = hexutil.EncodeUint64(ethBlock.GasLimit())
+	response.GasUsed = hexutil.EncodeUint64(ethBlock.GasUsed())
+	response.Hash = ethBlock.Hash().Hex()
+	response.LogsBloom = hexutil.Encode(ethBlock.Bloom().Bytes())
+
+	response.Miner = ethBlock.Coinbase().Hex()
+
+	response.MixHash = ethBlock.MixDigest().Hex()
+	response.Nonce = hexutil.EncodeUint64(ethBlock.Nonce())
+	response.Number = arg1
+	response.ParentHash = parentHash
+	response.ReceiptsRoot = ethBlock.ReceiptHash().Hex()
+	response.Sha3Uncles = ethBlock.UncleHash().Hex()
+	response.Size = hexutil.EncodeUint64(ethBlock.Size())
+	response.StateRoot = ethBlock.Root().Hex()
+	response.Timestamp = hexutil.EncodeUint64(ethBlock.Time())
+	response.TotalDifficulty = hexutil.EncodeBig(ethBlock.Difficulty())
+	response.Transactions = make([]string, len(block.Transactions))
+	for i, v := range block.Transactions {
+		response.Transactions[i] = hexutil.Encode(v.Hash())
+	}
+	response.TransactionsRoot = ethBlock.TxHash().Hex()
+	response.Uncles = make([]interface{}, 0)
+	response.Withdrawals = []Withdrawal{}
+	// response.WithdrawalsRoot = ethBlock.Header().WithdrawalsHash.Hex()
+
+	return nil
+}
+
+// GetBlockByNumber gets block by number.
+// func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
+// 	arg1, ok := (*args)[0].(string)
+// 	if !ok {
+// 		return errors.New("invalid block number")
+// 	}
+
+// 	blockNo, err := hexutil.DecodeBig(arg1)
+// 	if err != nil {
+// 		return errors.New("invalid block number hex")
+// 	}
+
+// 	block, err := api.bc.GetBlockByNumber(blockNo.Uint64())
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get block: %w", err)
+// 	}
+
+// 	coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
+// 	}
+
+// 	blockHash := hexutil.Encode(block.Hash)
+// 	parentHash := hexutil.Encode(block.PreviousBlockHash)
+// 	response.BaseFeePerGas = estimatedGas
+// 	response.Difficulty = "0x0"
+// 	response.ExtraData = hexutil.Encode(block.Data)
+// 	response.GasLimit = hexutil.EncodeBig(big.NewInt(int64(transaction.GasLimitFromFFGNetwork * len(block.Transactions))))
+// 	response.GasUsed = hexutil.EncodeBig(big.NewInt(int64(len(block.Transactions))))
+// 	response.Hash = blockHash
+// 	response.LogsBloom = "0x0"
+// 	response.Miner = coinbaseTx.To()
+// 	response.MixHash = blockHash
+// 	response.Nonce = "0x0000000000000000"
+// 	response.Number = arg1
+// 	response.ParentHash = parentHash
+// 	response.ReceiptsRoot = blockHash
+// 	response.Sha3Uncles = blockHash
+// 	response.Size = hexutil.EncodeBig(big.NewInt(int64(3000 * len(block.Transactions))))
+// 	response.StateRoot = blockHash
+// 	response.Timestamp = hexutil.EncodeBig(big.NewInt(block.Timestamp))
+// 	response.TotalDifficulty = "0x1"
+// 	response.Transactions = make([]string, len(block.Transactions))
+// 	for i, v := range block.Transactions {
+// 		response.Transactions[i] = hexutil.Encode(v.Hash())
+// 	}
+// 	response.TransactionsRoot = hexutil.Encode(block.MerkleHash)
+// 	response.Uncles = make([]interface{}, 0)
+// 	response.Withdrawals = make([]Withdrawal, 1)
+// 	response.Withdrawals[0] = Withdrawal{
+// 		Address:        coinbaseTx.To(),
+// 		Amount:         coinbaseTx.Value(),
+// 		Index:          "0x0",
+// 		ValidatorIndex: "0x0",
+// 	}
+// 	response.WithdrawalsRoot = hexutil.Encode(block.MerkleHash)
+
+// 	return nil
+// }
 
 type SendRawTransactionArgs []interface{}
 
@@ -341,7 +492,7 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 		return fmt.Errorf("failed to marshal gossip payload: %w", err)
 	}
 
-	if err := api.publisher.PublishMessageToNetwork(r.Context(), common.FFGNetPubSubBlocksTXQuery, txBytes); err != nil {
+	if err := api.publisher.PublishMessageToNetwork(r.Context(), ffgcommon.FFGNetPubSubBlocksTXQuery, txBytes); err != nil {
 		return fmt.Errorf("failed to publish transaction to network: %w", err)
 	}
 

@@ -204,6 +204,10 @@ func (tx *Transaction) GasLimit() []byte {
 	return tx.gasLimit
 }
 
+func (tx *Transaction) InnerEth() *ethTypes.Transaction {
+	return tx.innerEth
+}
+
 func ParseEth(rawTX string) (*Transaction, error) {
 	var ethTx ethTypes.Transaction
 	txData, err := hexutil.DecodeNoPrefix(rawTX)

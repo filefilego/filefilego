@@ -7,9 +7,12 @@ import (
 	"testing"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/filefilego/filefilego/crypto"
 	"github.com/stretchr/testify/assert"
@@ -152,46 +155,50 @@ func TestParseEthTX(t *testing.T) {
 	assert.NoError(t, err)
 
 	hash := ethcrypto.Keccak256Hash(txData)
-	fmt.Println("all tx hash ", hash.Hex())
 
 	derivedTX, err := &ethTx, rlp.DecodeBytes(txData, &ethTx)
 	assert.NoError(t, err)
 	assert.EqualValues(t, derivedTX.Hash().Bytes(), tx.Hash())
 
-	fmt.Println("original hash: ", derivedTX.Hash().Hex())
-
 	// calculate hash from transaction data
 	calculatedHash, err := tx.CalculateHash()
 	assert.NoError(t, err)
-	fmt.Println(hexutil.Encode(calculatedHash))
-
 	assert.Equal(t, hexutil.Encode(calculatedHash), hash.Hex())
+	parentHashBytes, _ := hexutil.Decode("0x56ac5faa78cb9efc2bc677281252a9ff8e927b3c6b9cf825487253eb63b50c2b")
 
-	v, r, s := derivedTX.RawSignatureValues()
-	newTX := ethTypes.NewTx(&ethTypes.LegacyTx{
-		Nonce:    derivedTX.Nonce(),
-		GasPrice: derivedTX.GasPrice(),
-		Gas:      derivedTX.Gas(),
-		To:       derivedTX.To(),
-		Value:    derivedTX.Value(),
-		Data:     derivedTX.Data(),
-		V:        v,
-		R:        r,
-		S:        s,
-	})
-
-	ms, _ := derivedTX.MarshalJSON()
-	fmt.Println("derivedTX ", string(ms))
-
-	// Serialize the transaction using RLP encoding
-	rlpEncodedTx, err := rlp.EncodeToBytes(newTX)
-	if err != nil {
-		panic(err)
+	header := &ethTypes.Header{
+		BaseFee:    big.NewInt(12),
+		Difficulty: big.NewInt(0),
+		Number:     math.BigPow(2, 32),
+		GasLimit:   12345678,
+		GasUsed:    1476322,
+		Time:       1707152154,
+		ParentHash: common.BytesToHash(parentHashBytes),
 	}
 
-	// Hash the RLP encoded transaction using Keccak-256
-	txHash := ethcrypto.Keccak256(rlpEncodedTx)
-	fmt.Println("Manual hash ", hexutil.Encode(txHash))
+	txs := make([]*ethTypes.Transaction, 1)
+	txs[0] = tx.innerEth
+
+	receipts := make([]*ethTypes.Receipt, len(txs))
+
+	for i, v := range txs {
+		receipts[i] = ethTypes.NewReceipt(make([]byte, 32), false, v.Gas())
+	}
+
+	block := ethTypes.NewBlock(header, txs, []*ethTypes.Header{}, receipts, trie.NewStackTrie(nil))
+
+	fmt.Println("block hash ", block.Hash().Hex())
+	fmt.Println("block BaseFee ", block.BaseFee().String())
+	fmt.Println("block Difficulty ", block.Difficulty().String())
+	fmt.Println("block Nonce ", block.Nonce())
+	fmt.Println("block Number ", block.Number().String())
+	fmt.Println("block ParentHash ", block.ParentHash().Hex())
+	fmt.Println("block ReceiptHash ", block.ReceiptHash())
+	fmt.Println("block Root ", block.Root().Hex())
+	fmt.Println("block TxHash ", block.TxHash().Hex())
+	fmt.Println("block Bloom ", hexutil.Encode(block.Bloom().Bytes()))
+
+	assert.Fail(t, "fuck")
 }
 
 func TestCalculateHash(t *testing.T) {
