@@ -198,7 +198,6 @@ func TestParseEthTX(t *testing.T) {
 	fmt.Println("block TxHash ", block.TxHash().Hex())
 	fmt.Println("block Bloom ", hexutil.Encode(block.Bloom().Bytes()))
 
-	assert.Fail(t, "fuck")
 }
 
 func TestCalculateHash(t *testing.T) {

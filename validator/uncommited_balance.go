@@ -8,6 +8,7 @@ package validator
 
 import (
 	"math/big"
+	"strings"
 	"sync"
 )
 
@@ -23,7 +24,9 @@ type UncommitedBalance struct {
 }
 
 // InitializeBalanceAndNounceFor sets the balance and nounce for an address.
-func (b *UncommitedBalance) InitializeBalanceAndNounceFor(address string, balance *big.Int, nounce uint64) {
+func (b *UncommitedBalance) InitializeBalanceAndNounceFor(addr string, balance *big.Int, nounce uint64) {
+	address := strings.ToLower(addr)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -33,22 +36,27 @@ func (b *UncommitedBalance) InitializeBalanceAndNounceFor(address string, balanc
 	}
 	data.dbBalance = balance
 	data.dbNounce = nounce
+
 	b.addresses[address] = data
 }
 
 // IsInitialized checks if balance is initialized for an address.
-func (b *UncommitedBalance) IsInitialized(address string) bool {
+func (b *UncommitedBalance) IsInitialized(addr string) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
+	address := strings.ToLower(addr)
 
 	_, ok := b.addresses[address]
 	return ok
 }
 
 // Subtract from balance.
-func (b *UncommitedBalance) Subtract(address string, amount *big.Int, nounce uint64) bool {
+func (b *UncommitedBalance) Subtract(addr string, amount *big.Int, txNounce uint64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	address := strings.ToLower(addr)
 
 	data, ok := b.addresses[address]
 	if !ok {
@@ -59,12 +67,12 @@ func (b *UncommitedBalance) Subtract(address string, amount *big.Int, nounce uin
 		return false
 	}
 
-	if nounce != data.dbNounce+1 {
+	if txNounce != data.dbNounce+1 {
 		return false
 	}
 
 	data.dbBalance = data.dbBalance.Sub(data.dbBalance, amount)
-	data.dbNounce = nounce
+	data.dbNounce = txNounce
 
 	b.addresses[address] = data
 	return true
