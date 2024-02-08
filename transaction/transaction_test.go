@@ -197,7 +197,6 @@ func TestParseEthTX(t *testing.T) {
 	fmt.Println("block Root ", block.Root().Hex())
 	fmt.Println("block TxHash ", block.TxHash().Hex())
 	fmt.Println("block Bloom ", hexutil.Encode(block.Bloom().Bytes()))
-
 }
 
 func TestCalculateHash(t *testing.T) {
