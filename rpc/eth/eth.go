@@ -23,9 +23,9 @@ import (
 )
 
 const (
+	gasPrice = "0x1"
 	// 0.001 FFG
-	gasPrice     = "0x1"
-	estimatedGas = "0x38d7ea4c68000"
+	blockBaseFees = 1000000000000000
 )
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -156,7 +156,7 @@ type EstimateGasArgs struct {
 
 // EstimateGas returns the estimated gas.
 func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
-	*response = EstimateGasResponse(estimatedGas)
+	*response = EstimateGasResponse(hexutil.EncodeBig(big.NewInt(blockBaseFees)))
 	return nil
 }
 
@@ -309,11 +309,11 @@ func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, re
 
 func getEthBlock(blockNumber *big.Int, timestamp uint64, parentHash []byte, txs []*ethTypes.Transaction) *ethTypes.Block {
 	header := &ethTypes.Header{
-		BaseFee:    big.NewInt(12),
+		BaseFee:    big.NewInt(blockBaseFees),
 		Difficulty: big.NewInt(0),
 		Number:     blockNumber,
-		GasLimit:   12345678,
-		GasUsed:    1476322,
+		GasLimit:   uint64(transaction.GasLimitFromFFGNetwork * len(txs) * 5), // gas limit will be 5x the limit of each transaction
+		GasUsed:    uint64(transaction.GasLimitFromFFGNetwork * len(txs)),
 		Time:       timestamp,
 		ParentHash: common.BytesToHash(parentHash),
 	}
