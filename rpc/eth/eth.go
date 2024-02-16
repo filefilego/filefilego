@@ -390,66 +390,6 @@ func (api *API) GetBlockByHash(_ *http.Request, args *GetBlockByNumberArgs, resp
 	return nil
 }
 
-// GetBlockByNumber gets block by number.
-// func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
-// 	arg1, ok := (*args)[0].(string)
-// 	if !ok {
-// 		return errors.New("invalid block number")
-// 	}
-
-// 	blockNo, err := hexutil.DecodeBig(arg1)
-// 	if err != nil {
-// 		return errors.New("invalid block number hex")
-// 	}
-
-// 	block, err := api.bc.GetBlockByNumber(blockNo.Uint64())
-// 	if err != nil {
-// 		return fmt.Errorf("failed to get block: %w", err)
-// 	}
-
-// 	coinbaseTx, err := block.GetAndValidateCoinbaseTransaction()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to get block's coinbase transaction: %w", err)
-// 	}
-
-// 	blockHash := hexutil.Encode(block.Hash)
-// 	parentHash := hexutil.Encode(block.PreviousBlockHash)
-// 	response.BaseFeePerGas = estimatedGas
-// 	response.Difficulty = "0x0"
-// 	response.ExtraData = hexutil.Encode(block.Data)
-// 	response.GasLimit = hexutil.EncodeBig(big.NewInt(int64(transaction.GasLimitFromFFGNetwork * len(block.Transactions))))
-// 	response.GasUsed = hexutil.EncodeBig(big.NewInt(int64(len(block.Transactions))))
-// 	response.Hash = blockHash
-// 	response.LogsBloom = "0x0"
-// 	response.Miner = coinbaseTx.To()
-// 	response.MixHash = blockHash
-// 	response.Nonce = "0x0000000000000000"
-// 	response.Number = arg1
-// 	response.ParentHash = parentHash
-// 	response.ReceiptsRoot = blockHash
-// 	response.Sha3Uncles = blockHash
-// 	response.Size = hexutil.EncodeBig(big.NewInt(int64(3000 * len(block.Transactions))))
-// 	response.StateRoot = blockHash
-// 	response.Timestamp = hexutil.EncodeBig(big.NewInt(block.Timestamp))
-// 	response.TotalDifficulty = "0x1"
-// 	response.Transactions = make([]string, len(block.Transactions))
-// 	for i, v := range block.Transactions {
-// 		response.Transactions[i] = hexutil.Encode(v.Hash())
-// 	}
-// 	response.TransactionsRoot = hexutil.Encode(block.MerkleHash)
-// 	response.Uncles = make([]interface{}, 0)
-// 	response.Withdrawals = make([]Withdrawal, 1)
-// 	response.Withdrawals[0] = Withdrawal{
-// 		Address:        coinbaseTx.To(),
-// 		Amount:         coinbaseTx.Value(),
-// 		Index:          "0x0",
-// 		ValidatorIndex: "0x0",
-// 	}
-// 	response.WithdrawalsRoot = hexutil.Encode(block.MerkleHash)
-
-// 	return nil
-// }
-
 type SendRawTransactionArgs []interface{}
 
 type SendRawTransactionResponse string
