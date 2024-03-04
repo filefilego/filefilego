@@ -79,6 +79,7 @@ func TestNewTransaction(t *testing.T) {
 }
 
 func TestParseEthTX2(t *testing.T) {
+	// comment out below if you want to test as single unit
 	if !allTestsDone {
 		t.Skip("Skipping final test until all others are complete because we will change the ChainIDGlobal and it will make the rest of tests fail")
 	}
@@ -97,7 +98,7 @@ func TestParseEthTX2(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, txHashOriginal, hexutil.Encode(hash))
 
-	// another tx
+	// another tx from eth network
 	raw = "02f874018202688405f5e10085088ac5c910825208945c543c580288237bcb771d1677b8adab36d4138a8758d15e1762800080c080a02d6a0025789f6b7ca4cd700bc82fd9a8255d902d4aa8c6efa99ed20ef2dd65f0a048e1a0da1ffd32cac2ee67503ee1f2b86e450c1099d1518c0a6dc9e7f93ac4e0"
 	tx, err = ParseEth(raw)
 	assert.NoError(t, err)
@@ -110,6 +111,13 @@ func TestParseEthTX2(t *testing.T) {
 	hash, err = tx.CalculateHash()
 	assert.NoError(t, err)
 	assert.Equal(t, txHashOriginal, hexutil.Encode(hash))
+
+	// "gasLimit": "21000",
+	// "maxFeePerGas": "36687956240",
+	// "maxPriorityFeePerGas": "100000000",
+	assert.Equal(t, uint64(100000000), big.NewInt(0).SetBytes(tx.GasTip()).Uint64())
+	fees := tx.TransactionFees()
+	assert.Equal(t, "0x2bcb7b0956880", fees)
 }
 
 func TestParseEthTx2(t *testing.T) {
@@ -123,10 +131,6 @@ func TestParseEthTx2(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
 	assert.Equal(t, "0xe84ef10c7dd1ba43c6d897c31757ddaf2a908a9720cae0ccba51fe3a349954c0", hexutil.Encode(tx.Hash()))
-
-	js, err := tx.innerEth.MarshalJSON()
-	assert.NoError(t, err)
-	fmt.Println("ss ", string(js))
 
 	_, err = tx.Validate()
 	assert.NoError(t, err)

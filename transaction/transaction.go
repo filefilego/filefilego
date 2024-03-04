@@ -181,7 +181,29 @@ func (tx *Transaction) Value() string {
 }
 
 func (tx *Transaction) TransactionFees() string {
-	return tx.transactionFees
+	// if regular tx then return the fees
+	if tx.txType == LegacyTxType {
+		return tx.transactionFees
+	}
+
+	// eth transaction
+	// fees = gaslimit * (base fees + priority/tip)
+	// we dont include gas tip for now
+	gasLimitBig := big.NewInt(0).SetBytes(tx.gasLimit)
+	if gasLimitBig.Uint64() == 0 {
+		gasLimitBig = gasLimitBig.SetUint64(GasLimitFromFFGNetwork)
+	}
+
+	fees, err := hexutil.DecodeBig(tx.transactionFees)
+	if err != nil {
+		return ""
+	}
+	if fees.Uint64() == 0 {
+		fees = fees.SetUint64(1)
+	}
+	fees = fees.Mul(fees, gasLimitBig)
+
+	return hexutil.EncodeBig(fees)
 }
 
 func (tx *Transaction) Chain() []byte {

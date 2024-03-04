@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
@@ -23,9 +25,8 @@ import (
 )
 
 const (
-	gasPrice = "0x1"
-	// 0.001 FFG
-	blockBaseFees = 1000000000000000
+	// 0.001 FFG = 47619047620 (fee per gas)  * 21000 (gas limit)
+	blockBaseFees = 47619047620
 )
 
 // NetworkMessagePublisher is a pub sub message broadcaster.
@@ -140,7 +141,7 @@ type GasPriceResponse string
 
 // GasPrice returns the gas price.
 func (api *API) GasPrice(_ *http.Request, _ *EmptyArgs, response *GasPriceResponse) error {
-	*response = GasPriceResponse(gasPrice)
+	*response = GasPriceResponse(hexutil.EncodeBig(big.NewInt(blockBaseFees)))
 	return nil
 }
 
@@ -155,8 +156,9 @@ type EstimateGasArgs struct {
 }
 
 // EstimateGas returns the estimated gas.
-func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
-	*response = EstimateGasResponse(hexutil.EncodeBig(big.NewInt(blockBaseFees)))
+func (api *API) EstimateGas(_ *http.Request, args *EstimateGasArgs, response *EstimateGasResponse) error {
+	defualtGas := big.NewInt(transaction.GasLimitFromFFGNetwork)
+	*response = EstimateGasResponse(hexutil.EncodeBig(defualtGas))
 	return nil
 }
 
@@ -312,8 +314,8 @@ func getEthBlock(blockNumber *big.Int, timestamp uint64, parentHash []byte, txs 
 		BaseFee:    big.NewInt(blockBaseFees),
 		Difficulty: big.NewInt(0),
 		Number:     blockNumber,
-		GasLimit:   uint64(transaction.GasLimitFromFFGNetwork * len(txs) * 5), // gas limit will be 5x the limit of each transaction
-		GasUsed:    uint64(transaction.GasLimitFromFFGNetwork * len(txs)),
+		GasLimit:   uint64(transaction.GasLimitFromFFGNetwork * 2), // gas limit will be 2x more than gas used.
+		GasUsed:    uint64(transaction.GasLimitFromFFGNetwork),
 		Time:       timestamp,
 		ParentHash: common.BytesToHash(parentHash),
 	}
@@ -400,6 +402,8 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 	if !ok {
 		return errors.New("invalid tx data")
 	}
+
+	log.Infof("raw transaction submited: %s", arg1)
 
 	tx, err := transaction.ParseEth(strings.TrimPrefix(arg1, "0x"))
 	if err != nil {
@@ -515,7 +519,8 @@ func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHash
 	if txs[0].EthType() == transaction.EthDynamicFeeTxType {
 		// for dynamic transaction fees, we store MaxFeePerGas inside TransactionFees
 		response.MaxFeePerGas = txs[0].TransactionFees()
-		response.MaxPriorityFeePerGas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasTip()))
+		// response.MaxPriorityFeePerGas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasTip()))
+		response.MaxPriorityFeePerGas = "0x0"
 	}
 
 	response.Nonce = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].Nounce()))
