@@ -156,7 +156,7 @@ type EstimateGasArgs struct {
 }
 
 // EstimateGas returns the estimated gas.
-func (api *API) EstimateGas(_ *http.Request, args *EstimateGasArgs, response *EstimateGasResponse) error {
+func (api *API) EstimateGas(_ *http.Request, _ *EstimateGasArgs, response *EstimateGasResponse) error {
 	defualtGas := big.NewInt(transaction.GasLimitFromFFGNetwork)
 	*response = EstimateGasResponse(hexutil.EncodeBig(defualtGas))
 	return nil
