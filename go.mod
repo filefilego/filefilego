@@ -9,7 +9,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/fatih/color v1.16.0
-	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
