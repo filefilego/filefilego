@@ -53,6 +53,7 @@ var methodMapping = map[string]string{
 	"eth_getTransactionByHash":  "eth.GetTransactionByHash",
 	"eth_getTransactionReceipt": "eth.GetTransactionReceipt",
 	"eth_getBlockByHash":        "eth.GetBlockByHash",
+	"eth_feeHistory":            "eth.FeeHistory",
 }
 
 // InspectValidateCall insepcts and validates rpc call.

@@ -180,6 +180,10 @@ func (tx *Transaction) Value() string {
 	return tx.value
 }
 
+func (tx *Transaction) GasFees() string {
+	return tx.transactionFees
+}
+
 func (tx *Transaction) TransactionFees() string {
 	// if regular tx then return the fees
 	if tx.txType == LegacyTxType {
@@ -187,23 +191,32 @@ func (tx *Transaction) TransactionFees() string {
 	}
 
 	// eth transaction
-	// fees = gaslimit * (base fees + priority/tip)
+	// fees = (gaslimit * base fees) + priority/tip
 	// we dont include gas tip for now
 	gasLimitBig := big.NewInt(0).SetBytes(tx.gasLimit)
 	if gasLimitBig.Uint64() == 0 {
 		gasLimitBig = gasLimitBig.SetUint64(GasLimitFromFFGNetwork)
 	}
 
-	fees, err := hexutil.DecodeBig(tx.transactionFees)
+	totalFees, err := hexutil.DecodeBig(tx.transactionFees)
 	if err != nil {
 		return ""
 	}
-	if fees.Uint64() == 0 {
-		fees = fees.SetUint64(1)
-	}
-	fees = fees.Mul(fees, gasLimitBig)
 
-	return hexutil.EncodeBig(fees)
+	if totalFees.Uint64() == 0 {
+		totalFees = totalFees.SetUint64(1)
+	}
+
+	totalFees = totalFees.Mul(totalFees, gasLimitBig)
+
+	// if its eth transaction of type EIP-1559
+	// we add the gas tip
+	if tx.ethTxType == EthDynamicFeeTxType {
+		gasTip := big.NewInt(0).SetBytes(tx.gasTip)
+		totalFees.Add(totalFees, gasTip)
+	}
+
+	return hexutil.EncodeBig(totalFees)
 }
 
 func (tx *Transaction) Chain() []byte {

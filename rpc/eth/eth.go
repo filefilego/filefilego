@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -26,6 +27,7 @@ import (
 
 const (
 	// 0.001 FFG = 47619047620 (fee per gas)  * 21000 (gas limit)
+	// note that this is without the priority fee
 	blockBaseFees = 47619047620
 )
 
@@ -101,6 +103,9 @@ type GetBalanceArgs []interface{}
 
 // GetBalance returns the address balance.
 func (api *API) GetBalance(_ *http.Request, args *GetBalanceArgs, response *GetBalanceResponse) error {
+	if len(*args) == 0 {
+		return errors.New("address is empty")
+	}
 	arg1, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid address")
@@ -168,6 +173,9 @@ type GetTransactionCountArgs []interface{}
 
 // GetTransactionCount returns the transaction counts of an address.
 func (api *API) GetTransactionCount(_ *http.Request, args *GetTransactionCountArgs, response *GetTransactionCountResponse) error {
+	if len(*args) == 0 {
+		return errors.New("address is empty")
+	}
 	arg1, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid address")
@@ -246,6 +254,10 @@ type Withdrawal struct {
 }
 
 func (api *API) GetBlockByNumber(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
+	if len(*args) == 0 {
+		return errors.New("invalid hash")
+	}
+
 	arg1, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid block number")
@@ -329,6 +341,9 @@ func getEthBlock(blockNumber *big.Int, timestamp uint64, parentHash []byte, txs 
 }
 
 func (api *API) GetBlockByHash(_ *http.Request, args *GetBlockByNumberArgs, response *GetBlockByNumberResponse) error {
+	if len(*args) == 0 {
+		return errors.New("invalid hash")
+	}
 	arg1, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid block number")
@@ -398,6 +413,9 @@ type SendRawTransactionResponse string
 
 // SendRawTransaction sends a raw transaction.
 func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs, response *SendRawTransactionResponse) error {
+	if len(*args) == 0 {
+		return errors.New("invalid hash")
+	}
 	arg1, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid tx data")
@@ -472,6 +490,10 @@ type GetTransactionByHashResponse struct {
 
 // SendRawTransaction gets the transaction by hash.
 func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHashArgs, response *GetTransactionByHashResponse) error {
+	if len(*args) == 0 {
+		return errors.New("invalid hash")
+	}
+
 	txHash, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid tx data")
@@ -512,13 +534,13 @@ func (api *API) GetTransactionByHash(_ *http.Request, args *GetTransactionByHash
 	response.ChainID = api.chainID
 	response.From = txs[0].From()
 	response.Gas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
-	response.GasPrice = txs[0].TransactionFees()
+	response.GasPrice = txs[0].GasFees()
 	response.Hash = hexutil.Encode(txs[0].Hash())
 	response.Input = hexutil.Encode(txs[0].Data())
 
 	if txs[0].EthType() == transaction.EthDynamicFeeTxType {
 		// for dynamic transaction fees, we store MaxFeePerGas inside TransactionFees
-		response.MaxFeePerGas = txs[0].TransactionFees()
+		response.MaxFeePerGas = txs[0].GasFees()
 		// response.MaxPriorityFeePerGas = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasTip()))
 		response.MaxPriorityFeePerGas = "0x0"
 	}
@@ -554,6 +576,10 @@ type GetTransactionReceiptResponse struct {
 
 // GetTransactionReceipt get's transaction receipt.
 func (api *API) GetTransactionReceipt(_ *http.Request, args *GetTransactionReceiptArgs, response *GetTransactionReceiptResponse) error {
+	if len(*args) == 0 {
+		return errors.New("invalid hash")
+	}
+
 	txHash, ok := (*args)[0].(string)
 	if !ok {
 		return errors.New("invalid tx data")
@@ -590,7 +616,8 @@ func (api *API) GetTransactionReceipt(_ *http.Request, args *GetTransactionRecei
 	response.BlockHash = hexutil.Encode(block.Hash)
 	response.BlockNumber = hexutil.EncodeBig(big.NewInt(0).SetUint64(blockNumbers[0]))
 	response.CumulativeGasUsed = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
-	response.EffectiveGasPrice = txs[0].TransactionFees()
+	response.EffectiveGasPrice = txs[0].GasFees()
+	// response.EffectiveGasPrice = txs[0].TransactionFees()
 	response.From = txs[0].From()
 	response.GasUsed = hexutil.EncodeBig(big.NewInt(0).SetBytes(txs[0].GasLimit()))
 	response.Logs = []string{}
@@ -599,6 +626,89 @@ func (api *API) GetTransactionReceipt(_ *http.Request, args *GetTransactionRecei
 	response.To = txs[0].To()
 	response.TransactionHash = hexutil.Encode(txs[0].Hash())
 	response.TransactionIndex = hexutil.EncodeInt64(int64(txIndex))
+
+	return nil
+}
+
+type FeeHistoryArgs []interface{}
+
+type FeeHistoryResponse struct {
+	BaseFeePerGas []string   `json:"baseFeePerGas"`
+	GasUsedRatio  []float32  `json:"gasUsedRatio"`
+	OldestBlock   string     `json:"oldestBlock"`
+	Reward        [][]string `json:"reward"`
+}
+
+// FeeHistory get fees history.
+func (api *API) FeeHistory(_ *http.Request, args *FeeHistoryArgs, response *FeeHistoryResponse) error {
+	if len(*args) < 2 {
+		return errors.New("invalid number arguments")
+	}
+
+	blockCountInt := uint64(0)
+	switch v := (*args)[0].(type) {
+	case string:
+		if strings.HasPrefix(v, "0x") {
+			blockCountBig, err := hexutil.DecodeBig(v)
+			if err != nil {
+				return errors.New("invalid hexadecimal blockCount")
+			}
+			blockCountInt = blockCountBig.Uint64()
+		} else {
+			// Attempt to convert string to integer
+			blockCountInt64, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return errors.New("invalid int blockCount")
+			}
+			blockCountInt = uint64(blockCountInt64)
+		}
+	case int:
+		blockCountInt = uint64(v)
+	case float64:
+		blockCountInt = uint64(v)
+	default:
+		return fmt.Errorf("invalid blockCount type: %T", v)
+	}
+
+	_, ok := (*args)[1].(string)
+	if !ok {
+		return errors.New("invalid newestBlock")
+	}
+
+	rewardPercentiles := []int{}
+	if len(*args) >= 2 {
+		p, ok := (*args)[2].([]interface{})
+		if ok {
+			for _, v := range p {
+				percentile, _ := v.(int)
+				rewardPercentiles = append(rewardPercentiles, percentile)
+			}
+		}
+	}
+
+	response.GasUsedRatio = make([]float32, blockCountInt)
+	response.Reward = make([][]string, blockCountInt)
+	response.BaseFeePerGas = make([]string, blockCountInt)
+	for i := 0; i < int(blockCountInt); i++ {
+		// 1. gas used ratio
+		response.GasUsedRatio[i] = 0.5
+
+		// 2. rewards
+		response.Reward[i] = []string{}
+		for j := 0; j < len(rewardPercentiles); j++ {
+			// each individual reward
+			response.Reward[i] = append(response.Reward[i], "0x1")
+		}
+
+		// 3. base fee per gas
+		response.BaseFeePerGas[i] = hexutil.EncodeBig(big.NewInt(blockBaseFees))
+	}
+
+	// +1 base fee
+	response.BaseFeePerGas = append(response.BaseFeePerGas, hexutil.EncodeBig(big.NewInt(blockBaseFees)))
+
+	bcHeight := api.bc.GetHeight()
+	response.OldestBlock = hexutil.EncodeBig(big.NewInt(0).SetUint64(bcHeight - blockCountInt))
 
 	return nil
 }

@@ -117,7 +117,7 @@ func TestParseEthTX2(t *testing.T) {
 	// "maxPriorityFeePerGas": "100000000",
 	assert.Equal(t, uint64(100000000), big.NewInt(0).SetBytes(tx.GasTip()).Uint64())
 	fees := tx.TransactionFees()
-	assert.Equal(t, "0x2bcb7b0956880", fees)
+	assert.Equal(t, "0x2bcb7b68b4980", fees)
 }
 
 func TestParseEthTx2(t *testing.T) {
