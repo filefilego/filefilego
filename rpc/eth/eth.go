@@ -689,7 +689,7 @@ func (api *API) FeeHistory(_ *http.Request, args *FeeHistoryArgs, response *FeeH
 	response.GasUsedRatio = make([]float32, blockCountInt)
 	response.Reward = make([][]string, blockCountInt)
 	response.BaseFeePerGas = make([]string, blockCountInt)
-	for i := 0; i < int(blockCountInt); i++ {
+	for i := uint64(0); i < blockCountInt; i++ {
 		// 1. gas used ratio
 		response.GasUsedRatio[i] = 0.5
 
