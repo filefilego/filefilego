@@ -27,6 +27,33 @@ message ProtoTransaction {
     string transaction_fees = 9;
     // chain represents the network chain.
     bytes chain = 10;
+    // tx_type indicated the transaction type
+    TxType tx_type = 11;
+    // eth_tx_type indicated the ethereum transaction type
+    EthTransactionType eth_tx_type = 12;
+    // gas_tip is used for DynamicFee transactions.
+    optional bytes gas_tip = 13;
+    // gas_limit represents the gaslimit.
+    optional bytes gas_limit = 14;
+    // access_list is used for AccessList transactions.
+    optional bytes access_list = 15;
+}
+
+// TxType represents transaction types.
+enum TxType {
+  LEGACY = 0;
+  ETH = 1;
+}
+
+// EthTransactionType represents ethereum transaction types.
+enum EthTransactionType {
+    LEGACY_TX = 0;
+	// EIP-2930 transaction
+	ACCESS_LIST = 1;
+	// EIP-1559 transaction
+	DYNAMIC_FEE = 2;
+	// EIP-4844: Shard Blob Transactions
+	BLOB = 3;
 }
 
 // DataType is the transaction data type.

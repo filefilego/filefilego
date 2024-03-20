@@ -325,31 +325,24 @@ func TestE2E(t *testing.T) {
 	nextNounce, err := hexutil.DecodeUint64(v1Balance.NextNounce)
 	assert.NoError(t, err)
 	nounceBytes := hexutil.EncodeUint64ToBytes(nextNounce)
-	tx1 := transaction.Transaction{
-		PublicKey:       publicKeyV1,
-		Nounce:          nounceBytes,
-		Data:            []byte{0},
-		From:            kpV1.Address,
-		To:              kpFileDownloader1.Address,
-		Value:           hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))),
-		TransactionFees: "0x1",
-		Chain:           mainChain,
-	}
+
+	tx1 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyV1, nounceBytes, []byte{0}, kpV1.Address, kpFileDownloader1.Address, hexutil.EncodeBig(currency.FFG().Mul(currency.FFG(), big.NewInt(5))), "0x1", mainChain)
+
 	err = tx1.Sign(kpV1.PrivateKey)
 	assert.NoError(t, err)
 	ok, err := tx1.Validate()
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	JSONTx1 := internalrpc.JSONTransaction{
-		Hash:            hexutil.Encode(tx1.Hash),
-		Signature:       hexutil.Encode(tx1.Signature),
-		PublicKey:       hexutil.Encode(tx1.PublicKey),
-		Nounce:          hexutil.EncodeUint64BytesToHexString(tx1.Nounce),
-		Data:            hexutil.Encode(tx1.Data),
-		From:            tx1.From,
-		To:              tx1.To,
-		Value:           tx1.Value,
-		TransactionFees: tx1.TransactionFees,
+		Hash:            hexutil.Encode(tx1.Hash()),
+		Signature:       hexutil.Encode(tx1.Signature()),
+		PublicKey:       hexutil.Encode(tx1.PublicKey()),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx1.Nounce()),
+		Data:            hexutil.Encode(tx1.Data()),
+		From:            tx1.From(),
+		To:              tx1.To(),
+		Value:           tx1.Value(),
+		TransactionFees: tx1.TransactionFees(),
 		Chain:           hexutil.Encode(mainChain),
 	}
 
@@ -442,31 +435,23 @@ func TestE2E(t *testing.T) {
 	}
 	txPayloadBytes, err := proto.Marshal(&txPayload)
 	assert.NoError(t, err)
-	tx2 := transaction.Transaction{
-		PublicKey:       publicKeyBytesOfFileDownloader,
-		Nounce:          []byte{1},
-		Data:            txPayloadBytes,
-		From:            kpFileDownloader1.Address,
-		To:              dataverifierAddr,
-		Value:           hexutil.EncodeBig(totalFees),
-		TransactionFees: "0x1",
-		Chain:           mainChain,
-	}
+	tx2 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytesOfFileDownloader, []byte{1}, txPayloadBytes, kpFileDownloader1.Address, dataverifierAddr, hexutil.EncodeBig(totalFees), "0x1", mainChain)
+
 	err = tx2.Sign(kpFileDownloader1.PrivateKey)
 	assert.NoError(t, err)
 	ok, err = tx2.Validate()
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	JSONTx2 := internalrpc.JSONTransaction{
-		Hash:            hexutil.Encode(tx2.Hash),
-		Signature:       hexutil.Encode(tx2.Signature),
-		PublicKey:       hexutil.Encode(tx2.PublicKey),
-		Nounce:          hexutil.EncodeUint64BytesToHexString(tx2.Nounce),
-		Data:            hexutil.Encode(tx2.Data),
-		From:            tx2.From,
-		To:              tx2.To,
-		Value:           tx2.Value,
-		TransactionFees: tx2.TransactionFees,
+		Hash:            hexutil.Encode(tx2.Hash()),
+		Signature:       hexutil.Encode(tx2.Signature()),
+		PublicKey:       hexutil.Encode(tx2.PublicKey()),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx2.Nounce()),
+		Data:            hexutil.Encode(tx2.Data()),
+		From:            tx2.From(),
+		To:              tx2.To(),
+		Value:           tx2.Value(),
+		TransactionFees: tx2.TransactionFees(),
 		Chain:           hexutil.Encode(mainChain),
 	}
 
@@ -511,31 +496,22 @@ func TestE2E(t *testing.T) {
 	assert.NoError(t, err)
 	channelBytes, err := hexutil.Decode(channelBytesStr)
 	assert.NoError(t, err)
-	tx3 := transaction.Transaction{
-		PublicKey:       publicKeyBytesOfFileDownloader,
-		Nounce:          []byte{2},
-		Data:            channelBytes,
-		From:            kpFileDownloader1.Address,
-		To:              dataverifierAddr,
-		Value:           "0x1",
-		TransactionFees: fees,
-		Chain:           mainChain,
-	}
+	tx3 := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytesOfFileDownloader, []byte{2}, channelBytes, kpFileDownloader1.Address, dataverifierAddr, "0x1", fees, mainChain)
 	err = tx3.Sign(kpFileDownloader1.PrivateKey)
 	assert.NoError(t, err)
 	ok, err = tx3.Validate()
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	JSONTx3 := internalrpc.JSONTransaction{
-		Hash:            hexutil.Encode(tx3.Hash),
-		Signature:       hexutil.Encode(tx3.Signature),
-		PublicKey:       hexutil.Encode(tx3.PublicKey),
-		Nounce:          hexutil.EncodeUint64BytesToHexString(tx3.Nounce),
-		Data:            hexutil.Encode(tx3.Data),
-		From:            tx3.From,
-		To:              tx3.To,
-		Value:           tx3.Value,
-		TransactionFees: tx3.TransactionFees,
+		Hash:            hexutil.Encode(tx3.Hash()),
+		Signature:       hexutil.Encode(tx3.Signature()),
+		PublicKey:       hexutil.Encode(tx3.PublicKey()),
+		Nounce:          hexutil.EncodeUint64BytesToHexString(tx3.Nounce()),
+		Data:            hexutil.Encode(tx3.Data()),
+		From:            tx3.From(),
+		To:              tx3.To(),
+		Value:           tx3.Value(),
+		TransactionFees: tx3.TransactionFees(),
 		Chain:           hexutil.Encode(mainChain),
 	}
 
@@ -549,7 +525,7 @@ func TestE2E(t *testing.T) {
 	mempoolTransactions := v1Bchain.GetTransactionsFromPool()
 	found := false
 	for _, v := range mempoolTransactions {
-		if hexutil.Encode(v.Hash) == JSONTx2.Hash {
+		if hexutil.Encode(v.Hash()) == JSONTx2.Hash {
 			found = true
 		}
 	}
@@ -622,9 +598,9 @@ func TestE2E(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	mempoolTxs := v1Bchain.GetTransactionsFromPool()
 	assert.Len(t, mempoolTxs, 1)
-	assert.Equal(t, dataverifierAddr, mempoolTxs[0].From)
-	assert.Equal(t, kpN1.Address, mempoolTxs[0].To)
-	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), mempoolTxs[0].Value)
+	assert.Equal(t, dataverifierAddr, mempoolTxs[0].From())
+	assert.Equal(t, kpN1.Address, mempoolTxs[0].To())
+	assert.Equal(t, hexutil.EncodeBig(fileHosterFees), mempoolTxs[0].Value())
 
 	// seal block
 	sealedBlock4, _, err := validator.SealBlock(time.Now().Unix())

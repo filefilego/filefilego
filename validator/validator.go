@@ -105,47 +105,47 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 
 	// set the uncommitted balances of addresses
 	for _, tx := range mempoolTransactions {
-		fromBytes, err := hexutil.Decode(tx.From)
+		fromBytes, err := hexutil.Decode(tx.From())
 		if err != nil {
 			log.Errorf("failed to decode from field from transaction: %v", err)
 			continue
 		}
 
 		// prevent getting state for addresses which we already retrieved
-		if balances.IsInitialized(tx.From) {
+		if balances.IsInitialized(tx.From()) {
 			continue
 		}
 
 		state, err := m.blockchain.GetAddressState(fromBytes)
 		if err != nil {
 			// TODO: remove them from mempool, also handle for the below cases
-			log.Errorf("failed to get address state of %s : %v", tx.From, err)
+			log.Errorf("failed to get address state of %s : %v", tx.From(), err)
 			continue
 		}
 
 		balanceFrom, err := state.GetBalance()
 		if err != nil {
-			log.Errorf("failed to get address balance of %s : %v", tx.From, err)
+			log.Errorf("failed to get address balance of %s : %v", tx.From(), err)
 			continue
 		}
 
 		nounceFrom, err := state.GetNounce()
 		if err != nil {
-			log.Errorf("failed to get address nounce of %s : %v", tx.From, err)
+			log.Errorf("failed to get address nounce of %s : %v", tx.From(), err)
 			continue
 		}
 
-		balances.InitializeBalanceAndNounceFor(tx.From, balanceFrom, nounceFrom)
+		balances.InitializeBalanceAndNounceFor(tx.From(), balanceFrom, nounceFrom)
 	}
 
 	// we have the balances, go through the transactions again and see which are allowed
 	validatedTransaction := make([]transaction.Transaction, 0)
 	for _, tx := range mempoolTransactions {
-		amount, err := hexutil.DecodeBig(tx.Value)
+		amount, err := hexutil.DecodeBig(tx.Value())
 		if err != nil {
 			continue
 		}
-		ok := balances.Subtract(tx.From, amount, hexutil.DecodeBigFromBytesToUint64(tx.Nounce))
+		ok := balances.Subtract(tx.From(), amount, hexutil.DecodeBigFromBytesToUint64(tx.Nounce()))
 		if ok {
 			validatedTransaction = append(validatedTransaction, tx)
 		}
@@ -171,22 +171,13 @@ func (m *Validator) getCoinbaseTX(pk crypto.PrivKey, address string) (*transacti
 		return nil, fmt.Errorf("failed to get block reward: %w", err)
 	}
 
-	coinbaseTx := transaction.Transaction{
-		PublicKey:       make([]byte, len(publicKeyBytes)),
-		Nounce:          []byte{0},
-		From:            address,
-		To:              address,
-		Value:           hexutil.EncodeBig(blockReward),
-		TransactionFees: "0x0",
-		Chain:           mainChain,
-	}
-	copy(coinbaseTx.PublicKey, publicKeyBytes)
+	coinbaseTx := transaction.NewTransaction(transaction.LegacyTxType, publicKeyBytes, []byte{0}, []byte{}, address, address, hexutil.EncodeBig(blockReward), "0x0", mainChain)
 
 	err = coinbaseTx.Sign(pk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign coinbase transaction: %w", err)
 	}
-	return &coinbaseTx, nil
+	return coinbaseTx, nil
 }
 
 // BroadcastBlock broadcasts a block to the network.
@@ -249,8 +240,8 @@ func prependTransaction(x []transaction.Transaction, y transaction.Transaction) 
 
 func sortTransactionsByNounce(transactions []transaction.Transaction) []transaction.Transaction {
 	sort.Slice(transactions, func(i, j int) bool {
-		first := hexutil.DecodeBigFromBytesToUint64(transactions[i].Nounce)
-		second := hexutil.DecodeBigFromBytesToUint64(transactions[j].Nounce)
+		first := hexutil.DecodeBigFromBytesToUint64(transactions[i].Nounce())
+		second := hexutil.DecodeBigFromBytesToUint64(transactions[j].Nounce())
 
 		return first < second
 	})

@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
 
@@ -12,10 +13,14 @@ import (
 	"os"
 
 	"github.com/cespare/xxhash"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/crypto/sha3"
 )
+
+// AddressLength represents the length of an address.
+const AddressLength = 20
 
 // KeyPair represents a private, publick key and the address.
 type KeyPair struct {
@@ -41,6 +46,16 @@ func GenerateKeyPair() (KeyPair, error) {
 	}
 
 	return KeyPair{PrivateKey: priv, PublicKey: pub, Address: publicKeyHex}, nil
+}
+
+// PrivateKeyToEthPrivate returns an eth private key.
+func PrivateKeyToEthPrivate(privateKey []byte) (*ecdsa.PrivateKey, error) {
+	ethPriv, err := ethcrypto.ToECDSA(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert private key to eth private: %w", err)
+	}
+
+	return ethPriv, nil
 }
 
 // RestorePrivateKey unmarshals the privateKey

@@ -6,8 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+
 	"github.com/filefilego/filefilego/common/hexutil"
 	"github.com/stretchr/testify/assert"
+)
+
+var (
+	testmsg, _     = hexutil.Decode("0xce0677bb30baa8cf067c88db9811f4333d131bf8bcf12fe7065d211dce971008")
+	testsig, _     = hexutil.Decode("0x90f27b8b488db00b00606796d2987f6a5f59ae62ea05effe84fef5b8b0e549984a691139ad57a3f0b906637673aa2f63d1f55cb1a69199d4009eea23ceaddc9301")
+	testpubkey, _  = hexutil.Decode("0x04e32df42865e97135acfb65f3bae71bdc86f4d49150ad6a440b6f15878109880a0a2b2667f7e725ceea70c673093bf67663e0312623c8e091b13cf2c0f11ef652")
+	testpubkeyc, _ = hexutil.Decode("0x02e32df42865e97135acfb65f3bae71bdc86f4d49150ad6a440b6f15878109880a")
 )
 
 func TestGenerateKeyPair(t *testing.T) {
@@ -143,6 +153,44 @@ func TestSha1File(t *testing.T) {
 	hash, err := Sha1File(filePath)
 	assert.NoError(t, err)
 	assert.Equal(t, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", hash)
+}
+
+func TestPrivateKeyToEthPrivate(t *testing.T) {
+	kp, err := GenerateKeyPair()
+	assert.NoError(t, err)
+	pkBytes, err := kp.PrivateKey.Raw()
+	assert.NoError(t, err)
+	ethPriv, err := PrivateKeyToEthPrivate(pkBytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, ethPriv)
+	// get the underlying bytes and compare to the original
+	ethPkBytes := ethcrypto.FromECDSA(ethPriv)
+	assert.NotEmpty(t, ethPkBytes)
+	assert.EqualValues(t, ethPkBytes, pkBytes)
+
+	// test the public keys
+	rawpublic, err := kp.PublicKey.Raw()
+	assert.NoError(t, err)
+	pubKey, err := secp256k1.ParsePubKey(rawpublic)
+	assert.NoError(t, err)
+	uncompressedPubKey := pubKey.SerializeUncompressed()
+	ethBytes := ethcrypto.FromECDSAPub(&ethPriv.PublicKey)
+	reconstructEthPub, err := ethcrypto.UnmarshalPubkey(ethBytes)
+	assert.NoError(t, err)
+	assert.True(t, reconstructEthPub.Equal(&ethPriv.PublicKey))
+	assert.Equal(t, hexutil.Encode(uncompressedPubKey), hexutil.Encode(ethBytes))
+}
+
+func TestVerifySignature(t *testing.T) {
+	sig := testsig[:len(testsig)-1] // remove recovery id
+
+	// public key compressed
+	ok := ethcrypto.VerifySignature(testpubkeyc, testmsg, sig)
+	assert.True(t, ok)
+
+	// public key uncompressed
+	ok = ethcrypto.VerifySignature(testpubkey, testmsg, sig)
+	assert.True(t, ok)
 }
 
 func writeToFile(data []byte, filePath string) (string, error) {

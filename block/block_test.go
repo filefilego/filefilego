@@ -113,7 +113,7 @@ func TestGetCoinbaseTransaction(t *testing.T) {
 	assert.Equal(t, tx, block.Transactions[0])
 
 	// invalidate the public key data from the coinbase tx
-	block.Transactions[0].PublicKey = []byte{}
+	block.Transactions[0].SetPublicKey([]byte{})
 	_, err = block.GetAndValidateCoinbaseTransaction()
 	assert.EqualError(t, err, "failed to derive public key from transaction: malformed public key: invalid length: 0")
 
@@ -230,7 +230,7 @@ func TestValidate(t *testing.T) {
 				if err != nil {
 					return nil, kp
 				}
-				block.Transactions[0].PublicKey = []byte{}
+				block.Transactions[0].SetPublicKey([]byte{})
 				return block, kp
 			},
 		},
@@ -351,17 +351,9 @@ func validTransaction(t *testing.T) (*transaction.Transaction, crypto.KeyPair) {
 	addr, err := crypto.RawPublicToAddress(pkyData)
 	assert.NoError(t, err)
 
-	tx := transaction.Transaction{
-		PublicKey:       pkyData,
-		Nounce:          []byte{0},
-		Data:            []byte{1},
-		From:            addr,
-		To:              addr,
-		Chain:           mainChain,
-		Value:           "0x22b1c8c1227a00000",
-		TransactionFees: "0x0",
-	}
+	tx := transaction.NewTransaction(transaction.LegacyTxType, pkyData, []byte{0}, []byte{1}, addr, addr, "0x22b1c8c1227a00000", "0x0", mainChain)
+
 	err = tx.Sign(keypair.PrivateKey)
 	assert.NoError(t, err)
-	return &tx, keypair
+	return tx, keypair
 }

@@ -2,12 +2,10 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	jsonencoder "encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -23,6 +21,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json2"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/filefilego/filefilego/block"
@@ -41,10 +40,11 @@ import (
 	"github.com/filefilego/filefilego/node/protocols/messages"
 	storageprotocol "github.com/filefilego/filefilego/node/protocols/storage"
 	internalrpc "github.com/filefilego/filefilego/rpc"
+	internalethrpc "github.com/filefilego/filefilego/rpc/eth"
 	"github.com/filefilego/filefilego/search"
 	"github.com/filefilego/filefilego/storage"
+	"github.com/filefilego/filefilego/transaction"
 	"github.com/filefilego/filefilego/validator"
-	"github.com/gorilla/rpc/v2/json"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -63,7 +63,6 @@ const (
 	purgeConstractStoreTimeWindowSeconds = 60 * 60 * 24 * 7 // 7 days
 	triggerSyncSinceLastUpdateSeconds    = 15
 	purgeDataQueryReqsIntervalSeconds    = 30
-	RPCBodySize                          = 1024 * 290 // 290 KB
 )
 
 func main() {
@@ -197,7 +196,7 @@ func run(ctx *cli.Context) error {
 
 	// setup JSONRPC services
 	s := rpc.NewServer()
-	s.RegisterCodec(json.NewCodec(), "application/json")
+	s.RegisterCodec(json2.NewCodec(), "application/json")
 
 	ffgNode := &node.Node{}
 	bchain := &blockchain.Blockchain{}
@@ -417,7 +416,18 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup keystore: %w", err)
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.EthServiceNamespace) {
+		ethAPI, err := internalethrpc.NewAPI(bchain, transaction.ChainIDGlobalHex, ffgNode, conf.Global.SuperLightNode)
+		if err != nil {
+			return fmt.Errorf("failed to setup eth rpc api: %w", err)
+		}
+		err = s.RegisterService(ethAPI, internalrpc.EthServiceNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to register eth rpc api service: %w", err)
+		}
+	}
+
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.AddressServiceNamespace) {
 		addressAPI, err := internalrpc.NewAddressAPI(keystore, bchain)
 		if err != nil {
 			return fmt.Errorf("failed to setup address rpc api: %w", err)
@@ -428,7 +438,7 @@ func run(ctx *cli.Context) error {
 		}
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.BlockServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.BlockServiceNamespace) {
 		blockAPI, err := internalrpc.NewBlockAPI(bchain)
 		if err != nil {
 			return fmt.Errorf("failed to setup block rpc api: %w", err)
@@ -439,7 +449,7 @@ func run(ctx *cli.Context) error {
 		}
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.FilefilegoServiceNamespace) {
 		filefilegoAPI, err := internalrpc.NewFilefilegoAPI(conf, ffgNode, bchain, host)
 		if err != nil {
 			return fmt.Errorf("failed to setup filefilego rpc api: %w", err)
@@ -450,7 +460,7 @@ func run(ctx *cli.Context) error {
 		}
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.TransactionServiceNamespace) {
 		transactionAPI, err := internalrpc.NewTransactionAPI(keystore, ffgNode, bchain, conf.Global.SuperLightNode)
 		if err != nil {
 			return fmt.Errorf("failed to setup transaction rpc api: %w", err)
@@ -461,7 +471,7 @@ func run(ctx *cli.Context) error {
 		}
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.ChannelServiceNamespace) {
 		channelAPI, err := internalrpc.NewChannelAPI(bchain, searchEngine)
 		if err != nil {
 			return fmt.Errorf("failed to setup channel rpc api: %w", err)
@@ -517,7 +527,7 @@ func run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to setup data verification protocol: %w", err)
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.StorageServiceNamespace) {
 		storageAPI, err := internalrpc.NewStorageAPI(host, keystore, ffgNode, storageProtocol, storageEngine)
 		if err != nil {
 			return fmt.Errorf("failed to setup storage rpc api: %w", err)
@@ -530,7 +540,7 @@ func run(ctx *cli.Context) error {
 		defer storageAPI.Stop()
 	}
 
-	if contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
+	if common.Contains(conf.RPC.EnabledServices, internalrpc.DataTransferServiceNamespace) {
 		dataTransferAPI, err := internalrpc.NewDataTransferAPI(host, dataQueryProtocol, dataVerificationProtocol, ffgNode, contractStore, keystore, conf.Global.DataDir)
 		if err != nil {
 			return fmt.Errorf("failed to setup data transfer rpc api: %w", err)
@@ -546,7 +556,7 @@ func run(ctx *cli.Context) error {
 	log.Infof("peerstore content: %v ", peers)
 
 	r := mux.NewRouter()
-	r.Handle("/rpc", addCorsHeaders(s, conf.RPC.DisabledMethods))
+	r.Handle("/rpc", internalrpc.InspectValidateCall(s, conf.RPC.DisabledMethods))
 
 	if conf.Global.Debug {
 		r.HandleFunc("/internal/contracts/", contractStore.Debug)
@@ -603,58 +613,6 @@ func run(ctx *cli.Context) error {
 	}
 
 	return server.ListenAndServe()
-}
-
-func contains(elements []string, el string) bool {
-	for _, s := range elements {
-		s = strings.TrimSpace(s)
-		if s == el || s == "*" {
-			return true
-		}
-	}
-	return false
-}
-
-type rpcRequest struct {
-	JSONRPC string        `json:"jsonrpc"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-	ID      uint64        `json:"id"`
-}
-
-func addCorsHeaders(handler http.Handler, disAllowedRPCMethods []string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		r.Body = http.MaxBytesReader(w, r.Body, RPCBodySize)
-		requestBody, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		req := rpcRequest{}
-		err = jsonencoder.Unmarshal(requestBody, &req)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if contains(disAllowedRPCMethods, req.Method) {
-			http.Error(w, "method not allowed", http.StatusBadRequest)
-			return
-		}
-
-		r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
-		handler.ServeHTTP(w, r)
-	})
 }
 
 func serveMediaFile(dataDir, cacheDir string) http.Handler {

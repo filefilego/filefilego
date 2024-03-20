@@ -99,3 +99,14 @@ func CalculateFileHosterTotalContractFees(downloadContract *messages.DownloadCon
 	}
 	return totalFileHosterFees, nil
 }
+
+// Contains checks is an element is within a list.
+func Contains(elements []string, el string) bool {
+	for _, s := range elements {
+		s = strings.TrimSpace(s)
+		if s == el || s == "*" {
+			return true
+		}
+	}
+	return false
+}
