@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/rpc/v2/json2"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -430,7 +431,6 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 
 	ok, err = tx.Validate()
 	if err != nil {
-		fmt.Println("raw tx error ", arg1, hexutil.Encode(tx.Hash()))
 		return fmt.Errorf("failed to validate transaction with error: %w", err)
 	}
 	if !ok {
@@ -440,6 +440,20 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 	if !api.superLightNode {
 		if err := api.bc.PutMemPool(*tx); err != nil {
 			return fmt.Errorf("failed to insert transaction from rpc method to mempool: %w", err)
+		}
+
+		fromAddr, decodeErr := hexutil.Decode(tx.From())
+		state, getStateErr := api.bc.GetAddressState(fromAddr)
+		balance, err := state.GetBalance()
+		fees, _ := hexutil.DecodeBig(tx.TransactionFees())
+		val, _ := hexutil.DecodeBig(tx.Value())
+		val = val.Add(val, fees)
+		nobalance := val.Cmp(balance) == 1
+		if err != nil || decodeErr != nil || getStateErr != nil || nobalance {
+			return &json2.Error{
+				Code:    json2.E_SERVER,
+				Message: "insufficient funds for gas * price + value: address " + tx.From() + " have " + balance.String() + " want " + val.String(),
+			}
 		}
 	}
 
