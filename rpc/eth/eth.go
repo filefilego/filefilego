@@ -441,6 +441,17 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 		if err := api.bc.PutMemPool(*tx); err != nil {
 			return fmt.Errorf("failed to insert transaction from rpc method to mempool: %w", err)
 		}
+
+		fromAddr, decodeErr := hexutil.Decode(tx.From())
+		state, getStateErr := api.bc.GetAddressState(fromAddr)
+		balance, err := state.GetBalance()
+		fees, _ := hexutil.DecodeBig(tx.TransactionFees())
+		val, _ := hexutil.DecodeBig(tx.Value())
+		val = val.Add(val, fees)
+		nobalance := val.Cmp(balance) == 1
+		if err != nil || decodeErr != nil || getStateErr != nil || nobalance {
+			return errors.New("insufficient funds for gas * price + value")
+		}
 	}
 
 	payload := messages.GossipPayload{
