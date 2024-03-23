@@ -433,6 +433,7 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 	if err != nil {
 		return fmt.Errorf("failed to validate transaction with error: %w", err)
 	}
+
 	if !ok {
 		return errors.New("failed to validate transaction")
 	}
@@ -450,7 +451,6 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 		val = val.Add(val, fees)
 		nobalance := val.Cmp(balance) == 1
 		if err != nil || decodeErr != nil || getStateErr != nil || nobalance {
-
 			return &json2.Error{
 				Code:    json2.E_SERVER,
 				Message: "insufficient funds for gas * price + value: address " + tx.From() + " have " + balance.String() + " want " + val.String(),
