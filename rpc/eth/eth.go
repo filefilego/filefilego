@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/rpc/v2/json2"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -430,7 +431,6 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 
 	ok, err = tx.Validate()
 	if err != nil {
-		fmt.Println("raw tx error ", arg1, hexutil.Encode(tx.Hash()))
 		return fmt.Errorf("failed to validate transaction with error: %w", err)
 	}
 	if !ok {
@@ -450,7 +450,10 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 		val = val.Add(val, fees)
 		nobalance := val.Cmp(balance) == 1
 		if err != nil || decodeErr != nil || getStateErr != nil || nobalance {
-			return errors.New("insufficient funds for gas * price + value")
+			return &json2.Error{
+				Code:    json2.E_SERVER,
+				Message: "insufficient funds for gas * price + value: address " + tx.From() + " have " + balance.String() + " want " + val.String(),
+			}
 		}
 	}
 
