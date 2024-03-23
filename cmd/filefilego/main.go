@@ -627,7 +627,7 @@ func serveMediaFile(dataDir, cacheDir string) http.Handler {
 		}
 
 		hash := r.URL.Query().Get("hash")
-		if strings.Contains(hash, ".") {
+		if strings.ContainsAny(hash, "./\\") {
 			http.NotFound(w, r)
 			return
 		}
