@@ -145,6 +145,11 @@ func (m *Validator) prepareMempoolTransactions() []transaction.Transaction {
 		if err != nil {
 			continue
 		}
+		transactionFees, err := hexutil.DecodeBig(tx.TransactionFees())
+		if err != nil {
+			continue
+		}
+		amount = amount.Add(amount, transactionFees)
 		ok := balances.Subtract(tx.From(), amount, hexutil.DecodeBigFromBytesToUint64(tx.Nounce()))
 		if ok {
 			validatedTransaction = append(validatedTransaction, tx)
