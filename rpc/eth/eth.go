@@ -450,6 +450,7 @@ func (api *API) SendRawTransaction(r *http.Request, args *SendRawTransactionArgs
 		val = val.Add(val, fees)
 		nobalance := val.Cmp(balance) == 1
 		if err != nil || decodeErr != nil || getStateErr != nil || nobalance {
+
 			return &json2.Error{
 				Code:    json2.E_SERVER,
 				Message: "insufficient funds for gas * price + value: address " + tx.From() + " have " + balance.String() + " want " + val.String(),
