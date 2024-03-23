@@ -14,16 +14,18 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v2"
-	"google.golang.org/protobuf/proto"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/urfave/cli/v2"
+	"google.golang.org/protobuf/proto"
 
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/filefilego/filefilego/block"
 	"github.com/filefilego/filefilego/blockchain"
 	"github.com/filefilego/filefilego/client"
@@ -656,6 +658,72 @@ func TestE2E(t *testing.T) {
 	retrivedContract, err = fileDownloaderContractStore.GetContract(downloadContract.Contract.ContractHash)
 	assert.Error(t, err)
 	assert.Nil(t, retrivedContract)
+
+	// create an eth transaction more than what is available in the balance
+	// but first send to eth compatible addr some amount
+	kpN1PrivateBytes, err := kpN1.PrivateKey.Raw()
+	assert.NoError(t, err)
+	ethPk, err := crypto.PrivateKeyToEthPrivate(kpN1PrivateBytes)
+	assert.NoError(t, err)
+	ethAddr := ethcrypto.PubkeyToAddress(ethPk.PublicKey)
+
+	pubStorageNode, err := kpN1.PublicKey.Raw()
+	assert.NoError(t, err)
+
+	sendToEthAddrTx := transaction.NewTransaction(0, pubStorageNode, []byte{1}, []byte{}, kpN1.Address, ethAddr.Hex(), "0x7", "0x1", []byte{1})
+	err = sendToEthAddrTx.Sign(kpN1.PrivateKey)
+	assert.NoError(t, err)
+	ok, err = sendToEthAddrTx.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	err = v1Bchain.PutMemPool(*sendToEthAddrTx)
+	assert.NoError(t, err)
+
+	sealedBlock5, _, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock5)
+	assert.Len(t, sealedBlock5.Transactions, 2)
+	time.Sleep(200 * time.Millisecond)
+
+	dfeeTx := ethTypes.NewTx(&ethTypes.DynamicFeeTx{
+		ChainID:    big.NewInt(191),
+		Nonce:      1,
+		GasTipCap:  big.NewInt(2),
+		GasFeeCap:  big.NewInt(8),
+		Gas:        21000,
+		To:         &ethAddr,
+		Value:      big.NewInt(5),
+		Data:       nil,
+		AccessList: nil,
+	})
+	signer := ethTypes.NewCancunSigner(big.NewInt(int64(transaction.ChainIDGlobal)))
+	signedEthTX, err := ethTypes.SignTx(dfeeTx, signer, ethPk)
+	assert.NoError(t, err)
+
+	marshalledEthTx, err := signedEthTX.MarshalBinary()
+	assert.NoError(t, err)
+	hexutil.EncodeNoPrefix(marshalledEthTx)
+
+	ethTx, err := transaction.ParseEth(hexutil.EncodeNoPrefix(marshalledEthTx))
+	assert.NoError(t, err)
+	ok, err = ethTx.Validate()
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	// send the transaction
+	err = v1Bchain.PutMemPool(*ethTx)
+	assert.NoError(t, err)
+	sealedBlock6, _, err := validator.SealBlock(time.Now().Unix())
+	assert.NoError(t, err)
+	assert.NotNil(t, sealedBlock6)
+	time.Sleep(200 * time.Millisecond)
+
+	// balance should be same as before
+	// but mempool should include only one transaction.
+	n1Balance, err = v1Client.Balance(context.TODO(), ethAddr.Hex())
+	assert.NoError(t, err)
+	assert.Equal(t, "0x7", n1Balance.BalanceHex)
+	assert.Len(t, sealedBlock6.Transactions, 1)
 }
 
 func createNode(t *testing.T, dbName string, conf *config.Config, isVerifier bool) (*node.Node, *blockchain.Blockchain, *validator.Validator, crypto.KeyPair, *contract.Store) {
