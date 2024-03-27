@@ -6,7 +6,7 @@ require (
 	github.com/blevesearch/bleve/v2 v2.4.0
 	github.com/briandowns/spinner v1.23.0
 	github.com/cbergoon/merkletree v0.2.0
-	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.13.14
