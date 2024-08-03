@@ -6,10 +6,10 @@ require (
 	github.com/blevesearch/bleve/v2 v2.4.0
 	github.com/briandowns/spinner v1.23.0
 	github.com/cbergoon/merkletree v0.2.0
-	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
-	github.com/ethereum/go-ethereum v1.13.14
+	github.com/ethereum/go-ethereum v1.13.15
 	github.com/fatih/color v1.16.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang/mock v1.6.0
@@ -20,7 +20,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
 	github.com/microcosm-cc/bluemonday v1.0.26
-	github.com/multiformats/go-multiaddr v0.12.2
+	github.com/multiformats/go-multiaddr v0.12.4
 	github.com/oschwald/geoip2-golang v1.9.0
 	github.com/rodaine/table v1.1.1
 	github.com/schollz/progressbar/v3 v3.14.2
@@ -192,7 +192,7 @@ require (
 	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
