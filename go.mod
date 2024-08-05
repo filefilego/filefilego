@@ -30,7 +30,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1
 	golang.org/x/crypto v0.21.0
 	golang.org/x/sys v0.18.0
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.2
 )
 
 require (
